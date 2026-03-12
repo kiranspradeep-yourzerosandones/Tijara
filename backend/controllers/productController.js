@@ -18,7 +18,6 @@ exports.createProduct = async (req, res) => {
     const { 
       title, 
       shortDescription, 
-      briefDescription,
       description, 
       category, 
       brand, 
@@ -45,7 +44,6 @@ exports.createProduct = async (req, res) => {
       category,
       brand,
       shortDescription: shortDescription || "",
-      briefDescription: briefDescription || "",
       description: description || "",
       images,
       applications: applicationsArray,
@@ -157,7 +155,6 @@ exports.updateProduct = async (req, res) => {
     const { 
       title, 
       shortDescription, 
-      briefDescription,
       description, 
       category, 
       brand, 
@@ -197,7 +194,6 @@ exports.updateProduct = async (req, res) => {
 
     product.title = title || product.title;
     product.shortDescription = shortDescription !== undefined ? shortDescription : product.shortDescription;
-    product.briefDescription = briefDescription !== undefined ? briefDescription : product.briefDescription;
     product.description = description !== undefined ? description : product.description;
     product.category = category || product.category;
     product.brand = brand !== undefined ? brand : product.brand;
