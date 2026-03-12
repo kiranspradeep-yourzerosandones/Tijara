@@ -22,7 +22,13 @@ exports.createProduct = async (req, res) => {
       category, 
       brand, 
       applications, 
-      storage 
+      storage,
+      price,
+      compareAtPrice,
+      unit,
+      minOrderQuantity,
+      maxOrderQuantity,
+      inStock
     } = req.body;
 
     if (!title) {
@@ -31,6 +37,10 @@ exports.createProduct = async (req, res) => {
 
     if (!category) {
       return res.status(400).json({ message: "Category is required" });
+    }
+
+    if (!price || isNaN(parseFloat(price))) {
+      return res.status(400).json({ message: "Valid price is required" });
     }
 
     const images = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
@@ -47,7 +57,13 @@ exports.createProduct = async (req, res) => {
       description: description || "",
       images,
       applications: applicationsArray,
-      storage
+      storage,
+      price: parseFloat(price),
+      compareAtPrice: compareAtPrice ? parseFloat(compareAtPrice) : undefined,
+      unit: unit || "piece",
+      minOrderQuantity: minOrderQuantity ? parseInt(minOrderQuantity) : 1,
+      maxOrderQuantity: maxOrderQuantity ? parseInt(maxOrderQuantity) : 100,
+      inStock: inStock !== "false" && inStock !== false
     };
 
     console.log("Product Data to Save:", productData);
@@ -75,14 +91,59 @@ exports.createProduct = async (req, res) => {
 // GET ALL PRODUCTS
 exports.getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const { 
+      category, 
+      inStock, 
+      minPrice, 
+      maxPrice,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const query = { isActive: true };
+
+    // Filter by category
+    if (category) {
+      query.category = category;
+    }
+
+    // Filter by stock status
+    if (inStock !== undefined) {
+      query.inStock = inStock === "true";
+    }
+
+    // Filter by price range
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = parseFloat(minPrice);
+      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+    }
+
+    // Sort options
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+    const products = await Product.find(query)
+      .sort(sortOptions)
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const total = await Product.countDocuments(query);
 
     console.log(`Found ${products.length} products`);
 
     res.json({
       success: true,
-      count: products.length,
-      products
+      data: {
+        products,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      }
     });
 
   } catch (error) {
@@ -161,7 +222,13 @@ exports.updateProduct = async (req, res) => {
       applications, 
       storage, 
       isActive, 
-      existingImages 
+      existingImages,
+      price,
+      compareAtPrice,
+      unit,
+      minOrderQuantity,
+      maxOrderQuantity,
+      inStock
     } = req.body;
 
     const product = await Product.findById(req.params.id);
@@ -199,8 +266,16 @@ exports.updateProduct = async (req, res) => {
     product.brand = brand !== undefined ? brand : product.brand;
     product.applications = applicationsArray;
     product.storage = storage !== undefined ? storage : product.storage;
-    product.images = images;
+    product.images = images.length > 0 ? images : product.images;
     product.isActive = isActive === "true" || isActive === true;
+
+    // Update pricing fields
+    if (price !== undefined) product.price = parseFloat(price);
+    if (compareAtPrice !== undefined) product.compareAtPrice = parseFloat(compareAtPrice) || null;
+    if (unit !== undefined) product.unit = unit;
+    if (minOrderQuantity !== undefined) product.minOrderQuantity = parseInt(minOrderQuantity);
+    if (maxOrderQuantity !== undefined) product.maxOrderQuantity = parseInt(maxOrderQuantity);
+    if (inStock !== undefined) product.inStock = inStock === "true" || inStock === true;
 
     await product.save();
 
@@ -263,7 +338,7 @@ exports.searchProducts = async (req, res) => {
   try {
     const { keyword, category } = req.query;
 
-    let query = {};
+    let query = { isActive: true };
 
     if (keyword) {
       query.$or = [

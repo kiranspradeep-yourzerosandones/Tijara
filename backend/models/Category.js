@@ -1,3 +1,5 @@
+// D:\kiran\yzo_ongoing_projects\
+
 const mongoose = require("mongoose");
 
 const categorySchema = new mongoose.Schema({
