@@ -7,10 +7,228 @@ const {
   mcSendOtp, 
   mcValidateOtp 
 } = require("../services/messageCentral");
+const emailService = require("../services/emailService");
 
 // ============================================================
 // REGISTRATION FLOW
 // ============================================================
+
+exports.requestPasswordResetEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address"
+      });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      console.log(`Password reset requested for non-existent email: ${email}`);
+      return res.status(200).json({
+        success: true,
+        message: "If an account exists with this email, you will receive a password reset link."
+      });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(200).json({
+        success: true,
+        message: "If an account exists with this email, you will receive a password reset link."
+      });
+    }
+
+    // Generate reset token
+    const resetToken = user.generatePasswordResetToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Create reset URL
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
+
+    // Send email
+    const emailResult = await emailService.sendPasswordResetEmail({
+      to: user.email,
+      name: user.name,
+      resetUrl,
+      expiresIn: "1 hour"
+    });
+
+    if (!emailResult.success && !emailResult.devMode) {
+      // Clear reset token if email failed
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      console.error("Failed to send password reset email:", emailResult.message);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send reset email. Please try again later."
+      });
+    }
+
+    console.log(`📧 Password reset email sent to: ${user.email}`);
+
+    // In development, include token in response for testing
+    const responseData = {
+      success: true,
+      message: "If an account exists with this email, you will receive a password reset link."
+    };
+
+    if (process.env.NODE_ENV === "development") {
+      responseData.devInfo = {
+        resetToken,
+        resetUrl
+      };
+    }
+
+    res.status(200).json(responseData);
+
+  } catch (error) {
+    console.error("Request Password Reset Email Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to process request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Verify reset token (check if valid)
+ * @route   GET /api/auth/reset-password/verify/:token
+ * @access  Public
+ */
+exports.verifyResetToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token is required"
+      });
+    }
+
+    // Verify token
+    const user = await User.verifyPasswordResetToken(token);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Token is valid",
+      data: {
+        email: user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3") // Mask email
+      }
+    });
+
+  } catch (error) {
+    console.error("Verify Reset Token Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to verify token",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Reset password using email token
+ * @route   POST /api/auth/reset-password/email
+ * @access  Public
+ */
+exports.resetPasswordWithToken = async (req, res) => {
+  try {
+    const { token, newPassword, confirmPassword } = req.body;
+
+    // Validate inputs
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and new password are required"
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters"
+      });
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match"
+      });
+    }
+
+    // Verify token and get user
+    const user = await User.verifyPasswordResetToken(token);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token. Please request a new one."
+      });
+    }
+
+    // Update password
+    user.password = newPassword;
+    user.clearPasswordReset();
+    await user.save();
+
+    // Send confirmation email
+    if (user.email) {
+      await emailService.sendPasswordChangedEmail({
+        to: user.email,
+        name: user.name
+      });
+    }
+
+    // Generate new token for auto-login
+    const authToken = generateToken(user._id, user.role);
+
+    console.log(`🔑 Password reset successful for user: ${user.phone}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successful",
+      data: {
+        user: user.getPublicProfile(),
+        token: authToken
+      }
+    });
+
+  } catch (error) {
+    console.error("Reset Password With Token Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset password",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
 
 /**
  * @desc    Send OTP for registration
@@ -317,7 +535,6 @@ exports.completeRegistration = async (req, res) => {
       email 
     } = req.body;
 
-    // Validate required fields
     if (!phone || !name || !password) {
       return res.status(400).json({
         success: false,
@@ -325,7 +542,6 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    // Validate password length
     if (password.length < 6) {
       return res.status(400).json({
         success: false,
@@ -333,7 +549,6 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    // Check if phone is verified
     const pending = await PendingRegistration.findOne({ 
       phone, 
       isVerified: true 
@@ -346,7 +561,6 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    // Check if verification is recent (within 10 minutes)
     const verifiedAt = new Date(pending.verifiedAt);
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
@@ -357,7 +571,6 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
       return res.status(400).json({
@@ -366,7 +579,7 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    // Create user
+    // ✅ CREATE USER - AUTO-APPROVED (isActive: true by default)
     const user = await User.create({
       name,
       phone,
@@ -376,18 +589,19 @@ exports.completeRegistration = async (req, res) => {
       gstNumber,
       email,
       isPhoneVerified: true,
+      isActive: true, // ✅ AUTO-APPROVED - No admin approval needed
       role: "customer"
     });
 
-    // Generate token
     const token = generateToken(user._id, user.role);
 
-    // Clean up pending registration
     await PendingRegistration.deleteOne({ phone });
+
+    console.log(`✅ New customer registered (auto-approved): ${user.phone}`);
 
     res.status(201).json({
       success: true,
-      message: "Registration successful",
+      message: "Registration successful. You can now use the app.",
       data: {
         user: user.getPublicProfile(),
         token

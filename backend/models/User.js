@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -15,6 +16,14 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     match: [/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"]
+  },
+
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    sparse: true,  // Allow null but unique when present
+    match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"]
   },
 
   password: {
@@ -35,13 +44,27 @@ const userSchema = new mongoose.Schema({
     default: false
   },
 
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+
   isActive: {
     type: Boolean,
     default: true
   },
 
-  // ========== OTP Fields (Message Central) ==========
-  
+  // ========== PASSWORD RESET (Email) ==========
+  passwordResetToken: {
+    type: String,
+    select: false
+  },
+  passwordResetExpires: {
+    type: Date,
+    select: false
+  },
+
+  // ========== OTP Fields (Message Central - Phone) ==========
   registrationVerificationId: {
     type: String,
     default: null
@@ -91,7 +114,6 @@ const userSchema = new mongoose.Schema({
   },
 
   // ========== Business Details (B2B) ==========
-  
   businessName: {
     type: String,
     trim: true
@@ -108,43 +130,35 @@ const userSchema = new mongoose.Schema({
   },
 
   // ========== CREDIT & PAYMENT TRACKING ==========
-  
-  // Credit limit assigned by admin
   creditLimit: {
     type: Number,
     default: 0
   },
 
-  // Total credit used (lifetime orders value)
   totalCredit: {
     type: Number,
     default: 0
   },
 
-  // Current pending/outstanding amount
   pendingAmount: {
     type: Number,
     default: 0
   },
 
-  // Total amount paid (lifetime)
   totalPaid: {
     type: Number,
     default: 0
   },
 
-  // Last payment date
   lastPaymentDate: {
     type: Date
   },
 
-  // Payment terms (in days)
   paymentTerms: {
     type: Number,
     default: 30
   },
 
-  // Is credit blocked
   isCreditBlocked: {
     type: Boolean,
     default: false
@@ -158,15 +172,17 @@ const userSchema = new mongoose.Schema({
   },
 
   // ========== Profile ==========
-  
-  email: {
-    type: String,
-    trim: true,
-    lowercase: true
-  },
-
   profileImage: {
     type: String
+  },
+
+  address: {
+    line1: String,
+    line2: String,
+    city: String,
+    state: String,
+    pincode: String,
+    country: { type: String, default: "India" }
   },
 
   fcmToken: {
@@ -175,6 +191,12 @@ const userSchema = new mongoose.Schema({
 
   lastLoginAt: {
     type: Date
+  },
+
+  // ========== Admin Notes ==========
+  adminNotes: {
+    type: String,
+    maxlength: 2000
   }
 
 }, { 
@@ -184,9 +206,11 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes
-userSchema.index({ phone: 1 });
+userSchema.index({ phone: 1 }, { unique: true });
+userSchema.index({ email: 1 }, { sparse: true });
 userSchema.index({ role: 1 });
 userSchema.index({ isCreditBlocked: 1 });
+userSchema.index({ isActive: 1 });
 
 // Virtual for available credit
 userSchema.virtual('availableCredit').get(function() {
@@ -198,6 +222,19 @@ userSchema.virtual('availableCredit').get(function() {
 userSchema.virtual('creditUtilization').get(function() {
   if (this.creditLimit === 0) return 0;
   return Math.round((this.pendingAmount / this.creditLimit) * 100);
+});
+
+// Virtual for full address
+userSchema.virtual('fullAddress').get(function() {
+  if (!this.address) return null;
+  const parts = [
+    this.address.line1,
+    this.address.line2,
+    this.address.city,
+    this.address.state,
+    this.address.pincode
+  ].filter(Boolean);
+  return parts.join(', ');
 });
 
 // Hash password before saving
@@ -220,18 +257,54 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+// Generate password reset token
+userSchema.methods.generatePasswordResetToken = function() {
+  // Generate random token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+
+  // Hash token and save to database
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  // Set expiry (1 hour)
+  this.passwordResetExpires = Date.now() + 60 * 60 * 1000;
+
+  // Return unhashed token (to send via email)
+  return resetToken;
+};
+
+// Verify password reset token
+userSchema.statics.verifyPasswordResetToken = async function(token) {
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+
+  const user = await this.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetExpires: { $gt: Date.now() }
+  }).select('+passwordResetToken +passwordResetExpires');
+
+  return user;
+};
+
 // Get public profile
 userSchema.methods.getPublicProfile = function() {
   return {
     id: this._id,
     name: this.name,
     phone: this.phone,
+    email: this.email,
     role: this.role,
     isPhoneVerified: this.isPhoneVerified,
+    isEmailVerified: this.isEmailVerified,
     businessName: this.businessName,
     businessType: this.businessType,
-    email: this.email,
+    gstNumber: this.gstNumber,
     profileImage: this.profileImage,
+    address: this.address,
     creditLimit: this.creditLimit,
     totalCredit: this.totalCredit,
     pendingAmount: this.pendingAmount,
@@ -278,4 +351,10 @@ userSchema.methods.clearResetOtp = function() {
   this.resetOtpAttempts = 0;
 };
 
-module.exports = mongoose.model("User", userSchema);
+// Clear password reset fields
+userSchema.methods.clearPasswordReset = function() {
+  this.passwordResetToken = undefined;
+  this.passwordResetExpires = undefined;
+};
+
+module.exports = mongoose.model("User", userSchema); ``

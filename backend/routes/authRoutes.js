@@ -10,9 +10,13 @@ const {
   login,
   sendLoginOtp,
   verifyLoginOtp,
-  // Forgot Password
+  // Forgot Password (OTP - Phone)
   sendForgotPasswordOtp,
   resetPassword,
+  // Forgot Password (Email)
+  requestPasswordResetEmail,
+  verifyResetToken,
+  resetPasswordWithToken,
   // Profile
   getMe,
   updateProfile,
@@ -32,9 +36,14 @@ router.post("/login", login);
 router.post("/login/send-otp", sendLoginOtp);
 router.post("/login/verify-otp", verifyLoginOtp);
 
-// ============ Forgot Password Routes ============
+// ============ Forgot Password (OTP - Phone) ============
 router.post("/forgot-password/send-otp", sendForgotPasswordOtp);
 router.post("/forgot-password/reset", resetPassword);
+
+// ============ Forgot Password (Email Link) ============
+router.post("/forgot-password/email", requestPasswordResetEmail);
+router.get("/reset-password/verify/:token", verifyResetToken);
+router.post("/reset-password/email", resetPasswordWithToken);
 
 // ============ Protected Routes ============
 router.get("/me", protect, getMe);

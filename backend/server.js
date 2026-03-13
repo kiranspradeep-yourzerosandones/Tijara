@@ -41,6 +41,7 @@ const routes = {
   auth: loadRoute("./routes/authRoutes", "authRoutes"),
   admin: loadRoute("./routes/adminRoutes", "adminRoutes"),
   adminDashboard: loadRoute("./routes/adminDashboardRoutes", "adminDashboardRoutes"),
+  adminCustomers: loadRoute("./routes/adminCustomerRoutes", "adminCustomerRoutes"),
   products: loadRoute("./routes/productRoutes", "productRoutes"),
   categories: loadRoute("./routes/categoryRoutes", "categoryRoutes"),
   locations: loadRoute("./routes/locationRoutes", "locationRoutes"),
@@ -59,6 +60,7 @@ const routes = {
 if (routes.auth) app.use("/api/auth", routes.auth);
 if (routes.admin) app.use("/api/admin", routes.admin);
 if (routes.adminDashboard) app.use("/api/admin/dashboard", routes.adminDashboard);
+if (routes.adminCustomers) app.use("/api/admin/customers", routes.adminCustomers);
 if (routes.adminLocations) app.use("/api/admin/locations", routes.adminLocations);
 if (routes.adminCarts) app.use("/api/admin/carts", routes.adminCarts);
 if (routes.adminOrders) app.use("/api/admin/orders", routes.adminOrders);

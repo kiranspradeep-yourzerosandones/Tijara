@@ -1,44 +1,44 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 
-const seedAdmin = async () => {
+async function createAdmin() {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("MongoDB connected");
+    console.log("Connected to MongoDB");
 
     // Check if admin exists
     const existingAdmin = await User.findOne({ role: "admin" });
-
+    
     if (existingAdmin) {
       console.log("Admin already exists:");
-      console.log(`Phone: ${existingAdmin.phone}`);
-      console.log("Use this phone to login as admin");
+      console.log("  Phone:", existingAdmin.phone);
+      console.log("  Name:", existingAdmin.name);
       process.exit(0);
     }
 
-    // Create default admin
+    // Create admin
     const admin = await User.create({
       name: "Admin",
-      phone: process.env.ADMIN_PHONE || "9999999999",
-      password: process.env.ADMIN_PASSWORD || "admin123456",
+      phone: "9876543210",
+      password: "admin123", // Will be hashed by pre-save hook
+      email: "admin@tijara.com",
       role: "admin",
-      isPhoneVerified: true
+      isPhoneVerified: true,
+      isActive: true
     });
 
-    console.log("Default admin created successfully!");
-    console.log("================================");
-    console.log(`Phone: ${admin.phone}`);
-    console.log(`Password: ${process.env.ADMIN_PASSWORD || "admin123456"}`);
-    console.log("================================");
-    console.log("Please change the password after first login!");
+    console.log("✅ Admin created successfully!");
+    console.log("  Phone:", admin.phone);
+    console.log("  Password: admin123");
+    console.log("  Name:", admin.name);
 
     process.exit(0);
-
   } catch (error) {
-    console.error("Seed Error:", error);
+    console.error("Error:", error.message);
     process.exit(1);
   }
-};
+}
 
-seedAdmin();
+createAdmin();
