@@ -11,56 +11,68 @@ exports.adminLogin = async (req, res) => {
     if (!phone || !password) {
       return res.status(400).json({
         success: false,
-        message: "Phone and password are required"
+        message: "Phone and password required"
       });
     }
 
-    // Find admin user
-    const user = await User.findOne({ phone, role: "admin" }).select("+password");
+    // Find user with password
+    const user = await User.findOne({ phone }).select("+password");
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Invalid admin credentials"
+        message: "Invalid credentials"
       });
     }
 
-    // Check password
+    if (user.role !== "admin") {
+      return res.status(401).json({
+        success: false,
+        message: "Admin access only"
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "Account deactivated"
+      });
+    }
+     console.log("=====================");
     const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid admin credentials"
+        message: "Invalid credentials"
       });
     }
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Generate token
     const token = generateToken(user._id, user.role);
 
-    res.status(200).json({
+    res.json({
       success: true,
-      message: "Admin login successful",
+      message: "Login successful",
       data: {
-        user: user.getPublicProfile(),
+        user: {
+          id: user._id,
+          name: user.name,
+          phone: user.phone,
+          email: user.email,
+          role: user.role
+        },
         token
       }
     });
 
   } catch (error) {
-    console.error("Admin Login Error:", error);
+    console.error("Login Error:", error);
     res.status(500).json({
       success: false,
-      message: "Login failed",
-      error: error.message
+      message: "Login failed"
     });
   }
 };
-
 // @desc    Get all users (Admin)
 // @route   GET /api/admin/users
 // @access  Private/Admin
