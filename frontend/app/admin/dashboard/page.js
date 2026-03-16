@@ -1,3 +1,4 @@
+// frontend\app\admin\dashboard\page.js
 "use client";
 
 import { useState, useEffect } from "react";
