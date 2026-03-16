@@ -22,31 +22,35 @@ export default function AdminLoginPage() {
   }, [isAuthenticated, loading, router]);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+  e.preventDefault();
+  setError("");
+
+  console.log("📝 Form submitted with phone:", phone);
 
     // Validate phone
-    if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
-      setError("Please enter a valid 10-digit phone number");
-      return;
-    }
+  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+    setError("Please enter a valid 10-digit phone number");
+    return;
+  }
 
-    // Validate password
-    if (!password || password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
+  // Validate password
+  if (!password || password.length < 6) {
+    setError("Password must be at least 6 characters");
+    return;
+  }
 
-    setIsLoading(true);
+  setIsLoading(true);
 
     const result = await login(phone, password);
+  
+  console.log("🎯 Login result:", result);
 
-    if (!result.success) {
-      setError(result.message || "Login failed");
-    }
+  if (!result.success) {
+    setError(result.message || "Login failed");
+  }
 
-    setIsLoading(false);
-  };
+  setIsLoading(false);
+};
 
   // Show loading while checking auth
   if (loading) {

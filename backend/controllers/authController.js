@@ -1,3 +1,4 @@
+// Dbackend\controllers\authController.js
 const User = require("../models/User");
 const PendingRegistration = require("../models/PendingRegistration");
 const { generateToken } = require("../utils/jwtUtils");

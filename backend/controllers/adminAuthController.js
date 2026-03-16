@@ -1,3 +1,4 @@
+// Dbackend\controllers\adminAuthController.js
 const User = require("../models/User");
 const { generateToken } = require("../utils/jwtUtils");
 
@@ -8,24 +9,46 @@ exports.adminLogin = async (req, res) => {
   try {
     const { phone, password } = req.body;
 
+    console.log("\n" + "=".repeat(60));
+    console.log("🔐 ADMIN LOGIN ATTEMPT");
+    console.log("=".repeat(60));
+    console.log("📱 Phone:", phone);
+    console.log("🔑 Password received:", password ? "YES" : "NO");
+    console.log("🔑 Password length:", password ? password.length : 0);
+    console.log("🔑 Password value:", password); // ⚠️ Remove this in production!
+    console.log("=".repeat(60));
+
     if (!phone || !password) {
+      console.log("❌ FAIL: Missing credentials");
       return res.status(400).json({
         success: false,
         message: "Phone and password required"
       });
     }
 
-    // Find user with password
+    // Find user
+    console.log("🔍 Searching for user with phone:", phone);
     const user = await User.findOne({ phone }).select("+password");
-
+    
     if (!user) {
+      console.log("❌ FAIL: User not found");
       return res.status(401).json({
         success: false,
         message: "Invalid credentials"
       });
     }
 
+    console.log("✅ User found:");
+    console.log("   ID:", user._id);
+    console.log("   Name:", user.name);
+    console.log("   Phone:", user.phone);
+    console.log("   Role:", user.role);
+    console.log("   Active:", user.isActive);
+    console.log("   Has password:", !!user.password);
+    console.log("   Password hash:", user.password?.substring(0, 20) + "...");
+
     if (user.role !== "admin") {
+      console.log("❌ FAIL: Not admin (role:", user.role + ")");
       return res.status(401).json({
         success: false,
         message: "Admin access only"
@@ -33,15 +56,23 @@ exports.adminLogin = async (req, res) => {
     }
 
     if (!user.isActive) {
+      console.log("❌ FAIL: Account deactivated");
       return res.status(401).json({
         success: false,
         message: "Account deactivated"
       });
     }
-     console.log("=====================");
+
+    console.log("\n🔐 Comparing passwords...");
+    console.log("   Input password:", password);
+    console.log("   Stored hash:", user.password?.substring(0, 30) + "...");
+    
     const isMatch = await user.comparePassword(password);
+    
+    console.log("   Result:", isMatch ? "✅ MATCH" : "❌ NO MATCH");
 
     if (!isMatch) {
+      console.log("❌ FAIL: Password mismatch");
       return res.status(401).json({
         success: false,
         message: "Invalid credentials"
@@ -49,6 +80,8 @@ exports.adminLogin = async (req, res) => {
     }
 
     const token = generateToken(user._id, user.role);
+    console.log("✅ SUCCESS: Token generated");
+    console.log("=".repeat(60) + "\n");
 
     res.json({
       success: true,
@@ -66,7 +99,8 @@ exports.adminLogin = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Login Error:", error);
+    console.error("❌ LOGIN ERROR:", error);
+    console.error("   Stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Login failed"

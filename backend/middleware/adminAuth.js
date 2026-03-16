@@ -1,3 +1,4 @@
+// \backend\middleware\adminAuth.js
 // Check if user is admin
 const adminOnly = (req, res, next) => {
   if (!req.user) {

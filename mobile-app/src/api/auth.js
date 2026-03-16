@@ -1,4 +1,4 @@
-mobile-app\src\api\auth.js
+// mobile-app\src\api\auth.js
 import apiClient from './client';
 
 export const authAPI = {

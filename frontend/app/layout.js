@@ -1,3 +1,4 @@
+// frontend\app\layout.js
 import "./globals.css";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
 
