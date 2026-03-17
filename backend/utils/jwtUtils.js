@@ -1,11 +1,11 @@
 const jwt = require("jsonwebtoken");
 
 // Generate Access Token
-const generateToken = (userId, role) => {
+const generateToken = (userId, userType) => {
   return jwt.sign(
     { 
       id: userId, 
-      role: role 
+      userType: userType // "admin" or "customer"
     },
     process.env.JWT_SECRET,
     { 

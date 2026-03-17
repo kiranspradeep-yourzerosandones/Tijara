@@ -17,40 +17,47 @@ export default function AdminLoginPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && isAuthenticated) {
+      console.log("✅ Already authenticated, redirecting...");
       router.push("/admin/dashboard");
     }
   }, [isAuthenticated, loading, router]);
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError("");
+    e.preventDefault();
+    setError("");
 
-  console.log("📝 Form submitted with phone:", phone);
+    console.log("📝 Form submitted with phone:", phone);
 
     // Validate phone
-  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
-    setError("Please enter a valid 10-digit phone number");
-    return;
-  }
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+      setError("Please enter a valid 10-digit phone number");
+      return;
+    }
 
-  // Validate password
-  if (!password || password.length < 6) {
-    setError("Password must be at least 6 characters");
-    return;
-  }
+    // Validate password
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
 
-  setIsLoading(true);
+    setIsLoading(true);
 
-    const result = await login(phone, password);
-  
-  console.log("🎯 Login result:", result);
+    try {
+      const result = await login(phone, password);
+      
+      console.log("🎯 Login result:", result);
 
-  if (!result.success) {
-    setError(result.message || "Login failed");
-  }
-
-  setIsLoading(false);
-};
+      if (!result.success) {
+        setError(result.message || "Login failed");
+      }
+      // ✅ Success case: context already handles redirect
+    } catch (err) {
+      console.error("❌ Login exception:", err);
+      setError("An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Show loading while checking auth
   if (loading) {
@@ -64,7 +71,7 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4">
       {/* Background Pattern */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#ffe494]/10 rounded-full blur-3xl"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[#ffe494]/10 rounded-full blur-3xl"></div>
       </div>
@@ -87,12 +94,12 @@ export default function AdminLoginPage() {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl animate-shake">
               <p className="text-red-400 text-sm flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {error}
+                <span>{error}</span>
               </p>
             </div>
           )}
@@ -111,9 +118,11 @@ export default function AdminLoginPage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                  placeholder="Enter phone number"
+                  placeholder="9876543210"
+                  maxLength={10}
                   className="w-full pl-14 pr-4 py-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-[#ffe494] focus:border-transparent transition-all"
                   disabled={isLoading}
+                  autoComplete="tel"
                 />
               </div>
             </div>
@@ -131,11 +140,13 @@ export default function AdminLoginPage() {
                   placeholder="Enter password"
                   className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-[#ffe494] focus:border-transparent transition-all pr-12"
                   disabled={isLoading}
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-white"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-white transition-colors"
+                  tabIndex={-1}
                 >
                   {showPassword ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,7 +189,7 @@ export default function AdminLoginPage() {
 
           {/* Footer */}
           <p className="text-center text-gray-500 text-sm mt-8">
-            Secure admin access only
+            🔒 Secure admin access only
           </p>
         </div>
 

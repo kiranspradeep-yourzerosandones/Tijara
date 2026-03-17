@@ -208,7 +208,7 @@ exports.resetPasswordWithToken = async (req, res) => {
     }
 
     // Generate new token for auto-login
-    const authToken = generateToken(user._id, user.role);
+   const authToken = generateToken(user._id, "customer");
 
     console.log(`🔑 Password reset successful for user: ${user.phone}`);
 
@@ -590,11 +590,10 @@ exports.completeRegistration = async (req, res) => {
       gstNumber,
       email,
       isPhoneVerified: true,
-      isActive: true, // ✅ AUTO-APPROVED - No admin approval needed
-      role: "customer"
+      isActive: true // ✅ AUTO-APPROVED - No admin approval needed
     });
 
-    const token = generateToken(user._id, user.role);
+    const token = generateToken(user._id, "customer"); // ✅ Changed to "customer"
 
     await PendingRegistration.deleteOne({ phone });
 
@@ -640,7 +639,6 @@ exports.login = async (req, res) => {
   try {
     const { phone, password } = req.body;
 
-    // Validate inputs
     if (!phone || !password) {
       return res.status(400).json({
         success: false,
@@ -658,7 +656,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Check if user is active
     if (!user.isActive) {
       return res.status(401).json({
         success: false,
@@ -695,7 +692,7 @@ exports.login = async (req, res) => {
     await user.save();
 
     // Generate token
-    const token = generateToken(user._id, user.role);
+    const token = generateToken(user._id, "customer"); // ✅ Changed to "customer"
 
     res.status(200).json({
       success: true,
@@ -955,7 +952,7 @@ exports.verifyLoginOtp = async (req, res) => {
       await user.save();
 
       // Generate token
-      const token = generateToken(user._id, user.role);
+      const token = generateToken(user._id, "customer");
 
       return res.status(200).json({
         success: true,
@@ -1254,7 +1251,7 @@ exports.resetPassword = async (req, res) => {
       await user.save();
 
       // Generate token
-      const token = generateToken(user._id, user.role);
+     const token = generateToken(user._id, "customer"); 
 
       return res.status(200).json({
         success: true,
@@ -1428,7 +1425,7 @@ exports.changePassword = async (req, res) => {
     await user.save();
 
     // Generate new token
-    const token = generateToken(user._id, user.role);
+    const authToken = generateToken(user._id, "customer");
 
     res.status(200).json({
       success: true,

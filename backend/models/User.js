@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -33,12 +32,6 @@ const userSchema = new mongoose.Schema({
     select: false
   },
 
-  role: {
-    type: String,
-    enum: ["customer", "admin"],
-    default: "customer"
-  },
-
   isPhoneVerified: {
     type: Boolean,
     default: false
@@ -51,7 +44,7 @@ const userSchema = new mongoose.Schema({
 
   isActive: {
     type: Boolean,
-    default: true
+    default: true // ✅ AUTO-APPROVED - Customers can use app immediately
   },
 
   // Password Reset (Email)
@@ -91,7 +84,7 @@ const userSchema = new mongoose.Schema({
   isCreditBlocked: { type: Boolean, default: false },
   creditBlockedReason: String,
   creditBlockedAt: Date,
-  creditBlockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  creditBlockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" }, // ✅ Changed to Admin
 
   // Profile
   profileImage: String,
@@ -115,11 +108,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // ============================================================
-// INDEXES (remove duplicates - only define here)
-// ============================================================
-// Note: 'unique: true' in schema already creates index, so we don't need to add again
-
-// ============================================================
 // VIRTUALS
 // ============================================================
 userSchema.virtual('availableCredit').get(function() {
@@ -133,21 +121,19 @@ userSchema.virtual('creditUtilization').get(function() {
 });
 
 // ============================================================
-// PRE-SAVE HOOK - Hash Password (FIXED)
+// PRE-SAVE HOOK - Hash Password
 // ============================================================
-userSchema.pre("save", async function(next) {
-  // Only hash if password is modified
+// ============================================================
+userSchema.pre("save", async function() {
+  // Skip if password not modified
   if (!this.isModified("password")) {
-    return next();
+    return;
   }
 
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    return next();  // ✅ Add return here
-  } catch (error) {
-    return next(error);  // ✅ Add return here
-  }
+  // Hash password
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
+  console.log("✅ Password hashed for:", this.phone);
 });
 
 // ============================================================
@@ -161,6 +147,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Generate password reset token
 userSchema.methods.generatePasswordResetToken = function() {
+  const crypto = require('crypto');
   const resetToken = crypto.randomBytes(32).toString('hex');
   
   this.passwordResetToken = crypto
@@ -180,7 +167,6 @@ userSchema.methods.getPublicProfile = function() {
     name: this.name,
     phone: this.phone,
     email: this.email,
-    role: this.role,
     isPhoneVerified: this.isPhoneVerified,
     isActive: this.isActive,
     businessName: this.businessName,
@@ -191,7 +177,25 @@ userSchema.methods.getPublicProfile = function() {
     availableCredit: this.availableCredit,
     isCreditBlocked: this.isCreditBlocked,
     paymentTerms: this.paymentTerms,
+    profileImage: this.profileImage,
+    address: this.address,
+    lastLoginAt: this.lastLoginAt,
     createdAt: this.createdAt
+  };
+};
+
+// Get credit summary
+userSchema.methods.getCreditSummary = function() {
+  return {
+    creditLimit: this.creditLimit,
+    pendingAmount: this.pendingAmount,
+    availableCredit: this.availableCredit,
+    creditUtilization: this.creditUtilization,
+    isCreditBlocked: this.isCreditBlocked,
+    creditBlockedReason: this.creditBlockedReason,
+    paymentTerms: this.paymentTerms,
+    totalPaid: this.totalPaid,
+    lastPaymentDate: this.lastPaymentDate
   };
 };
 
@@ -217,6 +221,7 @@ userSchema.methods.clearPasswordReset = function() {
 // STATICS
 // ============================================================
 userSchema.statics.verifyPasswordResetToken = async function(token) {
+  const crypto = require('crypto');
   const hashedToken = crypto
     .createHash('sha256')
     .update(token)

@@ -1,5 +1,7 @@
+// backend/routes/adminCustomerRoutes.js
 const express = require("express");
 const router = express.Router();
+const upload = require("../middleware/upload");
 
 const {
   getAllCustomers,
@@ -13,7 +15,7 @@ const {
   getCustomerStats,
   sendPasswordResetToCustomer,
   exportCustomers
-} = require("../controllers/customerController");
+} = require("../controllers/adminCustomerController");
 
 const { protect } = require("../middleware/auth");
 const { adminOnly } = require("../middleware/adminAuth");
@@ -22,18 +24,16 @@ const { adminOnly } = require("../middleware/adminAuth");
 router.use(protect);
 router.use(adminOnly);
 
-// Customer statistics
+// Customer statistics & export
 router.get("/stats", getCustomerStats);
-
-// Export customers
 router.get("/export", exportCustomers);
 
-// Customer CRUD
+// Customer CRUD with profile image upload
 router.get("/", getAllCustomers);
 router.get("/:id", getCustomer);
-router.post("/", createCustomer);
-router.put("/:id", updateCustomer);
-router.delete("/:id", deleteCustomer); // ✅ NEW - Delete customer
+router.post("/", upload.single("profileImage"), createCustomer);
+router.put("/:id", upload.single("profileImage"), updateCustomer);
+router.delete("/:id", deleteCustomer);
 
 // Customer actions
 router.put("/:id/reset-password", resetCustomerPassword);

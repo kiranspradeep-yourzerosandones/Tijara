@@ -1,8 +1,8 @@
-// backend\middleware\auth.js
 const { verifyToken } = require("../utils/jwtUtils");
 const User = require("../models/User");
+const Admin = require("../models/Admin");
 
-// Protect routes - verify JWT token
+// Protect routes - verify JWT token (for customers)
 const protect = async (req, res, next) => {
   try {
     let token;
@@ -30,26 +30,50 @@ const protect = async (req, res, next) => {
       });
     }
 
-    // Get user from token
-    const user = await User.findById(decoded.id).select("-password");
+    // Get user based on userType
+    let user;
+    
+    if (decoded.userType === "admin") {
+      user = await Admin.findById(decoded.id).select("-password");
+      
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Not authorized - Admin not found"
+        });
+      }
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Not authorized - User not found"
-      });
+      if (!user.isActive) {
+        return res.status(401).json({
+          success: false,
+          message: "Admin account has been deactivated"
+        });
+      }
+
+      req.user = user;
+      req.userType = "admin";
+    } else {
+      // Customer
+      user = await User.findById(decoded.id).select("-password");
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Not authorized - User not found"
+        });
+      }
+
+      if (!user.isActive) {
+        return res.status(401).json({
+          success: false,
+          message: "Account has been deactivated"
+        });
+      }
+
+      req.user = user;
+      req.userType = "customer";
     }
 
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: "Account has been deactivated"
-      });
-    }
-
-    // Attach user to request
-    req.user = user;
     next();
 
   } catch (error) {
@@ -74,9 +98,20 @@ const optionalAuth = async (req, res, next) => {
       const decoded = verifyToken(token);
       
       if (decoded) {
-        const user = await User.findById(decoded.id).select("-password");
-        if (user && user.isActive) {
-          req.user = user;
+        let user;
+        
+        if (decoded.userType === "admin") {
+          user = await Admin.findById(decoded.id).select("-password");
+          if (user && user.isActive) {
+            req.user = user;
+            req.userType = "admin";
+          }
+        } else {
+          user = await User.findById(decoded.id).select("-password");
+          if (user && user.isActive) {
+            req.user = user;
+            req.userType = "customer";
+          }
         }
       }
     }

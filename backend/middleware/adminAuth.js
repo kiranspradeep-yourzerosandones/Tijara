@@ -1,4 +1,3 @@
-// \backend\middleware\adminAuth.js
 // Check if user is admin
 const adminOnly = (req, res, next) => {
   if (!req.user) {
@@ -8,7 +7,7 @@ const adminOnly = (req, res, next) => {
     });
   }
 
-  if (req.user.role !== "admin") {
+  if (req.userType !== "admin") {
     return res.status(403).json({
       success: false,
       message: "Access denied - Admin only"
@@ -18,8 +17,27 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-// Check if user is admin or the resource owner
-const adminOrOwner = (ownerIdField = "userId") => {
+// Check if user is superadmin
+const superAdminOnly = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Not authorized - Please login"
+    });
+  }
+
+  if (req.userType !== "admin" || req.user.role !== "superadmin") {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied - Super Admin only"
+    });
+  }
+
+  next();
+};
+
+// Check admin permission
+const checkPermission = (permission) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -28,23 +46,22 @@ const adminOrOwner = (ownerIdField = "userId") => {
       });
     }
 
-    // Admin can access everything
-    if (req.user.role === "admin") {
-      return next();
+    if (req.userType !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied - Admin only"
+      });
     }
 
-    // Check if user owns the resource
-    const ownerId = req.params[ownerIdField] || req.body[ownerIdField];
-    
-    if (ownerId && ownerId.toString() === req.user._id.toString()) {
-      return next();
+    if (!req.user.hasPermission(permission)) {
+      return res.status(403).json({
+        success: false,
+        message: `Access denied - Missing permission: ${permission}`
+      });
     }
 
-    return res.status(403).json({
-      success: false,
-      message: "Access denied"
-    });
+    next();
   };
 };
 
-module.exports = { adminOnly, adminOrOwner };
+module.exports = { adminOnly, superAdminOnly, checkPermission };
