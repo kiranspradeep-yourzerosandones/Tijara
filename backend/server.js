@@ -31,7 +31,7 @@ app.use("/api/locations", require("./routes/locationRoutes"));
 app.use("/api/cart", require("./routes/cartRoutes"));
 app.use("/api/orders", require("./routes/orderRoutes"));
 app.use("/api/payments", require("./routes/paymentRoutes"));
-
+app.use("/api/admin/admins", require("./routes/adminManagementRoutes"));
 // Health check
 app.get("/api/health", (req, res) => {
   res.json({ success: true, message: "API Running" });

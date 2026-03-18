@@ -9,20 +9,20 @@ const adminSchema = new mongoose.Schema({
     maxlength: [50, "Name cannot exceed 50 characters"]
   },
 
-  phone: {
-    type: String,
-    required: [true, "Phone number is required"],
-    unique: true,
-    trim: true,
-    match: [/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"]
-  },
-
   email: {
     type: String,
+    required: [true, "Email is required"], // ✅ NOW REQUIRED
+    unique: true, // ✅ NOW UNIQUE
     trim: true,
     lowercase: true,
-    sparse: true,
     match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"]
+  },
+
+  phone: {
+    type: String,
+    trim: true,
+    sparse: true, // ✅ NOW OPTIONAL
+    match: [/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"]
   },
 
   password: {
@@ -68,18 +68,16 @@ const adminSchema = new mongoose.Schema({
 });
 
 // ============================================================
-// PRE-SAVE HOOK - Hash Password (NO next() needed for async)
+// PRE-SAVE HOOK - Hash Password
 // ============================================================
 adminSchema.pre("save", async function() {
-  // Skip if password not modified
   if (!this.isModified("password")) {
     return;
   }
 
-  // Hash password
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
-  console.log("✅ Password hashed for:", this.phone);
+  console.log("✅ Password hashed for:", this.email);
 });
 
 // ============================================================
@@ -94,8 +92,8 @@ adminSchema.methods.getPublicProfile = function() {
   return {
     id: this._id,
     name: this.name,
+    email: this.email, // ✅ Email instead of phone
     phone: this.phone,
-    email: this.email,
     role: this.role,
     permissions: this.role === "superadmin" ? {
       manageProducts: true,

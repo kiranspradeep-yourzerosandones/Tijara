@@ -124,7 +124,7 @@ export default function Dashboard() {
       ),
       link: "/admin/categories",
       color: "bg-blue-50 hover:bg-blue-100 border-blue-200",
-      iconColor: "bg-blue-400 text-white"
+      iconColor: "bg-blue-400 text-blac"
     },
     {
       title: "View Orders",
@@ -174,10 +174,10 @@ export default function Dashboard() {
               <span className="text-2xl font-bold text-gray-900">T</span>
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white">
+              <h2 className="text-xl sm:text-2xl font-bold text-black">
                 Welcome back, Admin! 👋
               </h2>
-              <p className="text-gray-400 mt-1 text-sm sm:text-base">
+              <p className="text-gray-700 mt-1 text-sm sm:text-base">
                 Manage your products and track orders from here.
               </p>
             </div>
@@ -199,10 +199,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
         {statCards.map((card, index) => (
           <Link key={index} href={card.link} className="group">
-            <div className={`${card.bgColor} rounded-2xl p-5 sm:p-6 text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}>
+            <div className={`${card.bgColor} rounded-2xl p-5 sm:p-6 text-black transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-white/80 text-xs sm:text-sm font-medium">{card.title}</p>
+                  <p className="text-black text-xs sm:text-sm font-medium">{card.title}</p>
                   <p className="text-2xl sm:text-4xl font-bold mt-2">
                     {loading ? (
                       <span className="inline-block w-12 h-8 bg-white/20 animate-pulse rounded"></span>
@@ -231,10 +231,10 @@ export default function Dashboard() {
               <p className="text-gray-500 text-sm mt-1">Common tasks at a glance</p>
             </div>
             
-            <div className="p-4 sm:p-5 space-y-3">
+            <div className="p-4  sm:p-5 space-y-3">
               {quickActions.map((action, index) => (
                 <Link key={index} href={action.link}>
-                  <div className={`flex items-center gap-4 p-4 rounded-xl border ${action.color} transition-all duration-200 group cursor-pointer`}>
+                  <div className={`flex items-center mb-2 gap-4 p-4 rounded-xl border ${action.color} transition-all duration-200 group cursor-pointer`}>
                     <div className={`${action.iconColor} p-2.5 rounded-xl transition-transform group-hover:scale-110`}>
                       {action.icon}
                     </div>
@@ -372,13 +372,13 @@ export default function Dashboard() {
         
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
           <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
           </div>
           <div className="flex-1">
-            <h3 className="text-white font-bold text-lg sm:text-xl">Mobile App Coming Soon! 📱</h3>
-            <p className="text-blue-300 mt-1 text-sm sm:text-base">
+            <h3 className="text-black font-bold text-lg sm:text-xl">Mobile App Coming Soon! 📱</h3>
+            <p className="text-gray-700 mt-1 text-sm sm:text-base">
               Your customers will be able to browse and order products directly from their phones.
             </p>
           </div>

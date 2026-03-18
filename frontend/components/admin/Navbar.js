@@ -25,9 +25,12 @@ export default function Navbar() {
   // Get page title from pathname
   const getPageTitle = () => {
     if (pathname.includes("/dashboard")) return "Dashboard";
-    if (pathname.includes("/users/add")) return "Add User";
-    if (pathname.includes("/users/")) return "User Details";
-    if (pathname.includes("/users")) return "Users";
+    if (pathname.includes("/admins/add")) return "Add Admin";
+    if (pathname.includes("/admins/")) return "Edit Admin";
+    if (pathname.includes("/admins")) return "Admin Management";
+    if (pathname.includes("/users/add")) return "Add Customer";
+    if (pathname.includes("/users/")) return "Customer Details";
+    if (pathname.includes("/users")) return "Customers";
     if (pathname.includes("/add-product")) return "Add Product";
     if (pathname.includes("/edit")) return "Edit Product";
     if (pathname.includes("/products")) return "Products";
@@ -105,7 +108,7 @@ export default function Navbar() {
               </div>
               <div className="text-left hidden md:block">
                 <p className="text-sm font-semibold text-black">{admin?.name || "Admin"}</p>
-                <p className="text-xs text-gray-500">{admin?.role || "Administrator"}</p>
+                <p className="text-xs text-gray-500 capitalize">{admin?.role || "Administrator"}</p>
               </div>
               <svg
                 className={`w-4 h-4 text-gray-500 transition-transform ${showDropdown ? "rotate-180" : ""}`}
@@ -119,11 +122,14 @@ export default function Navbar() {
 
             {/* Dropdown */}
             {showDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
                 {/* User Info */}
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-black">{admin?.name || "Admin"}</p>
-                  <p className="text-xs text-gray-500">{admin?.phone || ""}</p>
+                  <p className="text-xs text-gray-500 truncate">{admin?.email || ""}</p>
+                  <p className="text-xs text-gray-400 mt-1 capitalize">
+                    {admin?.role === "superadmin" ? "Super Admin" : admin?.role || "Administrator"}
+                  </p>
                 </div>
 
                 {/* Menu Items */}
@@ -140,7 +146,7 @@ export default function Navbar() {
                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                       />
                     </svg>
-                    Profile
+                    My Profile
                   </button>
                   <button
                     onClick={() => setShowDropdown(false)}
@@ -164,7 +170,7 @@ export default function Navbar() {
                   </button>
                 </div>
 
-                {/* Logouddsdsdt */}
+                {/* Logout */}
                 <div className="border-t border-gray-100 pt-1">
                   <button
                     onClick={handleLogout}

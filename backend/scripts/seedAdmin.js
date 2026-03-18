@@ -7,10 +7,10 @@ const seedAdmin = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log("📦 Connected to MongoDB");
 
-    // ✅ YOUR CREDENTIALS
-    const ADMIN_PHONE = "8086415357";
-    const ADMIN_PASSWORD = "Qwerty@123";
+    // ✅ YOUR EMAIL CREDENTIALS
     const ADMIN_EMAIL = "kiranspradeep2002@gmail.com";
+    const ADMIN_PASSWORD = "Qwerty@123";
+    const ADMIN_NAME = "Kiran Pradeep";
 
     // Delete ALL existing admins
     const deleteResult = await Admin.deleteMany({});
@@ -18,10 +18,10 @@ const seedAdmin = async () => {
 
     // Create fresh admin
     const admin = await Admin.create({
-      name: "Super Admin",
-      phone: ADMIN_PHONE,
+      name: ADMIN_NAME,
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
+      phone: "8086415357", // Optional now
       role: "superadmin",
       isActive: true
     });
@@ -29,19 +29,18 @@ const seedAdmin = async () => {
     console.log("\n✅ Admin created successfully!");
     console.log("   ID:", admin._id);
     console.log("   Name:", admin.name);
-    console.log("   Phone:", admin.phone);
     console.log("   Email:", admin.email);
     console.log("   Role:", admin.role);
     
     console.log("\n🔐 Login Credentials:");
-    console.log("   Phone:", ADMIN_PHONE);
+    console.log("   Email:", ADMIN_EMAIL);
     console.log("   Password:", ADMIN_PASSWORD);
 
     // Verify password was hashed
     const savedAdmin = await Admin.findById(admin._id).select("+password");
     console.log("\n🔍 Verification:");
     console.log("   Password is hashed:", savedAdmin.password.startsWith("$2"));
-    console.log("   Hash preview:", savedAdmin.password.substring(0, 20) + "...");
+    console.log("   Hash preview:", savedAdmin.password.substring(0, 29) + "...");
 
     process.exit(0);
   } catch (error) {

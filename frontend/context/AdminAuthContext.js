@@ -14,7 +14,6 @@ export function AdminAuthProvider({ children }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Check if admin is logged in on mount
   useEffect(() => {
     checkAuth();
   }, []);
@@ -29,7 +28,6 @@ export function AdminAuthProvider({ children }) {
       if (token && storedAdmin) {
         const adminData = JSON.parse(storedAdmin);
         
-        // ✅ Verify token is still valid
         const response = await fetch(`${API_URL}/admin/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -60,12 +58,12 @@ export function AdminAuthProvider({ children }) {
     }
   };
 
-  const login = async (phone, password) => {
+  const login = async (email, password) => { // ✅ Changed from phone to email
     setError(null);
     setLoading(true);
 
     try {
-      console.log("🚀 Attempting login for:", phone);
+      console.log("🚀 Attempting login for:", email);
       console.log("📡 API URL:", `${API_URL}/admin/login`);
       
       const response = await fetch(`${API_URL}/admin/login`, {
@@ -73,7 +71,7 @@ export function AdminAuthProvider({ children }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ phone, password }),
+        body: JSON.stringify({ email, password }), // ✅ Send email instead of phone
       });
 
       console.log("📡 Response status:", response.status);
@@ -85,19 +83,16 @@ export function AdminAuthProvider({ children }) {
         throw new Error(data.message || "Login failed");
       }
 
-      // ✅ Verify response structure
       if (!data.data || !data.data.token || !data.data.admin) {
         throw new Error("Invalid response format");
       }
 
-      // Store token and admin data
       localStorage.setItem("adminToken", data.data.token);
       localStorage.setItem("adminUser", JSON.stringify(data.data.admin));
       setAdmin(data.data.admin);
 
       console.log("✅ Login successful, admin:", data.data.admin);
 
-      // Redirect to dashboard
       setTimeout(() => {
         router.push("/admin/dashboard");
       }, 100);

@@ -6,25 +6,24 @@ const { generateToken } = require("../utils/jwtUtils");
 // @access  Public
 exports.adminLogin = async (req, res) => {
   try {
-    const { phone, password } = req.body;
+    const { email, password } = req.body; // ✅ Changed from phone to email
 
-    console.log("📞 Admin login attempt for:", phone);
+    console.log("📧 Admin login attempt for:", email);
     console.log("🔑 Password received:", password ? "Yes" : "No");
-    console.log("🔑 Password length:", password?.length);
 
-    if (!phone || !password) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Phone and password required"
+        message: "Email and password required"
       });
     }
 
-    // Find admin with password
-    const admin = await Admin.findOne({ phone }).select("+password");
+    // Find admin by email with password
+    const admin = await Admin.findOne({ email: email.toLowerCase() }).select("+password");
     console.log("👤 Admin found:", admin ? "Yes" : "No");
     
     if (!admin) {
-      console.log("❌ No admin found with phone:", phone);
+      console.log("❌ No admin found with email:", email);
       return res.status(401).json({
         success: false,
         message: "Invalid credentials"
@@ -34,7 +33,7 @@ exports.adminLogin = async (req, res) => {
     console.log("👤 Admin details:", {
       id: admin._id,
       name: admin.name,
-      phone: admin.phone,
+      email: admin.email,
       role: admin.role,
       isActive: admin.isActive,
       hasPassword: !!admin.password
@@ -67,7 +66,7 @@ exports.adminLogin = async (req, res) => {
 
     const token = generateToken(admin._id, "admin");
 
-    console.log("🎉 Admin login successful:", admin.phone);
+    console.log("🎉 Admin login successful:", admin.email);
 
     res.json({
       success: true,
@@ -108,6 +107,58 @@ exports.getMe = async (req, res) => {
       success: false,
       message: "Failed to get profile",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+// @desc    Create admin user (superadmin only)
+// @route   POST /api/admin/create-admin
+// @access  Private/SuperAdmin
+exports.createAdmin = async (req, res) => {
+  try {
+    const { name, email, password, phone, role, permissions } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email, and password are required"
+      });
+    }
+
+    // Check if email already exists
+    const existingAdmin = await Admin.findOne({ email: email.toLowerCase() });
+
+    if (existingAdmin) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered"
+      });
+    }
+
+    const admin = await Admin.create({
+      name,
+      email: email.toLowerCase(),
+      password,
+      phone,
+      role: role || "admin",
+      permissions: permissions || {},
+      createdBy: req.user._id
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Admin created successfully",
+      data: {
+        admin: admin.getPublicProfile()
+      }
+    });
+
+  } catch (error) {
+    console.error("Create Admin Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create admin",
+      error: error.message
     });
   }
 };
