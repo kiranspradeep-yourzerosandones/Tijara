@@ -1,24 +1,37 @@
+// frontend/lib/api.js
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 // Get auth token
 const getToken = () => {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("adminToken");
+    return localStorage.getItem("token");
   }
   return null;
+};
+
+// Get auth headers
+export const getAuthHeaders = () => {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 // API request helper
 const apiRequest = async (endpoint, options = {}) => {
   const token = getToken();
 
+  const headers = {
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
+
+  // Don't set Content-Type for FormData
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const config = {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
     ...options,
+    headers,
   };
 
   const response = await fetch(`${API_URL}${endpoint}`, config);
@@ -34,34 +47,45 @@ const apiRequest = async (endpoint, options = {}) => {
 // ==================== USER API ====================
 
 export const userAPI = {
-  // Get all users (customers)
   getAll: async (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/admin/customers?${query}`);
   },
 
-  // Get single user
   getById: async (id) => {
     return apiRequest(`/admin/customers/${id}`);
   },
 
-  // Create user
   create: async (userData) => {
-    return apiRequest("/admin/customers", {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/admin/customers`, {
       method: "POST",
-      body: JSON.stringify(userData),
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(!(userData instanceof FormData) && { "Content-Type": "application/json" }),
+      },
+      body: userData instanceof FormData ? userData : JSON.stringify(userData),
     });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Request failed");
+    return data;
   },
 
-  // Update user
   update: async (id, userData) => {
-    return apiRequest(`/admin/customers/${id}`, {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/admin/customers/${id}`, {
       method: "PUT",
-      body: JSON.stringify(userData),
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(!(userData instanceof FormData) && { "Content-Type": "application/json" }),
+      },
+      body: userData instanceof FormData ? userData : JSON.stringify(userData),
     });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Request failed");
+    return data;
   },
 
-  // Delete user (soft delete)
   delete: async (id, reason = "") => {
     return apiRequest(`/admin/customers/${id}`, {
       method: "DELETE",
@@ -69,7 +93,6 @@ export const userAPI = {
     });
   },
 
-  // Toggle user status
   toggleStatus: async (id, reason = "") => {
     return apiRequest(`/admin/customers/${id}/toggle-status`, {
       method: "PUT",
@@ -77,7 +100,6 @@ export const userAPI = {
     });
   },
 
-  // Reset user password
   resetPassword: async (id, newPassword, sendEmail = true) => {
     return apiRequest(`/admin/customers/${id}/reset-password`, {
       method: "PUT",
@@ -85,7 +107,6 @@ export const userAPI = {
     });
   },
 
-  // Update credit settings
   updateCredit: async (id, creditData) => {
     return apiRequest(`/admin/customers/${id}/credit`, {
       method: "PUT",
@@ -93,19 +114,17 @@ export const userAPI = {
     });
   },
 
-  // Get user stats
   getStats: async () => {
     return apiRequest("/admin/customers/stats");
   },
 
-  // Export users
   exportCSV: async (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const token = getToken();
-    
+
     const response = await fetch(`${API_URL}/admin/customers/export?${query}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(token && { Authorization: `Bearer ${token}` }),
       },
     });
 
@@ -129,18 +148,22 @@ export const productAPI = {
     return apiRequest(`/products/${id}`);
   },
 
-  // jaahh uhqwud
+  getBySlug: async (slug) => {
+    return apiRequest(`/products/slug/${slug}`);
+  },
 
   create: async (productData) => {
     const token = getToken();
     const response = await fetch(`${API_URL}/products`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(token && { Authorization: `Bearer ${token}` }),
       },
       body: productData, // FormData for file upload
     });
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Failed to create product");
+    return data;
   },
 
   update: async (id, productData) => {
@@ -148,15 +171,33 @@ export const productAPI = {
     const response = await fetch(`${API_URL}/products/${id}`, {
       method: "PUT",
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(token && { Authorization: `Bearer ${token}` }),
       },
-      body: productData,
+      body: productData, // FormData for file upload
     });
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Failed to update product");
+    return data;
   },
 
   delete: async (id) => {
     return apiRequest(`/products/${id}`, { method: "DELETE" });
+  },
+
+  updateStock: async (id, quantity, operation = "set") => {
+    return apiRequest(`/products/${id}/stock`, {
+      method: "PUT",
+      body: JSON.stringify({ quantity, operation }),
+    });
+  },
+
+  getLowStock: async () => {
+    return apiRequest("/products/admin/low-stock");
+  },
+
+  search: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/products/search?${query}`);
   },
 };
 
@@ -198,11 +239,127 @@ export const orderAPI = {
     return apiRequest(`/admin/orders/${id}`);
   },
 
+  getStats: async () => {
+    return apiRequest("/admin/orders/stats");
+  },
+
   updateStatus: async (id, status) => {
     return apiRequest(`/admin/orders/${id}/status`, {
       method: "PUT",
       body: JSON.stringify({ status }),
     });
+  },
+
+  updatePaymentStatus: async (id, paymentData) => {
+    return apiRequest(`/admin/orders/${id}/payment`, {
+      method: "PUT",
+      body: JSON.stringify(paymentData),
+    });
+  },
+
+  addNote: async (id, note) => {
+    return apiRequest(`/admin/orders/${id}/notes`, {
+      method: "PUT",
+      body: JSON.stringify({ note }),
+    });
+  },
+
+  generateDeliveryOtp: async (id) => {
+    return apiRequest(`/admin/orders/${id}/delivery-otp`, {
+      method: "POST",
+    });
+  },
+
+  verifyDeliveryOtp: async (id, otp) => {
+    return apiRequest(`/admin/orders/${id}/verify-delivery`, {
+      method: "POST",
+      body: JSON.stringify({ otp }),
+    });
+  },
+};
+
+// ==================== PAYMENT API ====================
+
+export const paymentAPI = {
+  getAll: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/payments?${query}`);
+  },
+
+  getById: async (id) => {
+    return apiRequest(`/admin/payments/${id}`);
+  },
+
+  getStats: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/payments/stats?${query}`);
+  },
+
+  record: async (paymentData) => {
+    return apiRequest("/admin/payments", {
+      method: "POST",
+      body: JSON.stringify(paymentData),
+    });
+  },
+
+  update: async (id, paymentData) => {
+    return apiRequest(`/admin/payments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(paymentData),
+    });
+  },
+
+  cancel: async (id, reason) => {
+    return apiRequest(`/admin/payments/${id}/cancel`, {
+      method: "PUT",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getOverdueReport: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/payments/overdue?${query}`);
+  },
+
+  getUserPayments: async (userId, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/users/${userId}/payments?${query}`);
+  },
+};
+
+// ==================== ADMIN API ====================
+
+export const adminAPI = {
+  getAll: async () => {
+    return apiRequest("/admin/admins");
+  },
+
+  getById: async (id) => {
+    return apiRequest(`/admin/admins/${id}`);
+  },
+
+  create: async (adminData) => {
+    return apiRequest("/admin/create-admin", {
+      method: "POST",
+      body: JSON.stringify(adminData),
+    });
+  },
+
+  update: async (id, adminData) => {
+    return apiRequest(`/admin/admins/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(adminData),
+    });
+  },
+
+  toggleStatus: async (id) => {
+    return apiRequest(`/admin/admins/${id}/toggle-status`, {
+      method: "PUT",
+    });
+  },
+
+  delete: async (id) => {
+    return apiRequest(`/admin/admins/${id}`, { method: "DELETE" });
   },
 };
 
@@ -211,4 +368,7 @@ export default {
   productAPI,
   categoryAPI,
   orderAPI,
+  paymentAPI,
+  adminAPI,
+  getAuthHeaders,
 };

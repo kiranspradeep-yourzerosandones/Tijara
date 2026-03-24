@@ -1,44 +1,59 @@
-export const colors = {
+export const COLORS = {
   // Primary
-  primary: '#2563EB',
-  primaryDark: '#1D4ED8',
-  primaryLight: '#3B82F6',
-
-  // Secondary
-  secondary: '#10B981',
-  secondaryDark: '#059669',
-  secondaryLight: '#34D399',
-
-  // Status
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
-
-  // Neutrals
-  white: '#FFFFFF',
-  black: '#000000',
-  gray50: '#F9FAFB',
-  gray100: '#F3F4F6',
-  gray200: '#E5E7EB',
-  gray300: '#D1D5DB',
-  gray400: '#9CA3AF',
-  gray500: '#6B7280',
-  gray600: '#4B5563',
-  gray700: '#374151',
-  gray800: '#1F2937',
-  gray900: '#111827',
-
-  // Background
-  background: '#F9FAFB',
-  surface: '#FFFFFF',
+  primary: "#F5C518",
+  primaryDark: "#D4A817",
+  primaryLight: "#FFD93D",
+  
+  // Backgrounds
+  background: "#000000",
+  backgroundDark: "#0A0A0A",
+  backgroundLight: "#FFFFFF",
+  
+  // Cards & Surfaces
+  card: "#F7F7F7",
+  cardDark: "#1A1A1A",
+  surface: "#FFFFFF",
   
   // Text
-  textPrimary: '#111827',
-  textSecondary: '#6B7280',
-  textDisabled: '#9CA3AF',
-
-  // Border
-  border: '#E5E7EB',
-  divider: '#F3F4F6',
+  textPrimary: "#000000",
+  textSecondary: "#666666",
+  textLight: "#FFFFFF",
+  textMuted: "#9E9E9E",
+  textDisabled: "#AAAAAA",
+  
+  // Grays
+  white: "#FFFFFF",
+  black: "#000000",
+  lightGray: "#E5E5E5",
+  gray: "#9E9E9E",
+  darkGray: "#2C2C2C",
+  mediumGray: "#666666",
+  
+  // Borders
+  border: "#DDDDDD",
+  borderLight: "#EEEEEE",
+  borderDark: "#333333",
+  
+  // Status Colors
+  success: "#4CAF50",
+  successLight: "#E8F5E9",
+  error: "#F44336",
+  errorLight: "#FFEBEE",
+  warning: "#FF9800",
+  warningLight: "#FFF3E0",
+  info: "#2196F3",
+  infoLight: "#E3F2FD",
+  
+  // Gradients (for LinearGradient)
+  gradientStart: "#000000",
+  gradientEnd: "#2B2000",
+  
+  // Overlay
+  overlay: "rgba(0, 0, 0, 0.5)",
+  overlayLight: "rgba(255, 255, 255, 0.9)",
+  
+  // Shadows
+  shadow: "#000000",
 };
+
+export default COLORS;

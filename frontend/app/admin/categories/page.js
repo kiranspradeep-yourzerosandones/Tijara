@@ -2,6 +2,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import ProtectedPage from "@/components/admin/ProtectedPage";
+import PermissionGate from "@/components/admin/PermissionGate";
+import { getAuthHeaders } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -21,7 +24,9 @@ export default function Categories() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${API_URL}/categories`);
+      const res = await fetch(`${API_URL}/categories`, {
+        headers: getAuthHeaders()
+      });
       const data = await res.json();
       const cats = data.categories || data || [];
       setCategories(Array.isArray(cats) ? cats : []);
@@ -40,7 +45,10 @@ export default function Categories() {
     try {
       const res = await fetch(`${API_URL}/categories`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ name: newCategory }),
       });
 
@@ -65,6 +73,7 @@ export default function Categories() {
     try {
       const res = await fetch(`${API_URL}/categories/${id}`, {
         method: "DELETE",
+        headers: getAuthHeaders()
       });
 
       if (res.ok) {
@@ -93,7 +102,10 @@ export default function Categories() {
     try {
       const res = await fetch(`${API_URL}/categories/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ name: editName }),
       });
 
@@ -111,6 +123,7 @@ export default function Categories() {
   };
 
   return (
+    <ProtectedPage permission="manageProducts">
     <div className="w-full min-h-screen">
       {/* ─── Sticky Header ─── */}
       <div className="sticky top-0 z-30 -mx-6 px-6 bg-white/80 backdrop-blur-xl border-b border-gray-200/80">
@@ -516,5 +529,6 @@ export default function Categories() {
         </div>
       )}
     </div>
+     </ProtectedPage>
   );
 }

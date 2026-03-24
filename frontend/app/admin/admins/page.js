@@ -1,11 +1,12 @@
+// frontend/app/admin/admins/page.js
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAdminAuth } from "@/context/AdminAuthContext";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import ProtectedPage from "@/components/admin/ProtectedPage";
+import { adminAPI } from "@/lib/api";
 
 export default function AdminsPage() {
   const [admins, setAdmins] = useState([]);
@@ -18,31 +19,24 @@ export default function AdminsPage() {
   const [adminToDelete, setAdminToDelete] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
-  const { admin, getToken } = useAdminAuth();
+  const { admin } = useAdminAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (admin && admin.role !== "superadmin") {
-      router.push("/admin/dashboard");
-      return;
-    }
     fetchAdmins();
-  }, [admin]);
+  }, []);
 
   const fetchAdmins = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/admin/admins`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      const data = await response.json();
+      const data = await adminAPI.getAll();
       if (data.success) {
         setAdmins(data.data.admins);
       } else {
         setError(data.message);
       }
     } catch (err) {
-      setError("Failed to fetch admins");
+      setError(err.message || "Failed to fetch admins");
     } finally {
       setLoading(false);
     }
@@ -51,18 +45,14 @@ export default function AdminsPage() {
   const handleToggleStatus = async (adminId) => {
     setActionLoading(adminId);
     try {
-      const response = await fetch(`${API_URL}/admin/admins/${adminId}/toggle-status`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      const data = await response.json();
+      const data = await adminAPI.toggleStatus(adminId);
       if (data.success) {
         fetchAdmins();
       } else {
         setError(data.message);
       }
     } catch (err) {
-      setError("Failed to update status");
+      setError(err.message || "Failed to update status");
     } finally {
       setActionLoading(null);
     }
@@ -72,11 +62,7 @@ export default function AdminsPage() {
     if (!adminToDelete) return;
     setActionLoading(adminToDelete);
     try {
-      const response = await fetch(`${API_URL}/admin/admins/${adminToDelete}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      const data = await response.json();
+      const data = await adminAPI.delete(adminToDelete);
       if (data.success) {
         setShowDeleteModal(false);
         setAdminToDelete(null);
@@ -85,7 +71,7 @@ export default function AdminsPage() {
         setError(data.message);
       }
     } catch (err) {
-      setError("Failed to delete admin");
+      setError(err.message || "Failed to delete admin");
     } finally {
       setActionLoading(null);
     }
@@ -127,7 +113,7 @@ export default function AdminsPage() {
   }
 
   return (
-    <>
+    <ProtectedPage permission="manageAdmins">
       {/* Delete Modal */}
       {showDeleteModal && (
         <div
@@ -488,6 +474,6 @@ export default function AdminsPage() {
           </div>
         </div>
       </div>
-    </>
+    </ProtectedPage>
   );
 }

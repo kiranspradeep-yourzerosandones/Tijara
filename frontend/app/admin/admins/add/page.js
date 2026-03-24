@@ -1,11 +1,12 @@
+// frontend/app/admin/admins/add/page.js
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAdminAuth } from "@/context/AdminAuthContext";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import ProtectedPage from "@/components/admin/ProtectedPage";
+import { adminAPI } from "@/lib/api";
 
 export default function AddAdminPage() {
   const router = useRouter();
@@ -75,16 +76,7 @@ export default function AddAdminPage() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/admin/create-admin`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
+      const data = await adminAPI.create(formData);
 
       if (data.success) {
         setSuccess("Admin created successfully!");
@@ -93,7 +85,7 @@ export default function AddAdminPage() {
         setError(data.message || "Failed to create admin");
       }
     } catch (err) {
-      setError("Network error. Please try again.");
+      setError(err.message || "Network error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -109,6 +101,7 @@ export default function AddAdminPage() {
   ];
 
   return (
+    <ProtectedPage permission="manageAdmins">
     <div className="w-full min-h-screen">
       {/* ─── Sticky Header ─── */}
       <div className="sticky top-0 z-30 -mx-6 px-6 bg-white/80 backdrop-blur-xl border-b border-gray-200/80">
@@ -658,5 +651,6 @@ export default function AddAdminPage() {
       </div>
       <div className="xl:hidden h-24" />
     </div>
+    </ProtectedPage>
   );
 }

@@ -1,151 +1,220 @@
+// frontend/context/AdminAuthContext.js
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
-const AdminAuthContext = createContext();
+const AuthContext = createContext(null);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-export function AdminAuthProvider({ children }) {
+export const AdminAuthProvider = ({ children }) => {
   const [admin, setAdmin] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const router = useRouter();
-  const pathname = usePathname();
+  const [initialized, setInitialized] = useState(false);
 
+  // Initialize auth state from localStorage
   useEffect(() => {
-    checkAuth();
+    const initAuth = () => {
+      try {
+        // Only run on client side
+        if (typeof window === "undefined") {
+          setLoading(false);
+          setInitialized(true);
+          return;
+        }
+
+        console.log("Checking auth...");
+        const storedToken = localStorage.getItem("token");
+        const storedAdmin = localStorage.getItem("adminData");
+
+        if (storedToken && storedAdmin) {
+          try {
+            const parsedAdmin = JSON.parse(storedAdmin);
+            console.log("Found auth data:", parsedAdmin?.email);
+            setToken(storedToken);
+            setAdmin(parsedAdmin);
+          } catch (parseError) {
+            console.error("Failed to parse admin data:", parseError);
+            localStorage.removeItem("token");
+            localStorage.removeItem("adminData");
+          }
+        } else {
+          console.log("No auth data found");
+        }
+      } catch (error) {
+        console.error("Auth init error:", error);
+      } finally {
+        setLoading(false);
+        setInitialized(true);
+      }
+    };
+
+    initAuth();
   }, []);
 
-  const checkAuth = async () => {
+  const login = async (email, password) => {
     try {
-      const token = localStorage.getItem("adminToken");
-      const storedAdmin = localStorage.getItem("adminUser");
+      console.log("Attempting login for:", email);
+      console.log("API URL:", `${API_URL}/admin/login`);
 
-      console.log("🔍 Checking auth:", { hasToken: !!token, hasAdmin: !!storedAdmin });
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
-      if (token && storedAdmin) {
-        const adminData = JSON.parse(storedAdmin);
-        
-        const response = await fetch(`${API_URL}/admin/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setAdmin(data.data.admin);
-          console.log("✅ Auth verified:", data.data.admin);
-        } else {
-          console.log("❌ Token invalid, clearing auth");
-          localStorage.removeItem("adminToken");
-          localStorage.removeItem("adminUser");
-          setAdmin(null);
-        }
-      } else {
-        console.log("❌ No auth data found");
-        setAdmin(null);
-      }
-    } catch (err) {
-      console.error("❌ Auth check error:", err);
-      localStorage.removeItem("adminToken");
-      localStorage.removeItem("adminUser");
-      setAdmin(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (email, password) => { // ✅ Changed from phone to email
-    setError(null);
-    setLoading(true);
-
-    try {
-      console.log("🚀 Attempting login for:", email);
-      console.log("📡 API URL:", `${API_URL}/admin/login`);
-      
       const response = await fetch(`${API_URL}/admin/login`, {
         method: "POST",
-        headers: {
+        headers: { 
           "Content-Type": "application/json",
+          "Accept": "application/json"
         },
-        body: JSON.stringify({ email, password }), // ✅ Send email instead of phone
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
       });
 
-      console.log("📡 Response status:", response.status);
+      clearTimeout(timeoutId);
+
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error("Response is not JSON:", await response.text());
+        return {
+          success: false,
+          message: "Server error. Please try again later.",
+        };
+      }
 
       const data = await response.json();
-      console.log("📦 Response data:", data);
 
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed");
+      console.log("Response status:", response.status);
+      console.log("Response data:", data);
+
+      if (data.success && data.data) {
+        const { token: newToken, admin: adminData } = data.data;
+
+        if (!newToken || !adminData) {
+          return {
+            success: false,
+            message: "Invalid response from server",
+          };
+        }
+
+        console.log("Login successful for:", adminData.email);
+
+        // Store in state
+        setToken(newToken);
+        setAdmin(adminData);
+
+        // Store in localStorage
+        localStorage.setItem("token", newToken);
+        localStorage.setItem("adminData", JSON.stringify(adminData));
+
+        return { success: true, admin: adminData };
+      } else {
+        return {
+          success: false,
+          message: data.message || "Login failed",
+        };
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      
+      // Handle specific error types
+      if (error.name === "AbortError") {
+        return {
+          success: false,
+          message: "Request timeout. Please check your connection.",
+        };
+      }
+      
+      if (error.message === "Failed to fetch") {
+        return {
+          success: false,
+          message: "Cannot connect to server. Please ensure the backend is running.",
+        };
       }
 
-      if (!data.data || !data.data.token || !data.data.admin) {
-        throw new Error("Invalid response format");
-      }
-
-      localStorage.setItem("adminToken", data.data.token);
-      localStorage.setItem("adminUser", JSON.stringify(data.data.admin));
-      setAdmin(data.data.admin);
-
-      console.log("✅ Login successful, admin:", data.data.admin);
-
-      setTimeout(() => {
-        router.push("/admin/dashboard");
-      }, 100);
-
-      return { success: true };
-
-    } catch (err) {
-      console.error("❌ Login error:", err);
-      setError(err.message);
-      return { success: false, message: err.message };
-    } finally {
-      setLoading(false);
+      return {
+        success: false,
+        message: error.message || "Network error. Please try again.",
+      };
     }
   };
 
-  const logout = () => {
-    console.log("👋 Logging out...");
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("adminUser");
+  const logout = useCallback(() => {
     setAdmin(null);
-    router.push("/admin/login");
-  };
-
-  const getToken = () => {
+    setToken(null);
     if (typeof window !== "undefined") {
-      return localStorage.getItem("adminToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("adminData");
+    }
+  }, []);
+
+  const getToken = useCallback(() => {
+    if (token) return token;
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("token");
     }
     return null;
+  }, [token]);
+
+  const refreshAdminData = async () => {
+    const currentToken = getToken();
+    if (!currentToken) return;
+
+    try {
+      const response = await fetch(`${API_URL}/admin/me`, {
+        headers: { 
+          Authorization: `Bearer ${currentToken}`,
+          "Accept": "application/json"
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          logout();
+          return;
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.data?.admin) {
+        const updatedAdmin = data.data.admin;
+        setAdmin(updatedAdmin);
+        localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
+      }
+    } catch (error) {
+      console.error("Failed to refresh admin data:", error);
+    }
   };
 
   const value = {
     admin,
+    token,
     loading,
-    error,
+    initialized,
+    isAuthenticated: !!admin && !!token,
     login,
     logout,
     getToken,
-    isAuthenticated: !!admin,
+    refreshAdminData,
   };
 
   return (
-    <AdminAuthContext.Provider value={value}>
+    <AuthContext.Provider value={value}>
       {children}
-    </AdminAuthContext.Provider>
+    </AuthContext.Provider>
   );
-}
+};
 
-export function useAdminAuth() {
-  const context = useContext(AdminAuthContext);
+export const useAdminAuth = () => {
+  const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAdminAuth must be used within AdminAuthProvider");
+    throw new Error("useAdminAuth must be used within an AdminAuthProvider");
   }
   return context;
-}
+};
 
-export default AdminAuthContext;
+export default AuthContext;

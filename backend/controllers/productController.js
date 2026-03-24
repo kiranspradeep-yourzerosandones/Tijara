@@ -1,3 +1,4 @@
+// backend/controllers/productController.js
 const Product = require("../models/Product");
 const fs = require("fs");
 const path = require("path");
@@ -28,7 +29,10 @@ exports.createProduct = async (req, res) => {
       unit,
       minOrderQuantity,
       maxOrderQuantity,
-      inStock
+      inStock,
+      trackQuantity,
+      stockQuantity,
+      lowStockThreshold
     } = req.body;
 
     if (!title) {
@@ -49,6 +53,9 @@ exports.createProduct = async (req, res) => {
       ? applications.split(',').map(app => app.trim()).filter(app => app)
       : [];
 
+    // Handle stock tracking
+    const isTrackingQuantity = trackQuantity === "true" || trackQuantity === true;
+    
     const productData = {
       title,
       category,
@@ -63,8 +70,16 @@ exports.createProduct = async (req, res) => {
       unit: unit || "piece",
       minOrderQuantity: minOrderQuantity ? parseInt(minOrderQuantity) : 1,
       maxOrderQuantity: maxOrderQuantity ? parseInt(maxOrderQuantity) : 100,
-      inStock: inStock !== "false" && inStock !== false
+      inStock: inStock !== "false" && inStock !== false,
+      trackQuantity: isTrackingQuantity,
+      stockQuantity: isTrackingQuantity && stockQuantity ? parseInt(stockQuantity) : null,
+      lowStockThreshold: lowStockThreshold ? parseInt(lowStockThreshold) : 10
     };
+
+    // If tracking quantity and stock is 0, set inStock to false
+    if (isTrackingQuantity && productData.stockQuantity !== null && productData.stockQuantity <= 0) {
+      productData.inStock = false;
+    }
 
     console.log("Product Data to Save:", productData);
 
@@ -96,6 +111,7 @@ exports.getAllProducts = async (req, res) => {
       inStock, 
       minPrice, 
       maxPrice,
+      stockStatus, // new filter
       sortBy = "createdAt",
       sortOrder = "desc",
       page = 1,
@@ -112,6 +128,15 @@ exports.getAllProducts = async (req, res) => {
     // Filter by stock status
     if (inStock !== undefined) {
       query.inStock = inStock === "true";
+    }
+
+    // Filter by stock status (in_stock, low_stock, out_of_stock)
+    if (stockStatus === "low_stock") {
+      query.trackQuantity = true;
+      query.inStock = true;
+      query.$expr = { $lte: ["$stockQuantity", "$lowStockThreshold"] };
+    } else if (stockStatus === "out_of_stock") {
+      query.inStock = false;
     }
 
     // Filter by price range
@@ -228,7 +253,10 @@ exports.updateProduct = async (req, res) => {
       unit,
       minOrderQuantity,
       maxOrderQuantity,
-      inStock
+      inStock,
+      trackQuantity,
+      stockQuantity,
+      lowStockThreshold
     } = req.body;
 
     const product = await Product.findById(req.params.id);
@@ -275,7 +303,29 @@ exports.updateProduct = async (req, res) => {
     if (unit !== undefined) product.unit = unit;
     if (minOrderQuantity !== undefined) product.minOrderQuantity = parseInt(minOrderQuantity);
     if (maxOrderQuantity !== undefined) product.maxOrderQuantity = parseInt(maxOrderQuantity);
-    if (inStock !== undefined) product.inStock = inStock === "true" || inStock === true;
+
+    // Update stock fields
+    if (trackQuantity !== undefined) {
+      product.trackQuantity = trackQuantity === "true" || trackQuantity === true;
+    }
+
+    if (product.trackQuantity) {
+      if (stockQuantity !== undefined) {
+        product.stockQuantity = parseInt(stockQuantity);
+        // Auto-update inStock based on stockQuantity
+        product.inStock = product.stockQuantity > 0;
+      }
+    } else {
+      // If not tracking quantity, use manual inStock toggle
+      if (inStock !== undefined) {
+        product.inStock = inStock === "true" || inStock === true;
+      }
+      product.stockQuantity = null;
+    }
+
+    if (lowStockThreshold !== undefined) {
+      product.lowStockThreshold = parseInt(lowStockThreshold);
+    }
 
     await product.save();
 
@@ -358,6 +408,92 @@ exports.searchProducts = async (req, res) => {
       success: true,
       count: products.length,
       products
+    });
+
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// GET LOW STOCK PRODUCTS (Admin)
+exports.getLowStockProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      isActive: true,
+      trackQuantity: true,
+      $expr: { $lte: ["$stockQuantity", "$lowStockThreshold"] }
+    }).sort({ stockQuantity: 1 });
+
+    res.json({
+      success: true,
+      count: products.length,
+      products
+    });
+
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// UPDATE STOCK QUANTITY (Admin)
+exports.updateStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity, operation = "set" } = req.body; // operation: set, add, subtract
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    if (!product.trackQuantity) {
+      return res.status(400).json({
+        success: false,
+        message: "Product is not tracking stock quantity"
+      });
+    }
+
+    const qty = parseInt(quantity);
+
+    switch (operation) {
+      case "add":
+        product.stockQuantity = (product.stockQuantity || 0) + qty;
+        break;
+      case "subtract":
+        product.stockQuantity = Math.max(0, (product.stockQuantity || 0) - qty);
+        break;
+      case "set":
+      default:
+        product.stockQuantity = qty;
+    }
+
+    // Auto-update inStock
+    product.inStock = product.stockQuantity > 0;
+
+    await product.save();
+
+    res.json({
+      success: true,
+      message: "Stock updated successfully",
+      product: {
+        _id: product._id,
+        title: product.title,
+        stockQuantity: product.stockQuantity,
+        inStock: product.inStock,
+        stockStatus: product.stockStatus
+      }
     });
 
   } catch (error) {

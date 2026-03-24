@@ -1,3 +1,4 @@
+// backend/routes/adminCartRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -7,13 +8,13 @@ const {
 } = require("../controllers/cartController");
 
 const { protect } = require("../middleware/auth");
-const { adminOnly } = require("../middleware/adminAuth");
+const { adminOnly, checkPermission } = require("../middleware/adminAuth");
 
 // All routes require admin authentication
 router.use(protect);
 router.use(adminOnly);
 
-// Admin cart routes
-router.get("/", adminGetAllCarts);
+// Admin cart routes - manageOrders permission (to see customer carts)
+router.get("/", checkPermission("manageOrders"), adminGetAllCarts);
 
 module.exports = router;

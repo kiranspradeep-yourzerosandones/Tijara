@@ -1,25 +1,55 @@
-import React, { useEffect } from 'react';
+// App.js
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Provider as PaperProvider } from 'react-native-paper';
-import RootNavigator from './src/navigation/RootNavigator';
-import useAuthStore from './src/store/authStore';
-import { colors } from './src/theme/colors';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { RootNavigator } from './src/navigation';
+import { useAuthStore } from './src/store/authStore';
 
 export default function App() {
-  const loadStoredAuth = useAuthStore((state) => state.loadStoredAuth);
+  const [isReady, setIsReady] = useState(false);
+  const restoreSession = useAuthStore((state) => state.restoreSession);
 
   useEffect(() => {
-    // Load stored authentication on app start
-    loadStoredAuth();
+    const init = async () => {
+      try {
+        await restoreSession();
+      } catch (error) {
+        console.error('Init error:', error);
+      } finally {
+        setIsReady(true);
+      }
+    };
+    init();
   }, []);
 
+  if (!isReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#F5C518" />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaProvider>
-      <PaperProvider>
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaProvider>
         <StatusBar style="auto" />
         <RootNavigator />
-      </PaperProvider>
-    </SafeAreaProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+  },
+});

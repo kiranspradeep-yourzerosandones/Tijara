@@ -1,35 +1,38 @@
 {
   "expo": {
     "name": "Tijara",
-    "slug": "tijara-mobile",
+    "slug": "tijara",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2563EB"
+      "backgroundColor": "#F5C518"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tijara.mobile"
+      "bundleIdentifier": "com.tijara.app",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to provide accurate delivery addresses."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2563EB"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.tijara.mobile",
+      "package": "com.tijara.app",
+      "versionCode": 1,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -37,18 +40,16 @@
     },
     "plugins": [
       [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#2563EB"
-        }
-      ],
-      [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Tijara to use your location to save delivery addresses."
+          "locationAlwaysAndWhenInUsePermission": "Allow Tijara to use your location for delivery addresses."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    }
   }
 }

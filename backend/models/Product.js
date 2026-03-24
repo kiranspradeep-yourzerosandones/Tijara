@@ -1,3 +1,4 @@
+// backend/models/Product.js
 const mongoose = require("mongoose");
 
 function generateSlug(title) {
@@ -36,43 +37,60 @@ const productSchema = new mongoose.Schema({
   images: [String],
   applications: [String],
 
-  // ========== PRICING (NEW) ==========
+  // ========== PRICING ==========
   price: {
     type: Number,
     required: [true, "Price is required"],
     min: [0, "Price cannot be negative"]
   },
 
-  // Compare at price (for showing discounts)
   compareAtPrice: {
     type: Number,
     min: 0
   },
 
-  // Unit of measurement
   unit: {
     type: String,
     default: "piece",
     enum: ["piece", "kg", "liter", "box", "pack", "dozen", "meter", "unit"]
   },
 
-  // Minimum order quantity
   minOrderQuantity: {
     type: Number,
     default: 1,
     min: 1
   },
 
-  // Maximum order quantity (per order)
   maxOrderQuantity: {
     type: Number,
     default: 100
   },
 
-  // Stock status
+  // ========== INVENTORY ==========
+  // Stock status toggle
   inStock: {
     type: Boolean,
     default: true
+  },
+
+  // Track stock quantity (optional)
+  // If null/undefined = unlimited stock (just use inStock toggle)
+  // If number = limited stock, track quantity
+  trackQuantity: {
+    type: Boolean,
+    default: false
+  },
+
+  stockQuantity: {
+    type: Number,
+    default: null,
+    min: 0
+  },
+
+  // Low stock alert threshold
+  lowStockThreshold: {
+    type: Number,
+    default: 10
   },
 
   // ========== EXISTING FIELDS ==========
@@ -106,6 +124,7 @@ productSchema.index({ slug: 1 });
 productSchema.index({ category: 1 });
 productSchema.index({ isActive: 1 });
 productSchema.index({ price: 1 });
+productSchema.index({ inStock: 1, stockQuantity: 1 });
 
 // Generate slug before saving
 productSchema.pre('save', async function() {
@@ -121,6 +140,11 @@ productSchema.pre('save', async function() {
     
     this.slug = slug;
   }
+
+  // Auto-update inStock based on stockQuantity if tracking
+  if (this.trackQuantity && this.stockQuantity !== null) {
+    this.inStock = this.stockQuantity > 0;
+  }
 });
 
 // Virtual for discount percentage
@@ -130,6 +154,59 @@ productSchema.virtual('discountPercentage').get(function() {
   }
   return 0;
 });
+
+// Virtual for stock status text
+productSchema.virtual('stockStatus').get(function() {
+  if (!this.inStock) return "out_of_stock";
+  if (!this.trackQuantity) return "in_stock";
+  if (this.stockQuantity <= 0) return "out_of_stock";
+  if (this.stockQuantity <= this.lowStockThreshold) return "low_stock";
+  return "in_stock";
+});
+
+// Virtual for available quantity (for cart/order validation)
+productSchema.virtual('availableQuantity').get(function() {
+  if (!this.inStock) return 0;
+  if (!this.trackQuantity) return this.maxOrderQuantity || 9999; // Unlimited
+  return this.stockQuantity || 0;
+});
+
+// Method to check if quantity is available
+productSchema.methods.hasStock = function(quantity = 1) {
+  if (!this.inStock) return false;
+  if (!this.trackQuantity) return true;
+  return this.stockQuantity >= quantity;
+};
+
+// Method to reserve/decrement stock
+productSchema.methods.decrementStock = async function(quantity) {
+  if (!this.trackQuantity) return true;
+  
+  if (this.stockQuantity < quantity) {
+    throw new Error(`Insufficient stock. Available: ${this.stockQuantity}`);
+  }
+
+  this.stockQuantity -= quantity;
+  
+  // Auto update inStock status
+  if (this.stockQuantity <= 0) {
+    this.inStock = false;
+  }
+
+  await this.save();
+  return true;
+};
+
+// Method to restore stock (for cancelled orders)
+productSchema.methods.incrementStock = async function(quantity) {
+  if (!this.trackQuantity) return true;
+  
+  this.stockQuantity += quantity;
+  this.inStock = true;
+  
+  await this.save();
+  return true;
+};
 
 // Ensure virtuals are included
 productSchema.set("toJSON", { virtuals: true });

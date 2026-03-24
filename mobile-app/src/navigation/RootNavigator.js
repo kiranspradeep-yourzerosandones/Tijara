@@ -1,43 +1,51 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import useAuthStore from '../store/authStore';
+import { View, StyleSheet } from 'react-native';
+
 import AuthNavigator from './AuthNavigator';
 import AppNavigator from './AppNavigator';
-import { colors } from '../theme/colors';
+import { Loading } from '../components/common';
+import { useAuthStore } from '../store';
+import { COLORS } from '../theme';
 
-const Stack = createNativeStackNavigator();
+const RootNavigator = () => {
+  const { isAuthenticated, restoreSession } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(true);
 
-export default function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      await restoreSession();
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <Loading fullScreen message="Loading..." />
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <Stack.Screen name="App" component={AppNavigator} />
-        ) : (
-          <Stack.Screen name="Auth" component={AuthNavigator} />
-        )}
-      </Stack.Navigator>
+      {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
-}
+};
 
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: COLORS.white,
   },
 });
+
+export default RootNavigator;

@@ -242,6 +242,8 @@ exports.createCustomer = async (req, res) => {
       adminNotes
     } = req.body;
 
+    console.log("hii otp");
+    
     // Validate required fields
     if (!name || !phone || !password) {
       return res.status(400).json({

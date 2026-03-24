@@ -1,91 +1,192 @@
+// src/store/authStore.js
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
-import { STORAGE_KEYS } from '../utils/constants';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import tokenManager from '../utils/tokenManager';
 
-const useAuthStore = create((set, get) => ({
-  // State
-  user: null,
-  token: null,
-  isAuthenticated: false,
-  isLoading: true,
+// Import auth functions directly to avoid circular dependency
+import * as authAPI from '../api/auth';
 
-  // Actions
-  setUser: (user) => set({ user, isAuthenticated: true }),
-  
-  setToken: async (token) => {
-    try {
-      if (token) {
-        await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, token);
-      } else {
-        await SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
-      }
-      set({ token });
-    } catch (error) {
-      console.error('Error setting token:', error);
-    }
-  },
-
-  login: async (userData, token) => {
-    try {
-      await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, token);
-      await SecureStore.setItemAsync(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
-      set({ 
-        user: userData, 
-        token, 
-        isAuthenticated: true,
-        isLoading: false 
+export const useAuthStore = create(
+  persist(
+    (set, get) => {
+      // Register unauthorized callback
+      tokenManager.setUnauthorizedCallback(() => {
+        console.log('🚨 Unauthorized - Auto logout');
+        get().logout();
       });
-    } catch (error) {
-      console.error('Error during login:', error);
-      throw error;
-    }
-  },
 
-  logout: async () => {
-    try {
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.USER_DATA);
-      set({ 
-        user: null, 
-        token: null, 
+      return {
+        // State
+        user: null,
+        token: null,
         isAuthenticated: false,
-        isLoading: false 
-      });
-    } catch (error) {
-      console.error('Error during logout:', error);
-    }
-  },
+        isLoading: false,
+        error: null,
 
-  loadStoredAuth: async () => {
-    try {
-      const token = await SecureStore.getItemAsync(STORAGE_KEYS.AUTH_TOKEN);
-      const userDataStr = await SecureStore.getItemAsync(STORAGE_KEYS.USER_DATA);
-      
-      if (token && userDataStr) {
-        const userData = JSON.parse(userDataStr);
-        set({ 
-          user: userData, 
-          token, 
-          isAuthenticated: true,
-          isLoading: false 
-        });
-      } else {
-        set({ isLoading: false });
-      }
-    } catch (error) {
-      console.error('Error loading stored auth:', error);
-      set({ isLoading: false });
-    }
-  },
+        // Registration flow state
+        registrationPhone: null,
+        isPhoneVerified: false,
 
-  updateUser: async (userData) => {
-    try {
-      await SecureStore.setItemAsync(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
-      set({ user: userData });
-    } catch (error) {
-      console.error('Error updating user:', error);
+        // Actions
+        setLoading: (loading) => set({ isLoading: loading }),
+        setError: (error) => set({ error }),
+        clearError: () => set({ error: null }),
+
+        // Set registration phone
+        setRegistrationPhone: (phone) => set({ registrationPhone: phone }),
+        setPhoneVerified: (verified) => set({ isPhoneVerified: verified }),
+
+        // Login with password
+        login: async (phone, password) => {
+          set({ isLoading: true, error: null });
+          try {
+            const response = await authAPI.login(phone, password);
+            const { user, token } = response.data;
+
+            await tokenManager.setToken(token);
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+
+            return response;
+          } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message;
+            set({ isLoading: false, error: errorMessage });
+            throw error;
+          }
+        },
+
+        // Login with OTP
+        loginWithOtp: async (phone, otp) => {
+          set({ isLoading: true, error: null });
+          try {
+            const response = await authAPI.verifyLoginOtp(phone, otp);
+            const { user, token } = response.data;
+
+            await tokenManager.setToken(token);
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+
+            return response;
+          } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message;
+            set({ isLoading: false, error: errorMessage });
+            throw error;
+          }
+        },
+
+        // Complete registration
+        completeRegistration: async (data) => {
+          set({ isLoading: true, error: null });
+          try {
+            const response = await authAPI.completeRegistration(data);
+            const { user, token } = response.data;
+
+            await tokenManager.setToken(token);
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+              registrationPhone: null,
+              isPhoneVerified: false,
+            });
+
+            return response;
+          } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message;
+            set({ isLoading: false, error: errorMessage });
+            throw error;
+          }
+        },
+
+        // Logout
+        logout: async () => {
+          try {
+            await tokenManager.clearToken();
+          } catch (error) {
+            console.error('Error clearing token:', error);
+          }
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            error: null,
+            registrationPhone: null,
+            isPhoneVerified: false,
+          });
+        },
+
+        // Fetch profile
+        fetchProfile: async () => {
+          set({ isLoading: true });
+          try {
+            const response = await authAPI.getProfile();
+            set({ user: response.data.user, isLoading: false });
+            return response;
+          } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message;
+            set({ isLoading: false, error: errorMessage });
+            throw error;
+          }
+        },
+
+        // Update profile
+        updateProfile: async (data) => {
+          set({ isLoading: true, error: null });
+          try {
+            const response = await authAPI.updateProfile(data);
+            set({ user: response.data.user, isLoading: false });
+            return response;
+          } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message;
+            set({ isLoading: false, error: errorMessage });
+            throw error;
+          }
+        },
+
+        // Restore session
+        restoreSession: async () => {
+          try {
+            const token = await tokenManager.getToken();
+            if (token) {
+              set({ token, isAuthenticated: true });
+              await get().fetchProfile();
+              return true;
+            }
+            return false;
+          } catch (error) {
+            console.error('Error restoring session:', error);
+            await get().logout();
+            return false;
+          }
+        },
+      };
+    },
+    {
+      name: 'auth-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
-  },
-}));
+  )
+);
 
 export default useAuthStore;

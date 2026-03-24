@@ -5,11 +5,10 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import ProductImage from "@/components/ProductImage";
+import PermissionGate from "@/components/admin/PermissionGate";
 import { getImageUrl } from "@/lib/imageHelper";
+import { productAPI } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
-// Styles for rendered HTML content
 const contentStyles = `
   .rich-content h2 { font-size: 1.4em; font-weight: 700; margin: 1.2em 0 0.5em; color: #111; border-bottom: 2px solid #f3f4f6; padding-bottom: 0.3em; }
   .rich-content h3 { font-size: 1.2em; font-weight: 600; margin: 1em 0 0.4em; color: #222; }
@@ -42,8 +41,7 @@ export default function ProductDetail() {
 
   const fetchProduct = async () => {
     try {
-      const res = await fetch(`${API_URL}/products/slug/${params.slug}`);
-      const data = await res.json();
+      const data = await productAPI.getBySlug(params.slug);
 
       if (data.success && data.product) {
         setProduct(data.product);
@@ -114,7 +112,6 @@ export default function ProductDetail() {
       )}
 
       <div className="space-y-6">
-
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -136,17 +133,20 @@ export default function ProductDetail() {
               </div>
             </div>
           </div>
-          <Link href={`/admin/products/edit/${product._id}`}
-            className="inline-flex items-center gap-2 bg-amber-400 text-gray-900 px-5 py-2.5 rounded-lg font-semibold hover:bg-amber-500 transition-colors shadow-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Edit
-          </Link>
+          
+          {/* ✅ Only show Edit button if user has manageProducts permission */}
+          <PermissionGate permission="manageProducts">
+            <Link href={`/admin/products/edit/${product._id}`}
+              className="inline-flex items-center gap-2 bg-amber-400 text-gray-900 px-5 py-2.5 rounded-lg font-semibold hover:bg-amber-500 transition-colors shadow-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit
+            </Link>
+          </PermissionGate>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-
           {/* LEFT - Scrollable Content */}
           <div className="lg:col-span-3 space-y-8">
             {/* Images */}
@@ -164,11 +164,7 @@ export default function ProductDetail() {
                   {product.images.map((img, i) => (
                     <button key={i} onClick={() => setCurrentImage(i)}
                       className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${currentImage === i ? "border-amber-400 scale-105" : "border-gray-200 hover:border-gray-300"}`}>
-                      <ProductImage
-                        src={img}
-                        alt={`${i + 1}`}
-                        className="w-full h-full object-cover"
-                      />
+                      <ProductImage src={img} alt={`${i + 1}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>
@@ -258,6 +254,12 @@ export default function ProductDetail() {
                       {product.inStock ? "In Stock" : "Out of Stock"}
                     </span>
                   </div>
+                  {product.trackQuantity && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Quantity</span>
+                      <span className="font-medium text-gray-900">{product.stockQuantity ?? "—"}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -307,7 +309,6 @@ export default function ProductDetail() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </>

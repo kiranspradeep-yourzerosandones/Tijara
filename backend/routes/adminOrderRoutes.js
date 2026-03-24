@@ -1,3 +1,4 @@
+// backend/routes/adminOrderRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -13,26 +14,26 @@ const {
 } = require("../controllers/orderController");
 
 const { protect } = require("../middleware/auth");
-const { adminOnly } = require("../middleware/adminAuth");
+const { adminOnly, checkPermission } = require("../middleware/adminAuth");
 
 // All routes require admin authentication
 router.use(protect);
 router.use(adminOnly);
 
-// Order statistics
-router.get("/stats", adminGetOrderStats);
+// Order statistics - viewReports permission
+router.get("/stats", checkPermission("viewReports"), adminGetOrderStats);
 
-// Order CRUD
-router.get("/", adminGetAllOrders);
-router.get("/:id", adminGetOrder);
+// Order CRUD - manageOrders permission
+router.get("/", checkPermission("manageOrders"), adminGetAllOrders);
+router.get("/:id", checkPermission("manageOrders"), adminGetOrder);
 
-// Order actions
-router.put("/:id/status", adminUpdateOrderStatus);
-router.put("/:id/payment", adminUpdatePaymentStatus);
-router.put("/:id/notes", adminAddNote);
+// Order actions - manageOrders permission
+router.put("/:id/status", checkPermission("manageOrders"), adminUpdateOrderStatus);
+router.put("/:id/payment", checkPermission("managePayments"), adminUpdatePaymentStatus);
+router.put("/:id/notes", checkPermission("manageOrders"), adminAddNote);
 
-// Delivery OTP
-router.post("/:id/delivery-otp", adminGenerateDeliveryOtp);
-router.post("/:id/verify-delivery", adminVerifyDeliveryOtp);
+// Delivery OTP - manageOrders permission
+router.post("/:id/delivery-otp", checkPermission("manageOrders"), adminGenerateDeliveryOtp);
+router.post("/:id/verify-delivery", checkPermission("manageOrders"), adminVerifyDeliveryOtp);
 
 module.exports = router;

@@ -1,7 +1,7 @@
 {
   "name": "tijara-mobile",
   "version": "1.0.0",
-  "main": "expo/AppEntry.js",
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -9,31 +9,24 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/vector-icons": "^14.0.0",
-    "@react-native-async-storage/async-storage": "^1.21.0",
-    "@react-navigation/bottom-tabs": "^6.5.11",
-    "@react-navigation/native": "^6.1.9",
-    "@react-navigation/native-stack": "^6.9.17",
-    "axios": "^1.6.2",
-    "date-fns": "^3.0.0",
-    "expo": "~50.0.0",
-    "expo-constants": "~15.4.0",
-    "expo-device": "~5.9.0",
-    "expo-image-picker": "~14.7.0",
-    "expo-location": "~16.5.0",
-    "expo-notifications": "~0.27.0",
-    "expo-secure-store": "~12.8.0",
-    "expo-status-bar": "~1.11.0",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-navigation/bottom-tabs": "^6.5.20",
+    "@react-navigation/native": "^6.1.17",
+    "@react-navigation/stack": "^6.3.29",
+    "axios": "^1.6.8",
+    "expo": "~51.0.0",
+    "expo-linear-gradient": "~13.0.2",
+    "expo-location": "~17.0.1",
+    "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
-    "react-hook-form": "^7.49.0",
-    "react-native": "0.73.0",
-    "react-native-paper": "^5.11.3",
-    "react-native-safe-area-context": "4.8.2",
-    "react-native-screens": "~3.29.0",
-    "zustand": "^4.4.7"
+    "react-native": "0.74.2",
+    "react-native-gesture-handler": "~2.16.1",
+    "react-native-safe-area-context": "4.10.1",
+    "react-native-screens": "3.31.1",
+    "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.24.0"
   },
   "private": true
 }

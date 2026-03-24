@@ -18,27 +18,27 @@ const {
 } = require("../controllers/adminCustomerController");
 
 const { protect } = require("../middleware/auth");
-const { adminOnly } = require("../middleware/adminAuth");
+const { adminOnly, checkPermission } = require("../middleware/adminAuth");
 
 // All routes require admin authentication
 router.use(protect);
 router.use(adminOnly);
 
-// Customer statistics & export
-router.get("/stats", getCustomerStats);
-router.get("/export", exportCustomers);
+// Customer statistics & export - viewReports or manageCustomers
+router.get("/stats", checkPermission("viewReports"), getCustomerStats);
+router.get("/export", checkPermission("manageCustomers"), exportCustomers);
 
-// Customer CRUD with profile image upload
-router.get("/", getAllCustomers);
-router.get("/:id", getCustomer);
-router.post("/", upload.single("profileImage"), createCustomer);
-router.put("/:id", upload.single("profileImage"), updateCustomer);
-router.delete("/:id", deleteCustomer);
+// Customer CRUD with profile image upload - manageCustomers permission
+router.get("/", checkPermission("manageCustomers"), getAllCustomers);
+router.get("/:id", checkPermission("manageCustomers"), getCustomer);
+router.post("/", checkPermission("manageCustomers"), upload.single("profileImage"), createCustomer);
+router.put("/:id", checkPermission("manageCustomers"), upload.single("profileImage"), updateCustomer);
+router.delete("/:id", checkPermission("manageCustomers"), deleteCustomer);
 
-// Customer actions
-router.put("/:id/reset-password", resetCustomerPassword);
-router.put("/:id/toggle-status", toggleCustomerStatus);
-router.put("/:id/credit", updateCreditSettings);
-router.post("/:id/send-reset-email", sendPasswordResetToCustomer);
+// Customer actions - manageCustomers permission
+router.put("/:id/reset-password", checkPermission("manageCustomers"), resetCustomerPassword);
+router.put("/:id/toggle-status", checkPermission("manageCustomers"), toggleCustomerStatus);
+router.put("/:id/credit", checkPermission("managePayments"), updateCreditSettings);
+router.post("/:id/send-reset-email", checkPermission("manageCustomers"), sendPasswordResetToCustomer);
 
 module.exports = router;

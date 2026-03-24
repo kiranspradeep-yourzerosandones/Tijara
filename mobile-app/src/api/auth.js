@@ -1,64 +1,110 @@
-// mobile-app\src\api\auth.js
-import apiClient from './client';
+// src/api/auth.js
+// ⚠️ DO NOT import authStore here - it causes circular dependency!
+import apiClient, { handleApiResponse } from './client';
 
-export const authAPI = {
-  // Send registration OTP
-  sendRegistrationOTP: (phone) => {
-    return apiClient.post('/auth/register/send-otp', { phone });
-  },
+// ============================================================
+// REGISTRATION
+// ============================================================
 
-  // Verify registration OTP
-  verifyRegistrationOTP: (phone, otp) => {
-    return apiClient.post('/auth/register/verify-otp', { phone, otp });
-  },
+export const sendRegistrationOtp = async (phone) => {
+  const response = await apiClient.post('/auth/register/send-otp', { phone });
+  return handleApiResponse(response);
+};
 
-  // Complete registration
-  register: (data) => {
-    return apiClient.post('/auth/register/complete', data);
-  },
+export const verifyRegistrationOtp = async (phone, otp) => {
+  const response = await apiClient.post('/auth/register/verify-otp', { phone, otp });
+  return handleApiResponse(response);
+};
 
-  // Login with password
-  login: (phone, password) => {
-    return apiClient.post('/auth/login', { phone, password });
-  },
+export const completeRegistration = async (data) => {
+  const response = await apiClient.post('/auth/register/complete', data);
+  return handleApiResponse(response);
+};
 
-  // Send login OTP
-  sendLoginOTP: (phone) => {
-    return apiClient.post('/auth/login/send-otp', { phone });
-  },
+// ============================================================
+// LOGIN
+// ============================================================
 
-  // Verify login OTP
-  verifyLoginOTP: (phone, otp) => {
-    return apiClient.post('/auth/login/verify-otp', { phone, otp });
-  },
+export const login = async (phone, password) => {
+  const response = await apiClient.post('/auth/login', { phone, password });
+  return handleApiResponse(response);
+};
 
-  // Get current user
-  getMe: () => {
-    return apiClient.get('/auth/me');
-  },
+export const sendLoginOtp = async (phone) => {
+  const response = await apiClient.post('/auth/login/send-otp', { phone });
+  return handleApiResponse(response);
+};
 
-  // Update profile
-  updateProfile: (data) => {
-    return apiClient.put('/auth/profile', data);
-  },
+export const verifyLoginOtp = async (phone, otp) => {
+  const response = await apiClient.post('/auth/login/verify-otp', { phone, otp });
+  return handleApiResponse(response);
+};
 
-  // Change password
-  changePassword: (currentPassword, newPassword) => {
-    return apiClient.put('/auth/change-password', { currentPassword, newPassword });
-  },
+// ============================================================
+// FORGOT PASSWORD
+// ============================================================
 
-  // Forgot password - send OTP
-  sendForgotPasswordOTP: (phone) => {
-    return apiClient.post('/auth/forgot-password/send-otp', { phone });
-  },
+export const sendForgotPasswordOtp = async (phone) => {
+  const response = await apiClient.post('/auth/forgot-password/send-otp', { phone });
+  return handleApiResponse(response);
+};
 
-  // Reset password with OTP
-  resetPassword: (phone, otp, newPassword) => {
-    return apiClient.post('/auth/forgot-password/reset', { phone, otp, newPassword });
-  },
+export const resetPassword = async (phone, otp, newPassword) => {
+  const response = await apiClient.post('/auth/forgot-password/reset', {
+    phone,
+    otp,
+    newPassword,
+  });
+  return handleApiResponse(response);
+};
 
-  // Update FCM token
-  updateFCMToken: (fcmToken) => {
-    return apiClient.put('/auth/fcm-token', { fcmToken });
-  },
+// Email-based password reset
+export const requestPasswordResetEmail = async (email) => {
+  const response = await apiClient.post('/auth/reset-password/request', { email });
+  return handleApiResponse(response);
+};
+
+export const verifyResetToken = async (token) => {
+  const response = await apiClient.get(`/auth/reset-password/verify/${token}`);
+  return handleApiResponse(response);
+};
+
+export const resetPasswordWithToken = async (token, newPassword, confirmPassword) => {
+  const response = await apiClient.post('/auth/reset-password/email', {
+    token,
+    newPassword,
+    confirmPassword,
+  });
+  return handleApiResponse(response);
+};
+
+// ============================================================
+// PROFILE
+// ============================================================
+
+export const getProfile = async () => {
+  const response = await apiClient.get('/auth/me');
+  return handleApiResponse(response);
+};
+
+export const updateProfile = async (data) => {
+  const response = await apiClient.put('/auth/profile', data);
+  return handleApiResponse(response);
+};
+
+export const changePassword = async (currentPassword, newPassword) => {
+  const response = await apiClient.put('/auth/change-password', {
+    currentPassword,
+    newPassword,
+  });
+  return handleApiResponse(response);
+};
+
+// ============================================================
+// FCM TOKEN
+// ============================================================
+
+export const updateFCMToken = async (fcmToken) => {
+  const response = await apiClient.put('/auth/fcm-token', { fcmToken });
+  return handleApiResponse(response);
 };

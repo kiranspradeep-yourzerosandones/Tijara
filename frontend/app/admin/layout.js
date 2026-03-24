@@ -1,64 +1,91 @@
-// frontend\app\admin\layout.js
+// frontend/app/admin/layout.js
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useAdminAuth } from "@/context/AdminAuthContext";
+import { AdminAuthProvider, useAdminAuth } from "@/context/AdminAuthContext";
+import { PermissionProvider } from "@/context/PermissionContext";
 import Sidebar from "@/components/admin/Sidebar";
 import Navbar from "@/components/admin/Navbar";
 
-export default function AdminLayout({ children }) {
-  const { isAuthenticated, loading } = useAdminAuth();
+// Routes that don't require authentication
+const PUBLIC_ROUTES = [
+  "/admin/login",
+  "/admin/forgot-password",
+  "/admin/reset-password"
+];
+
+function AdminLayoutContent({ children }) {
+  const { isAuthenticated, loading, initialized } = useAdminAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Don't protect the login page
-  const isLoginPage = pathname === "/admin/login";
+  // Check if current path is a public route
+  const isPublicRoute = PUBLIC_ROUTES.some(route => pathname.startsWith(route));
 
   useEffect(() => {
-    if (!loading && !isAuthenticated && !isLoginPage) {
+    // Don't redirect if still loading or not initialized
+    if (loading || !initialized) return;
+
+    // If it's a public route, don't redirect
+    if (isPublicRoute) return;
+
+    // If not authenticated and not on a public route, redirect to login
+    if (!isAuthenticated) {
       router.push("/admin/login");
     }
-  }, [isAuthenticated, loading, isLoginPage, router]);
+  }, [isAuthenticated, loading, initialized, pathname, router, isPublicRoute]);
 
-  // Show loading state
-  if (loading) {
+  // Show loading spinner while checking auth
+  if (loading || !initialized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#ffe494] mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="h-screen flex items-center justify-center bg-gray-950">
+        <div className="relative">
+          <div className="w-14 h-14 rounded-full border-4 border-gray-800"></div>
+          <div className="absolute inset-0 w-14 h-14 rounded-full border-4 border-amber-400 border-t-transparent animate-spin"></div>
         </div>
       </div>
     );
   }
 
-  // Render login page without sidebar/navbar
-  if (isLoginPage) {
+  // For public routes (login, forgot-password, reset-password), render without sidebar
+  if (isPublicRoute) {
     return <>{children}</>;
   }
 
-  // Redirect to login if not authenticated
+  // If not authenticated and trying to access protected route, show loading (redirect will happen)
   if (!isAuthenticated) {
-    return null;
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-950">
+        <div className="relative">
+          <div className="w-14 h-14 rounded-full border-4 border-gray-800"></div>
+          <div className="absolute inset-0 w-14 h-14 rounded-full border-4 border-amber-400 border-t-transparent animate-spin"></div>
+        </div>
+      </div>
+    );
   }
 
-  // Render protected admin layout
+  // Authenticated users see the full admin layout
   return (
-    <div className="flex min-h-screen bg-[#f8f9fa]">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col ml-64">
-        {/* Navbar */}
-        <Navbar />
-
-        {/* Page Content */}
-        <main className="flex-1 p-6">
+    <div className="min-h-screen bg-gray-50">
+      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      <div className={`transition-all duration-300 ${isCollapsed ? "sm:ml-[72px]" : "sm:ml-64"}`}>
+        <Navbar isCollapsed={isCollapsed} />
+        <main className="p-4 sm:p-6 pt-20 sm:pt-24">
           {children}
         </main>
       </div>
     </div>
+  );
+}
+
+export default function AdminLayout({ children }) {
+  return (
+    <AdminAuthProvider>
+      <PermissionProvider>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+      </PermissionProvider>
+    </AdminAuthProvider>
   );
 }

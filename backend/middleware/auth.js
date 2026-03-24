@@ -1,3 +1,4 @@
+// Tijara\backend\middleware\auth.js
 const { verifyToken } = require("../utils/jwtUtils");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
