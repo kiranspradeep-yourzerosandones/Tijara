@@ -1,57 +1,34 @@
-import apiClient, { handleApiResponse, handleApiError } from './client';
+// src/api/products.js
+import apiClient, { handleApiResponse } from './client';
 
-export const productsAPI = {
-  // Get all products with filters
-  getProducts: async (params = {}) => {
-    try {
-      const response = await apiClient.get('/products', { params });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get single product by ID
-  getProduct: async (id) => {
-    try {
-      const response = await apiClient.get(`/products/${id}`);
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get product by slug
-  getProductBySlug: async (slug) => {
-    try {
-      const response = await apiClient.get(`/products/slug/${slug}`);
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Search products
-  searchProducts: async (keyword, category = null) => {
-    try {
-      const params = { keyword };
-      if (category) params.category = category;
-      const response = await apiClient.get('/products/search', { params });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get categories
-  getCategories: async () => {
-    try {
-      const response = await apiClient.get('/categories');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
+export const getProducts = async (params = {}) => {
+  const response = await apiClient.get('/products', { params });
+  return handleApiResponse(response);
 };
 
-export default productsAPI;
+export const getProduct = async (id) => {
+  const response = await apiClient.get(`/products/${id}`);
+  return handleApiResponse(response);
+};
+
+export const getProductBySlug = async (slug) => {
+  const response = await apiClient.get(`/products/slug/${slug}`);
+  return handleApiResponse(response);
+};
+
+export const searchProducts = async (keyword, category = null) => {
+  const params = { keyword };
+  if (category) params.category = category;
+  const response = await apiClient.get('/products/search', { params });
+  return handleApiResponse(response);
+};
+
+export const getCategories = async () => {
+  const response = await apiClient.get('/categories');
+  return handleApiResponse(response);
+};
+
+export const getCategory = async (id) => {
+  const response = await apiClient.get(`/categories/${id}`);
+  return handleApiResponse(response);
+};

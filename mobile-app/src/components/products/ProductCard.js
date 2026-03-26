@@ -16,8 +16,8 @@ const ProductCard = ({ product, onPress, style }) => {
   const quantity = getItemQuantity(product._id);
 
   const discount = calculateDiscount(product.compareAtPrice, product.price);
-  const imageUrl = product.images?.[0] 
-    ? getImageUrl(product.images[0]) 
+  const imageUrl = product.images?.[0]
+    ? getImageUrl(product.images[0])
     : null;
 
   const handleAddToCart = async () => {
@@ -48,10 +48,10 @@ const ProductCard = ({ product, onPress, style }) => {
           </View>
         )}
 
-        {/* Discount Badge */}
+        {/* Sale Badge */}
         {discount > 0 && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{discount}% OFF</Text>
+          <View style={styles.saleBadge}>
+            <Text style={styles.saleText}>Sale</Text>
           </View>
         )}
 
@@ -65,55 +65,43 @@ const ProductCard = ({ product, onPress, style }) => {
 
       {/* Content */}
       <View style={styles.content}>
-        {/* Category */}
-        {product.category && (
-          <Text style={styles.category} numberOfLines={1}>
-            {product.category}
-          </Text>
-        )}
-
         {/* Title */}
-        <Text style={styles.title} numberOfLines={2}>
+        <Text style={styles.title} numberOfLines={1}>
           {product.title}
         </Text>
 
         {/* Price Row */}
         <View style={styles.priceRow}>
-          <View style={styles.priceContainer}>
-            <Text style={styles.price}>
-              {formatCurrency(product.price)}
-            </Text>
-            {product.unit && (
-              <Text style={styles.unit}>/{product.unit}</Text>
-            )}
-          </View>
+          <Text style={styles.price}>
+            {formatCurrency(product.price)}
+          </Text>
           {product.compareAtPrice > product.price && (
             <Text style={styles.comparePrice}>
               {formatCurrency(product.compareAtPrice)}
             </Text>
           )}
-        </View>
 
-        {/* Add to Cart Button */}
-        {product.inStock && (
-          <TouchableOpacity
-            style={[
-              styles.addButton,
-              quantity > 0 && styles.addButtonActive,
-            ]}
-            onPress={handleAddToCart}
-            disabled={isLoading}
-          >
-            {quantity > 0 ? (
-              <View style={styles.quantityBadge}>
-                <Ionicons name="checkmark" size={14} color={COLORS.black} />
-                <Text style={styles.quantityText}>{quantity}</Text>
-              </View>
-            ) : (
-              <Ionicons name="add" size={20} color={COLORS.black} />
-            )}
-          </TouchableOpacity>
-        )}
+          {/* Add to Cart Button */}
+          {product.inStock && (
+            <TouchableOpacity
+              style={[
+                styles.addButton,
+                quantity > 0 && styles.addButtonActive,
+              ]}
+              onPress={handleAddToCart}
+              disabled={isLoading}
+            >
+              {quantity > 0 ? (
+                <View style={styles.quantityBadge}>
+                  <Ionicons name="checkmark" size={14} color={COLORS.white} />
+                  <Text style={styles.quantityText}>{quantity}</Text>
+                </View>
+              ) : (
+                <Ionicons name="add" size={20} color={COLORS.white} />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -122,7 +110,7 @@ const ProductCard = ({ product, onPress, style }) => {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.white,
-    borderRadius: SPACING.cardRadius,
+    borderRadius: 16,
     overflow: 'hidden',
     ...SHADOWS.small,
   },
@@ -130,6 +118,9 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     backgroundColor: COLORS.card,
     position: 'relative',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
@@ -142,18 +133,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: COLORS.lightGray,
   },
-  discountBadge: {
+  saleBadge: {
     position: 'absolute',
-    top: SPACING.sm,
-    left: SPACING.sm,
-    backgroundColor: COLORS.error,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: SPACING.xs,
+    top: 12,
+    left: 12,
+    backgroundColor: '#0D9488',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  discountText: {
-    ...FONTS.labelSmall,
+  saleText: {
     color: COLORS.white,
+    fontSize: 13,
     fontWeight: '700',
   },
   outOfStockOverlay: {
@@ -163,61 +154,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   outOfStockText: {
-    ...FONTS.label,
     color: COLORS.white,
+    fontSize: 14,
     fontWeight: '600',
   },
   content: {
-    padding: SPACING.sm,
-  },
-  category: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-    marginBottom: SPACING.xs,
-    textTransform: 'uppercase',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   title: {
-    ...FONTS.bodySmall,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-    marginBottom: SPACING.sm,
-    minHeight: 36,
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary || '#1a1a1a',
+    marginBottom: 8,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
   },
   price: {
-    ...FONTS.price,
-    color: COLORS.textPrimary,
-  },
-  unit: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-    marginLeft: 2,
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary || '#1a1a1a',
   },
   comparePrice: {
-    ...FONTS.strikethrough,
-    color: COLORS.gray,
+    fontSize: 14,
+    color: COLORS.gray || '#999',
+    textDecorationLine: 'line-through',
+    marginLeft: 10,
   },
   addButton: {
-    position: 'absolute',
-    right: SPACING.sm,
-    bottom: SPACING.sm,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
+    marginLeft: 'auto',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#0D9488',
     alignItems: 'center',
     justifyContent: 'center',
   },
   addButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#0D9488',
   },
   quantityBadge: {
     flexDirection: 'row',
@@ -225,8 +201,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   quantityText: {
-    ...FONTS.labelSmall,
-    color: COLORS.black,
+    fontSize: 12,
+    color: COLORS.white,
     fontWeight: '700',
   },
 });

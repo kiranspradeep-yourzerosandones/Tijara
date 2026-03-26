@@ -1,3 +1,4 @@
+// src/screens/products/ProductDetailScreen.js
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -15,7 +16,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button } from '../../components/common';
 import { useCartStore } from '../../store';
-import { formatCurrency, calculateDiscount, getImageUrl } from '../../utils/helpers';
+import { 
+  formatCurrency, 
+  calculateDiscount, 
+  getImageUrl, 
+  stripHtml, 
+  isHtml, 
+  parseHtmlList 
+} from '../../utils/helpers';
 
 const { width } = Dimensions.get('window');
 
@@ -26,9 +34,35 @@ const ProductDetailScreen = ({ navigation, route }) => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const flatListRef = useRef(null);
 
-  const { addToCart, getItemQuantity, isLoading } = useCartStore();
+  const addToCart = useCartStore((state) => state.addToCart);
+  const getItemQuantity = useCartStore((state) => state.getItemQuantity);
+  const isLoading = useCartStore((state) => state.isLoading);
+  
   const cartQuantity = getItemQuantity(product._id);
   const discount = calculateDiscount(product.compareAtPrice, product.price);
+
+  // Process description - handle HTML
+  const descriptionText = isHtml(product.description) 
+    ? stripHtml(product.description) 
+    : product.description;
+
+  // Process applications - handle HTML list or array
+  const applicationsList = (() => {
+    if (Array.isArray(product.applications) && product.applications.length > 0) {
+      // Check if first item is HTML
+      if (product.applications.length === 1 && isHtml(product.applications[0])) {
+        return parseHtmlList(product.applications[0]);
+      }
+      // Clean each application text
+      return product.applications.map(app => isHtml(app) ? stripHtml(app) : app);
+    }
+    return [];
+  })();
+
+  // Process short description
+  const shortDescText = isHtml(product.shortDescription)
+    ? stripHtml(product.shortDescription)
+    : product.shortDescription;
 
   const handleQuantityChange = (change) => {
     const newQty = quantity + change;
@@ -58,7 +92,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
     }
   };
 
-  const renderImageItem = ({ item, index }) => (
+  const renderImageItem = ({ item }) => (
     <Image
       source={{ uri: getImageUrl(item) }}
       style={styles.productImage}
@@ -170,11 +204,11 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </View>
 
           {/* Short Description */}
-          {product.shortDescription && (
+          {shortDescText ? (
             <Text style={styles.shortDescription}>
-              {product.shortDescription}
+              {shortDescText}
             </Text>
-          )}
+          ) : null}
 
           {/* Quantity Selector */}
           {product.inStock && (
@@ -183,19 +217,33 @@ const ProductDetailScreen = ({ navigation, route }) => {
               <View style={styles.quantityRow}>
                 <View style={styles.quantityControls}>
                   <TouchableOpacity
-                    style={styles.quantityButton}
+                    style={[
+                      styles.quantityButton,
+                      quantity <= (product.minOrderQuantity || 1) && styles.quantityButtonDisabled,
+                    ]}
                     onPress={() => handleQuantityChange(-1)}
                     disabled={quantity <= (product.minOrderQuantity || 1)}
                   >
-                    <Ionicons name="remove" size={20} color={COLORS.textPrimary} />
+                    <Ionicons 
+                      name="remove" 
+                      size={20} 
+                      color={quantity <= (product.minOrderQuantity || 1) ? COLORS.gray : COLORS.textPrimary} 
+                    />
                   </TouchableOpacity>
                   <Text style={styles.quantityText}>{quantity}</Text>
                   <TouchableOpacity
-                    style={styles.quantityButton}
+                    style={[
+                      styles.quantityButton,
+                      quantity >= (product.maxOrderQuantity || 100) && styles.quantityButtonDisabled,
+                    ]}
                     onPress={() => handleQuantityChange(1)}
                     disabled={quantity >= (product.maxOrderQuantity || 100)}
                   >
-                    <Ionicons name="add" size={20} color={COLORS.textPrimary} />
+                    <Ionicons 
+                      name="add" 
+                      size={20} 
+                      color={quantity >= (product.maxOrderQuantity || 100) ? COLORS.gray : COLORS.textPrimary} 
+                    />
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.quantityLimits}>
@@ -205,22 +253,42 @@ const ProductDetailScreen = ({ navigation, route }) => {
             </View>
           )}
 
-          {/* Description */}
-          {product.description && (
-            <View style={styles.descriptionSection}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <Text style={styles.description}>{product.description}</Text>
+          {/* Stock Info */}
+          {product.trackQuantity && product.stockQuantity !== null && product.inStock && (
+            <View style={styles.stockInfo}>
+              <Ionicons 
+                name="cube-outline" 
+                size={16} 
+                color={product.stockQuantity <= (product.lowStockThreshold || 10) ? COLORS.warning : COLORS.success} 
+              />
+              <Text style={[
+                styles.stockText,
+                product.stockQuantity <= (product.lowStockThreshold || 10) && styles.lowStockText
+              ]}>
+                {product.stockQuantity <= (product.lowStockThreshold || 10) 
+                  ? `Only ${product.stockQuantity} left in stock` 
+                  : `${product.stockQuantity} in stock`
+                }
+              </Text>
             </View>
           )}
 
+          {/* Description */}
+          {descriptionText ? (
+            <View style={styles.descriptionSection}>
+              <Text style={styles.sectionTitle}>Description</Text>
+              <Text style={styles.description}>{descriptionText}</Text>
+            </View>
+          ) : null}
+
           {/* Applications */}
-          {product.applications?.length > 0 && (
+          {applicationsList.length > 0 && (
             <View style={styles.applicationsSection}>
               <Text style={styles.sectionTitle}>Applications</Text>
               <View style={styles.applicationsList}>
-                {product.applications.map((app, index) => (
+                {applicationsList.map((app, index) => (
                   <View key={index} style={styles.applicationItem}>
-                    <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                    <View style={styles.bulletDot} />
                     <Text style={styles.applicationText}>{app}</Text>
                   </View>
                 ))}
@@ -232,7 +300,23 @@ const ProductDetailScreen = ({ navigation, route }) => {
           {product.storage && (
             <View style={styles.storageSection}>
               <Text style={styles.sectionTitle}>Storage</Text>
-              <Text style={styles.storageText}>{product.storage}</Text>
+              <View style={styles.storageCard}>
+                <Ionicons name="snow-outline" size={20} color={COLORS.info} />
+                <Text style={styles.storageText}>
+                  {isHtml(product.storage) ? stripHtml(product.storage) : product.storage}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Brand */}
+          {product.brand && (
+            <View style={styles.brandSection}>
+              <Text style={styles.sectionTitle}>Brand</Text>
+              <View style={styles.brandCard}>
+                <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.brandText}>{product.brand}</Text>
+              </View>
             </View>
           )}
 
@@ -309,7 +393,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cartBadgeText: {
-    ...FONTS.caption,
     fontSize: 10,
     color: COLORS.black,
     fontWeight: '700',
@@ -319,13 +402,13 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: width,
-    height: width,
+    height: width * 0.85,
     backgroundColor: COLORS.card,
     position: 'relative',
   },
   productImage: {
     width: width,
-    height: width,
+    height: width * 0.85,
   },
   placeholderImage: {
     width: '100%',
@@ -383,15 +466,18 @@ const styles = StyleSheet.create({
     padding: SPACING.screenPadding,
   },
   category: {
-    ...FONTS.caption,
+    fontSize: 12,
     color: COLORS.primary,
     textTransform: 'uppercase',
+    fontWeight: '600',
     marginBottom: SPACING.xs,
   },
   title: {
-    ...FONTS.h3,
+    fontSize: 22,
+    fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
+    lineHeight: 28,
   },
   priceContainer: {
     flexDirection: 'row',
@@ -399,31 +485,33 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   price: {
-    ...FONTS.priceLarge,
+    fontSize: 24,
+    fontWeight: '700',
     color: COLORS.textPrimary,
   },
   unit: {
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.gray,
     marginLeft: 4,
   },
   comparePrice: {
-    ...FONTS.body,
+    fontSize: 16,
     color: COLORS.gray,
     textDecorationLine: 'line-through',
     marginLeft: SPACING.sm,
   },
   shortDescription: {
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.textSecondary,
     marginBottom: SPACING.lg,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   quantitySection: {
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    ...FONTS.h4,
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
@@ -436,32 +524,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.card,
-    borderRadius: SPACING.buttonRadius,
-    padding: SPACING.xs,
+    borderRadius: 25,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   quantityButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 20,
+  },
+  quantityButtonDisabled: {
+    opacity: 0.4,
   },
   quantityText: {
-    ...FONTS.h4,
+    fontSize: 18,
+    fontWeight: '600',
     color: COLORS.textPrimary,
     minWidth: 50,
     textAlign: 'center',
   },
   quantityLimits: {
-    ...FONTS.caption,
+    fontSize: 12,
     color: COLORS.gray,
+  },
+  stockInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.card,
+    borderRadius: SPACING.sm,
+  },
+  stockText: {
+    fontSize: 13,
+    color: COLORS.success,
+    fontWeight: '500',
+  },
+  lowStockText: {
+    color: COLORS.warning,
   },
   descriptionSection: {
     marginBottom: SPACING.lg,
   },
   description: {
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.textSecondary,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   applicationsSection: {
     marginBottom: SPACING.lg,
@@ -471,22 +584,61 @@ const styles = StyleSheet.create({
   },
   applicationItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: SPACING.sm,
+    paddingRight: SPACING.md,
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+    marginTop: 7,
+    flexShrink: 0,
   },
   applicationText: {
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.textSecondary,
+    lineHeight: 20,
+    flex: 1,
   },
   storageSection: {
     marginBottom: SPACING.lg,
   },
+  storageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    backgroundColor: COLORS.card,
+    borderRadius: SPACING.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.info || COLORS.primary,
+  },
   storageText: {
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.textSecondary,
+    flex: 1,
+    lineHeight: 20,
+  },
+  brandSection: {
+    marginBottom: SPACING.lg,
+  },
+  brandCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    backgroundColor: COLORS.card,
+    borderRadius: SPACING.sm,
+  },
+  brandText: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    fontWeight: '500',
   },
   bottomSpacing: {
-    height: 100,
+    height: 120,
   },
   bottomBar: {
     position: 'absolute',
@@ -496,6 +648,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.screenPadding,
     paddingVertical: SPACING.md,
+    paddingBottom: SPACING.lg,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     ...SHADOWS.medium,
@@ -507,11 +660,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   totalLabel: {
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.gray,
   },
   totalPrice: {
-    ...FONTS.priceLarge,
+    fontSize: 22,
+    fontWeight: '700',
     color: COLORS.textPrimary,
   },
   buttonsContainer: {

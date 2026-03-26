@@ -1,75 +1,37 @@
-import apiClient, { handleApiResponse, handleApiError } from './client';
+// src/api/orders.js
+import apiClient, { handleApiResponse } from './client';
 
-export const ordersAPI = {
-  // Place order
-  placeOrder: async (locationId, customerNotes = '') => {
-    try {
-      const response = await apiClient.post('/orders', { locationId, customerNotes });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get all orders
-  getOrders: async (params = {}) => {
-    try {
-      const response = await apiClient.get('/orders', { params });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get single order
-  getOrder: async (id) => {
-    try {
-      const response = await apiClient.get(`/orders/${id}`);
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get order by number
-  getOrderByNumber: async (orderNumber) => {
-    try {
-      const response = await apiClient.get(`/orders/number/${orderNumber}`);
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Cancel order
-  cancelOrder: async (id, reason = '') => {
-    try {
-      const response = await apiClient.put(`/orders/${id}/cancel`, { reason });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get order stats
-  getOrderStats: async () => {
-    try {
-      const response = await apiClient.get('/orders/stats');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Reorder
-  reorder: async (orderId) => {
-    try {
-      const response = await apiClient.post(`/orders/${orderId}/reorder`);
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
+export const placeOrder = async (locationId, customerNotes = '') => {
+  const response = await apiClient.post('/orders', { locationId, customerNotes });
+  return handleApiResponse(response);
 };
 
-export default ordersAPI;
+export const getOrders = async (params = {}) => {
+  const response = await apiClient.get('/orders', { params });
+  return handleApiResponse(response);
+};
+
+export const getOrder = async (id) => {
+  const response = await apiClient.get(`/orders/${id}`);
+  return handleApiResponse(response);
+};
+
+export const getOrderByNumber = async (orderNumber) => {
+  const response = await apiClient.get(`/orders/number/${orderNumber}`);
+  return handleApiResponse(response);
+};
+
+export const cancelOrder = async (id, reason = '') => {
+  const response = await apiClient.put(`/orders/${id}/cancel`, { reason });
+  return handleApiResponse(response);
+};
+
+export const getOrderStats = async () => {
+  const response = await apiClient.get('/orders/stats');
+  return handleApiResponse(response);
+};
+
+export const reorder = async (orderId) => {
+  const response = await apiClient.post(`/orders/${orderId}/reorder`);
+  return handleApiResponse(response);
+};

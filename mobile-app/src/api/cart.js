@@ -1,85 +1,42 @@
-import apiClient, { handleApiResponse, handleApiError } from './client';
+// src/api/cart.js
+import apiClient, { handleApiResponse } from './client';
 
-export const cartAPI = {
-  // Get cart
-  getCart: async () => {
-    try {
-      const response = await apiClient.get('/cart');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Add item to cart
-  addToCart: async (productId, quantity = 1) => {
-    try {
-      const response = await apiClient.post('/cart/add', { productId, quantity });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Update cart item quantity
-  updateCartItem: async (productId, quantity) => {
-    try {
-      const response = await apiClient.put('/cart/update', { productId, quantity });
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Remove item from cart
-  removeFromCart: async (productId) => {
-    try {
-      const response = await apiClient.delete(`/cart/remove/${productId}`);
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Clear cart
-  clearCart: async () => {
-    try {
-      const response = await apiClient.delete('/cart/clear');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Get cart summary
-  getCartSummary: async () => {
-    try {
-      const response = await apiClient.get('/cart/summary');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Validate cart before checkout
-  validateCart: async () => {
-    try {
-      const response = await apiClient.get('/cart/validate');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
-
-  // Sync prices
-  syncPrices: async () => {
-    try {
-      const response = await apiClient.put('/cart/sync-prices');
-      return handleApiResponse(response);
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
+export const getCart = async () => {
+  const response = await apiClient.get('/cart');
+  return handleApiResponse(response);
 };
 
-export default cartAPI;
+export const addToCart = async (productId, quantity = 1) => {
+  const response = await apiClient.post('/cart/add', { productId, quantity });
+  return handleApiResponse(response);
+};
+
+export const updateCartItem = async (productId, quantity) => {
+  const response = await apiClient.put('/cart/update', { productId, quantity });
+  return handleApiResponse(response);
+};
+
+export const removeFromCart = async (productId) => {
+  const response = await apiClient.delete(`/cart/remove/${productId}`);
+  return handleApiResponse(response);
+};
+
+export const clearCart = async () => {
+  const response = await apiClient.delete('/cart/clear');
+  return handleApiResponse(response);
+};
+
+export const getCartSummary = async () => {
+  const response = await apiClient.get('/cart/summary');
+  return handleApiResponse(response);
+};
+
+export const validateCart = async () => {
+  const response = await apiClient.get('/cart/validate');
+  return handleApiResponse(response);
+};
+
+export const syncPrices = async () => {
+  const response = await apiClient.put('/cart/sync-prices');
+  return handleApiResponse(response);
+};

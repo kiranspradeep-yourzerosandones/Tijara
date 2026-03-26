@@ -1,36 +1,48 @@
 // src/api/index.js
-// ⚠️ DO NOT import authStore here!
+// ⚠️ DO NOT import authStore here - causes circular dependency!
 
-// Export API client
+// Export API client and helpers
 export { default as apiClient } from './client';
 export { handleApiResponse, handleApiError } from './client';
 
-// Export all auth functions as named exports AND as authAPI object
+// ============================================================
+// AUTH API
+// ============================================================
 import * as auth from './auth';
 export const authAPI = auth;
-export * from './auth';
 
-// Export other API modules
-import * as cart from './cart';
-export const cartAPI = cart;
-export * from './cart';
-
+// ============================================================
+// PRODUCTS API
+// ============================================================
 import * as products from './products';
 export const productsAPI = products;
-export * from './products';
 
+// ============================================================
+// CART API
+// ============================================================
+import * as cart from './cart';
+export const cartAPI = cart;
+
+// ============================================================
+// ORDERS API
+// ============================================================
 import * as orders from './orders';
 export const ordersAPI = orders;
-export * from './orders';
 
+// ============================================================
+// LOCATIONS API
+// ============================================================
 import * as locations from './locations';
 export const locationsAPI = locations;
-export * from './locations';
 
+// ============================================================
+// PAYMENTS API
+// ============================================================
 import * as payments from './payments';
 export const paymentsAPI = payments;
-export * from './payments';
 
+// ============================================================
+// NOTIFICATIONS API
+// ============================================================
 import * as notifications from './notifications';
 export const notificationsAPI = notifications;
-export * from './notifications';

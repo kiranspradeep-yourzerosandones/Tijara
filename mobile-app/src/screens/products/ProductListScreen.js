@@ -1,3 +1,4 @@
+// src/screens/products/ProductListScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -176,7 +177,7 @@ const ProductListScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: COLORS.backgroundLight || COLORS.card,
   },
   header: {
     flexDirection: 'row',
@@ -189,12 +190,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.card || COLORS.lightGray,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    ...FONTS.h4,
+    fontSize: 18,
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   headerRight: {
@@ -207,14 +209,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     height: 48,
     backgroundColor: COLORS.white,
-    borderRadius: SPACING.buttonRadius,
+    borderRadius: 24,
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   searchInput: {
     flex: 1,
-    ...FONTS.body,
+    fontSize: 14,
     color: COLORS.textPrimary,
     marginLeft: SPACING.sm,
   },
