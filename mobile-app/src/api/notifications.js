@@ -11,9 +11,10 @@ export const getUnreadCount = async () => {
     const response = await apiClient.get('/notifications/unread-count');
     return handleApiResponse(response);
   } catch (error) {
-    // Return 0 if endpoint doesn't exist yet
+    // Return 0 if endpoint doesn't exist yet - prevents app crash
     if (error.response?.status === 404) {
-      return { data: { count: 0 } };
+      console.log('⚠️ Notification unread-count endpoint not available');
+      return { data: { unreadCount: 0 } };
     }
     throw error;
   }
@@ -26,10 +27,5 @@ export const markAsRead = async (id) => {
 
 export const markAllAsRead = async () => {
   const response = await apiClient.put('/notifications/read-all');
-  return handleApiResponse(response);
-};
-
-export const deleteNotification = async (id) => {
-  const response = await apiClient.delete(`/notifications/${id}`);
   return handleApiResponse(response);
 };

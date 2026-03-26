@@ -199,10 +199,10 @@ const notificationSchema = new mongoose.Schema({
 
   // Created by admin
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true
-  },
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Admin",  // ✅ Changed from "User" to "Admin"
+  required: true
+},
 
   // Template used (if any)
   template: {

@@ -305,17 +305,21 @@ orderSchema.index({ "deliveryAddress.pincode": 1 });
 
 // Virtual for total items count
 orderSchema.virtual('totalItems').get(function() {
+  if (!this.items || !Array.isArray(this.items)) return 0;
   return this.items.reduce((sum, item) => sum + item.quantity, 0);
 });
 
 // Virtual for unique products count
 orderSchema.virtual('uniqueProducts').get(function() {
+  if (!this.items || !Array.isArray(this.items)) return 0;
   return this.items.length;
 });
 
 // Virtual for outstanding amount
 orderSchema.virtual('outstandingAmount').get(function() {
-  return this.totalAmount - (this.payment?.amountPaid || 0);
+  const total = this.totalAmount || 0;
+  const paid = this.payment?.amountPaid || 0;
+  return total - paid;
 });
 
 // Virtual for is paid
@@ -334,13 +338,20 @@ orderSchema.virtual('isCompleted').get(function() {
 });
 
 // Pre-save middleware to update status history
-orderSchema.pre("save", function(next) {
+orderSchema.pre("save", function() {
   // If status changed, add to history
   if (this.isModified("status")) {
-    this.statusHistory.push({
-      status: this.status,
-      timestamp: new Date()
-    });
+    // Don't add duplicate status to history (it's already added in controller)
+    const lastHistoryStatus = this.statusHistory.length > 0 
+      ? this.statusHistory[this.statusHistory.length - 1].status 
+      : null;
+    
+    if (lastHistoryStatus !== this.status) {
+      this.statusHistory.push({
+        status: this.status,
+        timestamp: new Date()
+      });
+    }
 
     // Update timestamp fields
     switch (this.status) {
@@ -362,8 +373,7 @@ orderSchema.pre("save", function(next) {
         break;
     }
   }
-
-  next();
+  // No next() needed - Mongoose handles this automatically for non-async functions too in newer versions
 });
 
 // Static method to get status display text

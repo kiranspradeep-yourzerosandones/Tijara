@@ -52,56 +52,69 @@ const PlaceOrderScreen = ({ navigation }) => {
   };
 
   const handlePlaceOrder = async () => {
-    if (!selectedLocation) {
-      Alert.alert('Error', 'Please select a delivery address');
-      return;
-    }
+  if (!selectedLocation) {
+    Alert.alert('Error', 'Please select a delivery address');
+    return;
+  }
 
-    Alert.alert(
-      'Confirm Order',
-      `Place order for ${formatCurrency(total)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Place Order',
-          onPress: async () => {
-            setIsPlacingOrder(true);
-            try {
-              const response = await ordersAPI.placeOrder(
-                selectedLocation._id,
-                customerNotes.trim()
-              );
-              
-              resetCart();
-              
-              Alert.alert(
-                'Order Placed! 🎉',
-                `Your order #${response.data.order.orderNumber} has been placed successfully.`,
-                [
-                  {
-                    text: 'View Order',
-                    onPress: () => {
-                      navigation.replace('OrderDetail', { 
-                        orderId: response.data.order._id 
-                      });
-                    },
+  Alert.alert(
+    'Confirm Order',
+    `Place order for ${formatCurrency(total)}?`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Place Order',
+        onPress: async () => {
+          setIsPlacingOrder(true);
+          try {
+            const response = await ordersAPI.placeOrder(
+              selectedLocation._id,
+              customerNotes.trim()
+            );
+            
+            resetCart();
+            
+            Alert.alert(
+              'Order Placed! 🎉',
+              `Your order #${response.data.order.orderNumber} has been placed successfully.`,
+              [
+                {
+                  text: 'View Order',
+                  onPress: () => {
+                    // ✅ FIXED - Use reset to create proper navigation stack
+                    navigation.reset({
+                      index: 1,
+                      routes: [
+                        { name: 'Home' },
+                        { 
+                          name: 'OrderDetail', 
+                          params: { orderId: response.data.order._id } 
+                        }
+                      ],
+                    });
                   },
-                  {
-                    text: 'Continue Shopping',
-                    onPress: () => navigation.navigate('Home'),
+                },
+                {
+                  text: 'Continue Shopping',
+                  onPress: () => {
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: 'Home' }],
+                    });
                   },
-                ]
-              );
-            } catch (error) {
-              Alert.alert('Error', error.message);
-            } finally {
-              setIsPlacingOrder(false);
-            }
-          },
+                },
+              ]
+            );
+          } catch (error) {
+            Alert.alert('Error', error.message);
+          } finally {
+            setIsPlacingOrder(false);
+          }
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
 
   const handleAddNewLocation = () => {
     setShowLocationPicker(false);

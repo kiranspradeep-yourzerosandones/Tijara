@@ -13,14 +13,12 @@ const { generateOrderNumber } = require("../utils/generateOrderNumber");
 // ============================================================
 
 /**
+/**
  * @desc    Place order from cart
  * @route   POST /api/orders
  * @access  Private
  */
 exports.placeOrder = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { locationId, customerNotes } = req.body;
 
@@ -44,11 +42,9 @@ exports.placeOrder = async (req, res) => {
       .populate({
         path: 'items.product',
         select: 'title slug price unit images category brand inStock isActive minOrderQuantity maxOrderQuantity trackQuantity stockQuantity'
-      })
-      .session(session);
+      });
 
     if (!cart || cart.items.length === 0) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Cart is empty"
@@ -106,13 +102,12 @@ exports.placeOrder = async (req, res) => {
           unit: product.unit || "piece"
         },
         quantity: item.quantity,
-        unitPrice: product.price, // Use current price
+        unitPrice: product.price,
         subtotal: item.quantity * product.price
       });
     }
 
     if (errors.length > 0) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Some items in cart are invalid",
@@ -121,7 +116,6 @@ exports.placeOrder = async (req, res) => {
     }
 
     if (validItems.length === 0) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "No valid items in cart"
@@ -133,10 +127,9 @@ exports.placeOrder = async (req, res) => {
       _id: locationId,
       user: req.user._id,
       isActive: true
-    }).session(session);
+    });
 
     if (!location) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Delivery location not found"
@@ -145,16 +138,16 @@ exports.placeOrder = async (req, res) => {
 
     // Calculate totals
     const subtotal = validItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const discount = 0; // Can be implemented later
-    const tax = 0; // Can be implemented later
-    const deliveryCharges = 0; // Can be implemented later
+    const discount = 0;
+    const tax = 0;
+    const deliveryCharges = 0;
     const totalAmount = subtotal - discount + tax + deliveryCharges;
 
     // Generate order number
     const orderNumber = await generateOrderNumber(Order);
 
     // Get user details for snapshot
-    const user = await User.findById(req.user._id).session(session);
+    const user = await User.findById(req.user._id);
 
     // Create order
     const order = new Order({
@@ -204,34 +197,30 @@ exports.placeOrder = async (req, res) => {
       }]
     });
 
-    await order.save({ session });
+    await order.save();
 
-    // ✅ DECREMENT STOCK for products that track quantity
+    // Decrement stock for products that track quantity
     for (const item of validItems) {
       try {
-        const product = await Product.findById(item.product).session(session);
+        const product = await Product.findById(item.product);
         if (product && product.trackQuantity) {
           await product.decrementStock(item.quantity);
           console.log(`📦 Stock decremented: ${product.title} - ${item.quantity} units`);
         }
       } catch (stockError) {
         console.error(`Failed to decrement stock for product ${item.product}:`, stockError);
-        // Continue anyway - order is more important than stock tracking
       }
     }
 
     // Clear the cart
     cart.clearCart();
-    await cart.save({ session });
+    await cart.save();
 
     // Update user's pending amount
     await User.findByIdAndUpdate(
       req.user._id,
-      { $inc: { pendingAmount: totalAmount } },
-      { session }
+      { $inc: { pendingAmount: totalAmount } }
     );
-
-    await session.commitTransaction();
 
     console.log(`📦 Order placed: ${orderNumber} by user: ${req.user._id}`);
 
@@ -263,15 +252,12 @@ exports.placeOrder = async (req, res) => {
     });
 
   } catch (error) {
-    await session.abortTransaction();
     console.error("Place Order Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to place order",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -437,15 +423,13 @@ exports.getOrderByNumber = async (req, res) => {
   }
 };
 
+
 /**
  * @desc    Cancel order (customer)
  * @route   PUT /api/orders/:id/cancel
  * @access  Private
  */
 exports.cancelOrder = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -460,10 +444,9 @@ exports.cancelOrder = async (req, res) => {
     const order = await Order.findOne({
       _id: id,
       user: req.user._id
-    }).session(session);
+    });
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Order not found"
@@ -472,7 +455,6 @@ exports.cancelOrder = async (req, res) => {
 
     // Check if order can be cancelled
     if (!order.canCancel) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: `Order cannot be cancelled. Current status: ${Order.getStatusText(order.status)}`
@@ -495,30 +477,26 @@ exports.cancelOrder = async (req, res) => {
       note: reason || "Cancelled by customer"
     });
 
-    await order.save({ session });
+    await order.save();
 
-    // ✅ RESTORE STOCK for products that track quantity
+    // Restore stock for products that track quantity
     for (const item of order.items) {
       try {
-        const product = await Product.findById(item.product).session(session);
+        const product = await Product.findById(item.product);
         if (product && product.trackQuantity) {
           await product.incrementStock(item.quantity);
           console.log(`📦 Stock restored: ${product.title} + ${item.quantity} units`);
         }
       } catch (stockError) {
         console.error(`Failed to restore stock for product ${item.product}:`, stockError);
-        // Continue anyway
       }
     }
 
     // Update user's pending amount
     await User.findByIdAndUpdate(
       req.user._id,
-      { $inc: { pendingAmount: -order.totalAmount } },
-      { session }
+      { $inc: { pendingAmount: -order.totalAmount } }
     );
-
-    await session.commitTransaction();
 
     console.log(`📦 Order cancelled: ${order.orderNumber} by customer`);
 
@@ -537,15 +515,12 @@ exports.cancelOrder = async (req, res) => {
     });
 
   } catch (error) {
-    await session.abortTransaction();
     console.error("Cancel Order Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to cancel order",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -906,9 +881,6 @@ exports.adminGetOrder = async (req, res) => {
  * @access  Private/Admin
  */
 exports.adminUpdateOrderStatus = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { id } = req.params;
     const { status, note, expectedDeliveryDate } = req.body;
@@ -927,10 +899,9 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       });
     }
 
-    const order = await Order.findById(id).session(session);
+    const order = await Order.findById(id);
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Order not found"
@@ -939,7 +910,6 @@ exports.adminUpdateOrderStatus = async (req, res) => {
 
     // Check valid transition
     if (!order.canTransitionTo(status)) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: `Cannot change status from "${Order.getStatusText(order.status)}" to "${Order.getStatusText(status)}"`,
@@ -971,10 +941,10 @@ exports.adminUpdateOrderStatus = async (req, res) => {
         isCustomerCancelled: false
       };
 
-      // ✅ RESTORE STOCK for products that track quantity
+      // Restore stock for products that track quantity
       for (const item of order.items) {
         try {
-          const product = await Product.findById(item.product).session(session);
+          const product = await Product.findById(item.product);
           if (product && product.trackQuantity) {
             await product.incrementStock(item.quantity);
             console.log(`📦 Stock restored (admin cancel): ${product.title} + ${item.quantity} units`);
@@ -987,14 +957,11 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       // Update user's pending amount
       await User.findByIdAndUpdate(
         order.user,
-        { $inc: { pendingAmount: -order.totalAmount } },
-        { session }
+        { $inc: { pendingAmount: -order.totalAmount } }
       );
     }
 
-    await order.save({ session });
-
-    await session.commitTransaction();
+    await order.save();
 
     console.log(`📦 Order status updated: ${order.orderNumber} -> ${status} by admin: ${req.user._id}`);
 
@@ -1014,15 +981,12 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     });
 
   } catch (error) {
-    await session.abortTransaction();
     console.error("Admin Update Order Status Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update order status",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 

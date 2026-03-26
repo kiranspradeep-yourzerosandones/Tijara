@@ -1,31 +1,22 @@
+// backend/routes/adminLocationRoutes.js
 const express = require("express");
 const router = express.Router();
 
 const {
-  adminLogin,
-  getAllUsers,
-  getUser,
-  updateUserStatus,
-  createAdmin
-} = require("../controllers/adminAuthController");
-
-const {
+  adminGetAllLocations,
+  adminGetLocation,
   adminGetUserLocations
 } = require("../controllers/locationController");
 
 const { protect } = require("../middleware/auth");
-const { adminOnly } = require("../middleware/adminAuth");
+const { adminOnly, checkPermission } = require("../middleware/adminAuth");
 
-// Public admin routes
-router.post("/login", adminLogin);
+// All routes require admin authentication
+router.use(protect);
+router.use(adminOnly);
 
-// Protected admin routes
-router.get("/users", protect, adminOnly, getAllUsers);
-router.get("/users/:id", protect, adminOnly, getUser);
-router.put("/users/:id/status", protect, adminOnly, updateUserStatus);
-router.post("/create-admin", protect, adminOnly, createAdmin);
-
-// User locations (admin)
-router.get("/users/:userId/locations", protect, adminOnly, adminGetUserLocations);
+// Admin location routes
+router.get("/", checkPermission("manageCustomers"), adminGetAllLocations);
+router.get("/:id", checkPermission("manageCustomers"), adminGetLocation);
 
 module.exports = router;

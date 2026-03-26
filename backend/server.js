@@ -12,11 +12,10 @@ const app = express();
 // MIDDLEWARE
 // ============================================================
 
-// ✅ UPDATED CORS - Allow all origins in development
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ["https://yourdomain.com"] // Only specific domains in production
-    : '*', // Allow ALL in development (including mobile apps)
+    ? ["https://yourdomain.com"]
+    : '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -29,16 +28,27 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // ============================================================
 // ROUTES
 // ============================================================
+
+// Customer routes
 app.use("/api/auth", require("./routes/authRoutes"));
-app.use("/api/admin", require("./routes/adminRoutes"));
-app.use("/api/admin/customers", require("./routes/adminCustomerRoutes"));
 app.use("/api/products", require("./routes/productRoutes"));
 app.use("/api/categories", require("./routes/categoryRoutes"));
 app.use("/api/locations", require("./routes/locationRoutes"));
 app.use("/api/cart", require("./routes/cartRoutes"));
 app.use("/api/orders", require("./routes/orderRoutes"));
 app.use("/api/payments", require("./routes/paymentRoutes"));
+app.use("/api/notifications", require("./routes/notificationRoutes"));
+
+// Admin routes
+app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/admin/admins", require("./routes/adminManagementRoutes"));
+app.use("/api/admin/customers", require("./routes/adminCustomerRoutes"));
+app.use("/api/admin/orders", require("./routes/adminOrderRoutes"));
+app.use("/api/admin/payments", require("./routes/adminPaymentRoutes"));
+app.use("/api/admin/dashboard", require("./routes/adminDashboardRoutes"));
+app.use("/api/admin/carts", require("./routes/adminCartRoutes"));
+app.use("/api/admin/notifications", require("./routes/adminNotificationRoutes"));
+// Note: Admin location routes removed - user locations accessible via /api/admin/users/:userId/locations in adminRoutes
 
 // Health check
 app.get("/api/health", (req, res) => {

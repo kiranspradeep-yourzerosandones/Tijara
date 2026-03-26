@@ -1,3 +1,4 @@
+// backend/routes/notificationRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -10,13 +11,22 @@ const {
 
 const { protect } = require("../middleware/auth");
 
+console.log("📢 Loading notification routes...");
+console.log("✅ getUnreadCount function:", typeof getUnreadCount);
+
 // All routes require authentication
 router.use(protect);
 
-// Notification routes
+// Notification routes - ORDER MATTERS!
+router.get("/unread-count", (req, res, next) => {
+  console.log("🔔 /unread-count route hit!");
+  next();
+}, getUnreadCount);
+
 router.get("/", getMyNotifications);
-router.get("/unread-count", getUnreadCount);
 router.put("/read-all", markAllAsRead);
 router.put("/:id/read", markAsRead);
+
+console.log("📢 Notification routes loaded successfully");
 
 module.exports = router;

@@ -172,7 +172,7 @@ locationSchema.set("toJSON", { virtuals: true });
 locationSchema.set("toObject", { virtuals: true });
 
 // Pre-save middleware to ensure only one default location per user
-locationSchema.pre("save", async function(next) {
+locationSchema.pre("save", async function() {
   if (this.isDefault && this.isModified("isDefault")) {
     // Remove default from other locations of this user
     await this.constructor.updateMany(
@@ -184,7 +184,7 @@ locationSchema.pre("save", async function(next) {
       { isDefault: false }
     );
   }
-  next();
+  // No need to call next() when using async function in Mongoose 6+
 });
 
 // Static method to get user's default location
