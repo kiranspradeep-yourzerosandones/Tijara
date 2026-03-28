@@ -3,12 +3,16 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet } from 'react-native';
+
 import { RootNavigator } from './src/navigation';
 import { useAuthStore } from './src/store/authStore';
+import SplashScreen from './src/screens/splash/SplashScreen';
 
 export default function App() {
-  const [isReady, setIsReady] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false);   // auth ready
+  const [showSplash, setShowSplash] = useState(true);    // splash control
+
   const restoreSession = useAuthStore((state) => state.restoreSession);
 
   useEffect(() => {
@@ -18,20 +22,28 @@ export default function App() {
       } catch (error) {
         console.error('Init error:', error);
       } finally {
-        setIsReady(true);
+        setIsAppReady(true); // ✅ auth done
       }
     };
     init();
   }, []);
 
-  if (!isReady) {
+  // 🔥 called when splash animation ends
+  const handleSplashFinish = () => {
+    setShowSplash(false);
+  };
+
+  // 🟡 SHOW SPLASH FIRST
+  if (showSplash) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#F5C518" />
-      </View>
+      <SplashScreen
+        isReady={isAppReady}   // waits for auth
+        onFinish={handleSplashFinish}
+      />
     );
   }
 
+  // 🟢 THEN LOAD APP
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
@@ -45,11 +57,5 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000000',
   },
 });
