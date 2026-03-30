@@ -1,4 +1,4 @@
-// App Constants
+// src/utils/Constants.js
 export const APP_NAME = 'Tijara';
 export const APP_VERSION = '1.0.0';
 

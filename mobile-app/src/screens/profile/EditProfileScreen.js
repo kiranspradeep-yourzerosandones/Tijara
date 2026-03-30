@@ -1,16 +1,16 @@
+// src/screens/profile/EditProfileScreen.js
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
-import { Button, Input } from '../../components/common';
+import { Button, Input, Screen } from '../../components/common';
 import { useAuthStore } from '../../store';
 import { validateName, validateEmail } from '../../utils/validation';
 
@@ -65,7 +65,7 @@ const EditProfileScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.white}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -169,15 +169,11 @@ const EditProfileScreen = ({ navigation }) => {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

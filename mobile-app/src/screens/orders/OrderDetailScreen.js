@@ -1,9 +1,9 @@
+// src/screens/orders/OrderDetailScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Alert,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Button, Loading, Card } from '../../components/common';
+import { Button, Loading, Card, Screen } from '../../components/common';
 import { ordersAPI } from '../../api';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '../../utils/constants';
@@ -157,7 +157,11 @@ const OrderDetailScreen = ({ navigation, route }) => {
   };
 
   if (isLoading) {
-    return <Loading fullScreen message="Loading order..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading order..." />
+      </Screen>
+    );
   }
 
   if (!order) {
@@ -167,7 +171,7 @@ const OrderDetailScreen = ({ navigation, route }) => {
   const statusColor = ORDER_STATUS_COLORS[order.status] || COLORS.gray;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -337,15 +341,11 @@ const OrderDetailScreen = ({ navigation, route }) => {
           />
         )}
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

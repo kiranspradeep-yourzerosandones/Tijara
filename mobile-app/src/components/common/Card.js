@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\components\common\Card.js
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, SHADOWS } from '../../theme';

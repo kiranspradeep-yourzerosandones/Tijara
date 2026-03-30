@@ -1,16 +1,16 @@
+// src/screens/profile/ProfileScreen.js
 import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Card } from '../../components/common';
+import { Card, Screen } from '../../components/common';
 import { useAuthStore } from '../../store';
 import { formatCurrency, getInitials } from '../../utils/helpers';
 
@@ -86,7 +86,7 @@ const ProfileScreen = ({ navigation }) => {
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -176,15 +176,11 @@ const ProfileScreen = ({ navigation }) => {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   scrollView: {
     flex: 1,
   },

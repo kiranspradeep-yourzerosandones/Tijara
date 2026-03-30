@@ -1,3 +1,9 @@
+// src/theme/spacing.js
+import { Platform, StatusBar } from 'react-native';
+
+// Get status bar height
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 24;
+
 export const SPACING = {
   // Base spacing
   xs: 4,
@@ -12,6 +18,10 @@ export const SPACING = {
   screenPadding: 20,
   screenPaddingHorizontal: 20,
   screenPaddingVertical: 16,
+  
+  // ✅ NEW: Status bar & safe area
+  statusBarHeight: STATUSBAR_HEIGHT,
+  safeTopPadding: STATUSBAR_HEIGHT + 10,
   
   // Card
   cardPadding: 16,

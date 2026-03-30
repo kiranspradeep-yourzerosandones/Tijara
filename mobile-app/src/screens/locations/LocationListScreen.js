@@ -1,9 +1,9 @@
+// src/screens/locations/LocationListScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   RefreshControl,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Loading, EmptyState, Card } from '../../components/common';
+import { Loading, EmptyState, Card, Screen } from '../../components/common';
 import { locationsAPI } from '../../api';
 
 const LocationListScreen = ({ navigation }) => {
@@ -134,11 +134,15 @@ const LocationListScreen = ({ navigation }) => {
   );
 
   if (isLoading) {
-    return <Loading fullScreen message="Loading addresses..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading addresses..." />
+      </Screen>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -190,15 +194,11 @@ const LocationListScreen = ({ navigation }) => {
           <Ionicons name="add" size={28} color={COLORS.black} />
         </TouchableOpacity>
       )}
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

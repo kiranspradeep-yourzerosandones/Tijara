@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/screens/orders/OrderListScreen.js
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
-import { Loading, EmptyState } from '../../components/common';
+import { Loading, EmptyState, Screen } from '../../components/common';
 import { OrderCard } from '../../components/orders';
 import { ordersAPI } from '../../api';
 
@@ -144,11 +144,15 @@ const OrderListScreen = ({ navigation }) => {
   };
 
   if (isLoading && orders.length === 0) {
-    return <Loading fullScreen message="Loading orders..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading orders..." />
+      </Screen>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>My Orders</Text>
@@ -181,15 +185,11 @@ const OrderListScreen = ({ navigation }) => {
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
       />
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

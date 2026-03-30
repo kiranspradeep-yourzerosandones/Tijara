@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\components\common\EmptyState.js
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

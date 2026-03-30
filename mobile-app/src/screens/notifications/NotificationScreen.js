@@ -1,16 +1,16 @@
+// src/screens/notifications/NotificationScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Loading, EmptyState } from '../../components/common';
+import { COLORS, FONTS, SPACING } from '../../theme';
+import { Loading, EmptyState, Screen } from '../../components/common';
 import { useNotificationStore } from '../../store';
 import { getRelativeTime } from '../../utils/helpers';
 
@@ -56,7 +56,6 @@ const NotificationScreen = ({ navigation }) => {
       markAsRead(notification._id);
     }
 
-    // Navigate based on notification type
     if (notification.data?.orderId) {
       navigation.navigate('OrderDetail', { orderId: notification.data.orderId });
     }
@@ -118,7 +117,7 @@ const NotificationScreen = ({ navigation }) => {
   const hasUnread = notifications.some(n => !n.isRead);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -159,15 +158,11 @@ const NotificationScreen = ({ navigation }) => {
         ListFooterComponent={renderFooter}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\theme\colors.js
 export const COLORS = {
   // Primary
   primary: "#F5C518",

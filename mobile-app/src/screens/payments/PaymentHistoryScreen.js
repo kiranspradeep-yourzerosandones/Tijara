@@ -1,16 +1,16 @@
+// src/screens/payments/PaymentHistoryScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Loading, EmptyState, Card } from '../../components/common';
+import { COLORS, FONTS, SPACING } from '../../theme';
+import { Loading, EmptyState, Card, Screen } from '../../components/common';
 import { paymentsAPI } from '../../api';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 
@@ -152,11 +152,15 @@ const PaymentHistoryScreen = ({ navigation }) => {
   };
 
   if (isLoading && payments.length === 0) {
-    return <Loading fullScreen message="Loading payments..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading payments..." />
+      </Screen>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -187,15 +191,11 @@ const PaymentHistoryScreen = ({ navigation }) => {
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
       />
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

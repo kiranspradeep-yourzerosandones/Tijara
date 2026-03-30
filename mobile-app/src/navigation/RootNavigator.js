@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\navigation\RootNavigator.js
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { View, StyleSheet } from 'react-native';

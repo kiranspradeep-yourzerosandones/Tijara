@@ -1,9 +1,9 @@
+// src/screens/cart/CartScreen.js
 import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Button, Loading, EmptyState } from '../../components/common';
+import { Button, Loading, EmptyState, Screen } from '../../components/common';
 import { CartItem } from '../../components/cart';
 import { useCartStore } from '../../store';
 import { formatCurrency } from '../../utils/helpers';
@@ -85,12 +85,16 @@ const CartScreen = ({ navigation }) => {
   };
 
   if (isLoading && items.length === 0) {
-    return <Loading fullScreen message="Loading cart..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading cart..." />
+      </Screen>
+    );
   }
 
   if (items.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <Screen backgroundColor={COLORS.backgroundLight}>
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -108,12 +112,12 @@ const CartScreen = ({ navigation }) => {
           actionText="Start Shopping"
           onAction={() => navigation.navigate('Home')}
         />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -167,7 +171,6 @@ const CartScreen = ({ navigation }) => {
 
       {/* Summary & Checkout */}
       <View style={styles.summaryContainer}>
-        {/* Order Summary */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Order Summary</Text>
 
@@ -189,7 +192,6 @@ const CartScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Checkout Button */}
         <Button
           title="Proceed to Checkout"
           onPress={handleCheckout}
@@ -198,15 +200,11 @@ const CartScreen = ({ navigation }) => {
           iconPosition="right"
         />
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,4 +1,4 @@
-// src/components/GoogleLogo.js
+// src/components/common/GoogleLogo.js
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 

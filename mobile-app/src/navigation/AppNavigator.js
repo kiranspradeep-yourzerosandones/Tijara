@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\navigation\AppNavigator.js
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';

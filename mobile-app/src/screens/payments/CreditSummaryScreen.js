@@ -1,16 +1,16 @@
+// src/screens/payments/CreditSummaryScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Loading, Card } from '../../components/common';
+import { Loading, Card, Screen } from '../../components/common';
 import { paymentsAPI } from '../../api';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 
@@ -49,13 +49,17 @@ const CreditSummaryScreen = ({ navigation }) => {
   };
 
   if (isLoading) {
-    return <Loading fullScreen message="Loading credit summary..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading credit summary..." />
+      </Screen>
+    );
   }
 
   const utilizationPercentage = creditSummary?.creditUtilization || 0;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -235,15 +239,11 @@ const CreditSummaryScreen = ({ navigation }) => {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

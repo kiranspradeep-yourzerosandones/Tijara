@@ -1,9 +1,9 @@
+// src/screens/orders/PlaceOrderScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   TextInput,
@@ -12,10 +12,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Button, Loading, Card } from '../../components/common';
+import { Button, Loading, Card, Screen } from '../../components/common';
 import { useCartStore, useAuthStore } from '../../store';
 import { locationsAPI, ordersAPI } from '../../api';
-import { formatCurrency, formatAddress } from '../../utils/helpers';
+import { formatCurrency } from '../../utils/helpers';
 
 const PlaceOrderScreen = ({ navigation }) => {
   const [locations, setLocations] = useState([]);
@@ -38,7 +38,6 @@ const PlaceOrderScreen = ({ navigation }) => {
       const locationList = response.data?.locations || [];
       setLocations(locationList);
       
-      // Select default location
       const defaultLocation = locationList.find(loc => loc.isDefault) || locationList[0];
       if (defaultLocation) {
         setSelectedLocation(defaultLocation);
@@ -52,69 +51,68 @@ const PlaceOrderScreen = ({ navigation }) => {
   };
 
   const handlePlaceOrder = async () => {
-  if (!selectedLocation) {
-    Alert.alert('Error', 'Please select a delivery address');
-    return;
-  }
+    if (!selectedLocation) {
+      Alert.alert('Error', 'Please select a delivery address');
+      return;
+    }
 
-  Alert.alert(
-    'Confirm Order',
-    `Place order for ${formatCurrency(total)}?`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Place Order',
-        onPress: async () => {
-          setIsPlacingOrder(true);
-          try {
-            const response = await ordersAPI.placeOrder(
-              selectedLocation._id,
-              customerNotes.trim()
-            );
-            
-            resetCart();
-            
-            Alert.alert(
-              'Order Placed! 🎉',
-              `Your order #${response.data.order.orderNumber} has been placed successfully.`,
-              [
-                {
-                  text: 'View Order',
-                  onPress: () => {
-                    // ✅ FIXED - Use reset to create proper navigation stack
-                    navigation.reset({
-                      index: 1,
-                      routes: [
-                        { name: 'Home' },
-                        { 
-                          name: 'OrderDetail', 
-                          params: { orderId: response.data.order._id } 
-                        }
-                      ],
-                    });
+    Alert.alert(
+      'Confirm Order',
+      `Place order for ${formatCurrency(total)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Place Order',
+          onPress: async () => {
+            setIsPlacingOrder(true);
+            try {
+              const response = await ordersAPI.placeOrder(
+                selectedLocation._id,
+                customerNotes.trim()
+              );
+              
+              resetCart();
+              
+              Alert.alert(
+                'Order Placed! 🎉',
+                `Your order #${response.data.order.orderNumber} has been placed successfully.`,
+                [
+                  {
+                    text: 'View Order',
+                    onPress: () => {
+                      navigation.reset({
+                        index: 1,
+                        routes: [
+                          { name: 'Home' },
+                          { 
+                            name: 'OrderDetail', 
+                            params: { orderId: response.data.order._id } 
+                          }
+                        ],
+                      });
+                    },
                   },
-                },
-                {
-                  text: 'Continue Shopping',
-                  onPress: () => {
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: 'Home' }],
-                    });
+                  {
+                    text: 'Continue Shopping',
+                    onPress: () => {
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Home' }],
+                      });
+                    },
                   },
-                },
-              ]
-            );
-          } catch (error) {
-            Alert.alert('Error', error.message);
-          } finally {
-            setIsPlacingOrder(false);
-          }
+                ]
+              );
+            } catch (error) {
+              Alert.alert('Error', error.message);
+            } finally {
+              setIsPlacingOrder(false);
+            }
+          },
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
   const handleAddNewLocation = () => {
     setShowLocationPicker(false);
@@ -133,7 +131,7 @@ const PlaceOrderScreen = ({ navigation }) => {
       presentationStyle="pageSheet"
       onRequestClose={() => setShowLocationPicker(false)}
     >
-      <SafeAreaView style={styles.modalContainer}>
+      <Screen backgroundColor={COLORS.white} extraTopPadding={0}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Delivery Address</Text>
           <TouchableOpacity onPress={() => setShowLocationPicker(false)}>
@@ -183,16 +181,20 @@ const PlaceOrderScreen = ({ navigation }) => {
             <Text style={styles.addNewLocationText}>Add New Address</Text>
           </TouchableOpacity>
         </ScrollView>
-      </SafeAreaView>
+      </Screen>
     </Modal>
   );
 
   if (isLoading) {
-    return <Loading fullScreen message="Loading..." />;
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <Loading fullScreen message="Loading..." />
+      </Screen>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -354,15 +356,11 @@ const PlaceOrderScreen = ({ navigation }) => {
       </View>
 
       {renderLocationPicker()}
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -612,10 +610,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

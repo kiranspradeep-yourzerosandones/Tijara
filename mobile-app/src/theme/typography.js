@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\theme\typography.js
 import { Platform } from 'react-native';
 import COLORS from './colors';
 

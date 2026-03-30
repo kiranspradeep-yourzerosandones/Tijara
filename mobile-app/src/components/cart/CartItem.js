@@ -1,3 +1,4 @@
+// Tijara\mobile-app\src\components\cart\CartItem.js
 import React from 'react';
 import {
   View,

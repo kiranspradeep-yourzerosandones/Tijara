@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\navigation\AuthNavigator.js
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 

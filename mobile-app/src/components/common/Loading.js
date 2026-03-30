@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\mobile-app\src\components\common\Loading.js
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { COLORS, FONTS, SPACING } from '../../theme';

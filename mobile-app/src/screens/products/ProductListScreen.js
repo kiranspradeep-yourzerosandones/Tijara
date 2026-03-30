@@ -4,13 +4,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
 import { ProductList } from '../../components/products';
+import { Screen } from '../../components/common';
 import { productsAPI } from '../../api';
 import { debounce } from '../../utils/helpers';
 
@@ -128,7 +128,7 @@ const ProductListScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -170,15 +170,11 @@ const ProductListScreen = ({ navigation, route }) => {
         emptyTitle={searchQuery ? 'No results found' : 'No products available'}
         emptyMessage={searchQuery ? 'Try a different search term' : 'Check back later for new products'}
       />
-    </SafeAreaView>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundLight || COLORS.card,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -190,13 +186,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.card || COLORS.lightGray,
+    backgroundColor: COLORS.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...FONTS.h4,
     color: COLORS.textPrimary,
   },
   headerRight: {
@@ -216,7 +211,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    ...FONTS.body,
     color: COLORS.textPrimary,
     marginLeft: SPACING.sm,
   },

@@ -1,3 +1,4 @@
+// mobile-app/src/components/common/Button.js
 import React from 'react';
 import {
   TouchableOpacity,
