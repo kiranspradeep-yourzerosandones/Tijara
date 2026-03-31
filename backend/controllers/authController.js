@@ -1307,8 +1307,9 @@ exports.resetPassword = async (req, res) => {
 // PROFILE MANAGEMENT
 // ============================================================
 
+
 /**
- * @desc    Get current user profile
+ * @desc    Get current user profile WITH CREDIT SUMMARY
  * @route   GET /api/auth/me
  * @access  Private
  */
@@ -1316,10 +1317,29 @@ exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Get credit summary
+    const creditSummary = user.getCreditSummary();
+
+    // Merge user profile with credit data
+    const profileData = {
+      ...user.getPublicProfile(),
+      // Add credit fields directly to user object
+      creditUtilization: creditSummary.creditUtilization,
+      totalPaid: creditSummary.totalPaid,
+      creditBlockedReason: creditSummary.creditBlockedReason,
+    };
+
     res.status(200).json({
       success: true,
       data: {
-        user: user.getPublicProfile()
+        user: profileData
       }
     });
 

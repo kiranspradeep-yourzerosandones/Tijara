@@ -309,15 +309,14 @@ exports.getOutstandingPayments = async (req, res) => {
 // ADMIN PAYMENT OPERATIONS
 // ============================================================
 
+// backend/controllers/paymentController.js - UPDATED adminRecordPayment
+
 /**
- * @desc    Record a payment (Admin)
+ * @desc    Record a payment (Admin) - WITHOUT TRANSACTIONS
  * @route   POST /api/admin/payments
  * @access  Private/Admin
  */
 exports.adminRecordPayment = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const {
       orderId,
@@ -361,10 +360,9 @@ exports.adminRecordPayment = async (req, res) => {
     }
 
     // Find order
-    const order = await Order.findById(orderId).session(session);
+    const order = await Order.findById(orderId);
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Order not found"
@@ -373,7 +371,6 @@ exports.adminRecordPayment = async (req, res) => {
 
     // Cannot record payment for cancelled orders
     if (order.status === "cancelled") {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Cannot record payment for cancelled order"
@@ -385,7 +382,6 @@ exports.adminRecordPayment = async (req, res) => {
     const outstanding = order.totalAmount - currentPaid;
 
     if (amount > outstanding) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: `Payment amount (₹${amount}) exceeds outstanding amount (₹${outstanding})`
@@ -412,7 +408,7 @@ exports.adminRecordPayment = async (req, res) => {
       status: "completed"
     });
 
-    await payment.save({ session });
+    await payment.save();
 
     // Update order payment info
     const newAmountPaid = currentPaid + amount;
@@ -429,18 +425,16 @@ exports.adminRecordPayment = async (req, res) => {
     order.payment.markedPaidBy = req.user._id;
     order.payment.notes = notes;
 
-    await order.save({ session });
+    await order.save();
 
     // Update user credit info
-    const user = await User.findById(order.user).session(session);
+    const user = await User.findById(order.user);
     if (user) {
       user.pendingAmount = Math.max(0, user.pendingAmount - amount);
       user.totalPaid += amount;
       user.lastPaymentDate = payment.paymentDate;
-      await user.save({ session });
+      await user.save();
     }
-
-    await session.commitTransaction();
 
     console.log(`💰 Payment recorded: ${paymentNumber} - ₹${amount} for order ${order.orderNumber}`);
 
@@ -460,15 +454,106 @@ exports.adminRecordPayment = async (req, res) => {
     });
 
   } catch (error) {
-    await session.abortTransaction();
     console.error("Record Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to record payment",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
-  } finally {
-    session.endSession();
+  }
+};
+
+/**
+ * @desc    Cancel/Reverse payment (Admin) - WITHOUT TRANSACTIONS
+ * @route   PUT /api/admin/payments/:id/cancel
+ * @access  Private/Admin
+ */
+exports.adminCancelPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment ID"
+      });
+    }
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Cancellation reason is required"
+      });
+    }
+
+    const payment = await Payment.findById(id);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found"
+      });
+    }
+
+    if (payment.status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Only completed payments can be cancelled"
+      });
+    }
+
+    // Update payment status
+    payment.status = "cancelled";
+    payment.internalNotes = payment.internalNotes 
+      ? `${payment.internalNotes}\n[CANCELLED] ${new Date().toISOString()}: ${reason}`
+      : `[CANCELLED] ${new Date().toISOString()}: ${reason}`;
+
+    await payment.save();
+
+    // Reverse order payment
+    const order = await Order.findById(payment.order);
+    if (order) {
+      order.payment.amountPaid = Math.max(0, (order.payment.amountPaid || 0) - payment.amount);
+      
+      if (order.payment.amountPaid === 0) {
+        order.paymentStatus = "pending";
+      } else if (order.payment.amountPaid < order.totalAmount) {
+        order.paymentStatus = "partial";
+      }
+
+      await order.save();
+    }
+
+    // Reverse user credit
+    const user = await User.findById(payment.user);
+    if (user) {
+      user.pendingAmount += payment.amount;
+      user.totalPaid = Math.max(0, user.totalPaid - payment.amount);
+      await user.save();
+    }
+
+    console.log(`💰 Payment cancelled: ${payment.paymentNumber}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Payment cancelled successfully",
+      data: {
+        payment: {
+          _id: payment._id,
+          paymentNumber: payment.paymentNumber,
+          status: payment.status
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Cancel Payment Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to cancel payment",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
   }
 };
 

@@ -329,11 +329,8 @@ exports.getMyOrders = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single order by ID
- * @route   GET /api/orders/:id
- * @access  Private
- */
+// In orderController.js - Update the getOrder function
+
 exports.getOrder = async (req, res) => {
   try {
     const { id } = req.params;
@@ -359,13 +356,15 @@ exports.getOrder = async (req, res) => {
       });
     }
 
+    // ✅ Include trackingTimeline in response
     res.status(200).json({
       success: true,
       data: {
         order: {
           ...order.toObject(),
           statusText: Order.getStatusText(order.status),
-          nextStatuses: Order.getNextStatuses(order.status)
+          nextStatuses: Order.getNextStatuses(order.status),
+          trackingTimeline: order.trackingTimeline  // ✅ NEW
         }
       }
     });
@@ -990,8 +989,10 @@ exports.adminUpdateOrderStatus = async (req, res) => {
   }
 };
 
+// backend/controllers/orderController.js - UPDATE adminUpdatePaymentStatus
+
 /**
- * @desc    Update payment status (Admin)
+ * @desc    Update payment status (Admin) - CREATES PAYMENT RECORD
  * @route   PUT /api/admin/orders/:id/payment
  * @access  Private/Admin
  */
@@ -1042,36 +1043,57 @@ exports.adminUpdatePaymentStatus = async (req, res) => {
 
     const previousPaymentStatus = order.paymentStatus;
     const previousAmountPaid = order.payment.amountPaid || 0;
+    
+    // Calculate the new amount to be paid
+    let newAmountPaid = amountPaid !== undefined ? amountPaid : order.totalAmount;
+    if (paymentStatus === "paid") {
+      newAmountPaid = order.totalAmount;
+    }
+    
+    // Calculate the payment amount for this transaction
+    const paymentAmount = newAmountPaid - previousAmountPaid;
+
+    // Create a Payment record if there's a positive payment amount
+    if (paymentAmount > 0) {
+      const Payment = require("../models/Payment");
+      const paymentNumber = await Payment.generatePaymentNumber();
+      
+      const payment = new Payment({
+        order: order._id,
+        user: order.user,
+        paymentNumber,
+        orderNumber: order.orderNumber,
+        amount: paymentAmount,
+        method: method || "credit",
+        paymentDate: new Date(),
+        notes: notes || `Payment updated via order management`,
+        recordedBy: req.user._id,
+        status: "completed"
+      });
+
+      await payment.save();
+      console.log(`💰 Payment record created: ${paymentNumber} - ₹${paymentAmount} for order ${order.orderNumber}`);
+    }
 
     // Update payment details
     order.paymentStatus = paymentStatus;
-    order.payment.amountPaid = amountPaid !== undefined ? amountPaid : order.totalAmount;
+    order.payment.amountPaid = newAmountPaid;
     order.payment.method = method || order.payment.method;
     order.payment.notes = notes || order.payment.notes;
     order.payment.markedPaidBy = req.user._id;
 
     if (paymentStatus === "paid") {
       order.payment.paidAt = new Date();
-      order.payment.amountPaid = order.totalAmount;
     }
 
     await order.save();
 
     // Update user's pending and total credit amounts
     const user = await User.findById(order.user);
-    if (user) {
-      const amountDifference = (order.payment.amountPaid || 0) - previousAmountPaid;
-      
-      if (paymentStatus === "paid" && previousPaymentStatus !== "paid") {
-        // Mark as fully paid - clear from pending, add to total credit
-        user.pendingAmount = Math.max(0, user.pendingAmount - order.totalAmount);
-        user.totalCredit += order.totalAmount;
-      } else if (paymentStatus === "partial") {
-        // Partial payment
-        user.pendingAmount = Math.max(0, user.pendingAmount - amountDifference);
-        user.totalCredit += amountDifference;
-      }
-
+    if (user && paymentAmount > 0) {
+      user.pendingAmount = Math.max(0, user.pendingAmount - paymentAmount);
+      user.totalPaid = (user.totalPaid || 0) + paymentAmount;
+      user.lastPaymentDate = new Date();
       await user.save();
     }
 
@@ -1527,6 +1549,235 @@ exports.adminVerifyDeliveryOtp = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to verify delivery",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+// Add this NEW function to orderController.js
+
+/**
+ * @desc    Set expected delivery dates (Admin)
+ * @route   PUT /api/admin/orders/:id/expected-dates
+ * @access  Private/Admin
+ */
+exports.adminSetExpectedDates = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      expectedDeliveryDate, 
+      expectedConfirmDate,
+      expectedPackDate,
+      expectedShipDate,
+      expectedOutForDeliveryDate,
+      note 
+    } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID"
+      });
+    }
+
+    if (!expectedDeliveryDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Expected delivery date is required"
+      });
+    }
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    // Cannot update for cancelled/delivered orders
+    if (order.status === "cancelled" || order.status === "delivered") {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot update expected dates for ${order.status} order`
+      });
+    }
+
+    // Set expected delivery date
+    order.expectedDeliveryDate = new Date(expectedDeliveryDate);
+
+    // Calculate or use provided dates for each step
+    const orderDate = order.createdAt;
+    const deliveryDate = new Date(expectedDeliveryDate);
+
+    // Initialize expectedTimeline if not exists
+    if (!order.expectedTimeline) {
+      order.expectedTimeline = {};
+    }
+
+    // Confirmed - default 12 hours from order
+    order.expectedTimeline.confirmed = {
+      ...order.expectedTimeline.confirmed,
+      expectedDate: expectedConfirmDate 
+        ? new Date(expectedConfirmDate) 
+        : new Date(orderDate.getTime() + 12 * 60 * 60 * 1000),
+      isCompleted: ["confirmed", "packed", "shipped", "out_for_delivery", "delivered"].includes(order.status),
+      actualDate: order.confirmedAt
+    };
+
+    // Packed - default 1 day from order
+    order.expectedTimeline.packed = {
+      ...order.expectedTimeline.packed,
+      expectedDate: expectedPackDate 
+        ? new Date(expectedPackDate) 
+        : new Date(orderDate.getTime() + 24 * 60 * 60 * 1000),
+      isCompleted: ["packed", "shipped", "out_for_delivery", "delivered"].includes(order.status),
+      actualDate: order.packedAt
+    };
+
+    // Shipped - default 2 days from order
+    order.expectedTimeline.shipped = {
+      ...order.expectedTimeline.shipped,
+      expectedDate: expectedShipDate 
+        ? new Date(expectedShipDate) 
+        : new Date(orderDate.getTime() + 2 * 24 * 60 * 60 * 1000),
+      isCompleted: ["shipped", "out_for_delivery", "delivered"].includes(order.status),
+      actualDate: order.shippedAt
+    };
+
+    // Out for delivery - morning of delivery day
+    const outForDeliveryDefault = new Date(deliveryDate);
+    outForDeliveryDefault.setHours(8, 0, 0, 0);
+    
+    order.expectedTimeline.out_for_delivery = {
+      ...order.expectedTimeline.out_for_delivery,
+      expectedDate: expectedOutForDeliveryDate 
+        ? new Date(expectedOutForDeliveryDate) 
+        : outForDeliveryDefault,
+      isCompleted: ["out_for_delivery", "delivered"].includes(order.status),
+      actualDate: order.outForDeliveryAt
+    };
+
+    // Delivered
+    order.expectedTimeline.delivered = {
+      ...order.expectedTimeline.delivered,
+      expectedDate: deliveryDate,
+      isCompleted: order.status === "delivered",
+      actualDate: order.deliveredAt
+    };
+
+    // Add note to internal notes
+    if (note) {
+      const timestamp = new Date().toISOString();
+      const newNote = `[${timestamp}] Expected delivery set to ${deliveryDate.toDateString()}: ${note}`;
+      order.internalNotes = order.internalNotes 
+        ? `${order.internalNotes}\n${newNote}`
+        : newNote;
+    }
+
+    await order.save();
+
+    console.log(`📅 Expected dates set for order ${order.orderNumber}: Delivery by ${deliveryDate.toDateString()}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Expected delivery dates updated",
+      data: {
+        order: {
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          expectedDeliveryDate: order.expectedDeliveryDate,
+          expectedTimeline: order.expectedTimeline,
+          trackingTimeline: order.trackingTimeline
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Set Expected Dates Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to set expected dates",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Mark order as delayed (Admin)
+ * @route   PUT /api/admin/orders/:id/delay
+ * @access  Private/Admin
+ */
+exports.adminMarkDelayed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isDelayed, delayReason, newExpectedDeliveryDate } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID"
+      });
+    }
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    order.isDelayed = isDelayed !== undefined ? isDelayed : true;
+    
+    if (delayReason) {
+      order.delayReason = delayReason;
+    }
+
+    if (newExpectedDeliveryDate) {
+      order.expectedDeliveryDate = new Date(newExpectedDeliveryDate);
+      
+      // Update delivered expected date in timeline
+      if (order.expectedTimeline) {
+        order.expectedTimeline.delivered = {
+          ...order.expectedTimeline.delivered,
+          expectedDate: new Date(newExpectedDeliveryDate)
+        };
+      }
+    }
+
+    // Add to status history
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: new Date(),
+      note: `Order marked as ${isDelayed ? 'delayed' : 'on-time'}. ${delayReason || ''}`
+    });
+
+    await order.save();
+
+    console.log(`⚠️ Order ${order.orderNumber} marked as ${isDelayed ? 'delayed' : 'on-time'}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Order marked as ${isDelayed ? 'delayed' : 'on-time'}`,
+      data: {
+        order: {
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          isDelayed: order.isDelayed,
+          delayReason: order.delayReason,
+          expectedDeliveryDate: order.expectedDeliveryDate
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Mark Delayed Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update delay status",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }

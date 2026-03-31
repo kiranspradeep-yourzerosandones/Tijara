@@ -7,14 +7,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Linking,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Button, Loading, Card, Screen } from '../../components/common';
+import { COLORS, FONTS, SPACING } from '../../theme';
+import { Button, Loading, Screen } from '../../components/common';
 import { ordersAPI } from '../../api';
-import { formatCurrency, formatDate } from '../../utils/helpers';
-import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '../../utils/constants';
+import { formatCurrency, formatDate, getImageUrl } from '../../utils/helpers';
 
 const OrderDetailScreen = ({ navigation, route }) => {
   const { orderId } = route.params;
@@ -82,78 +81,200 @@ const OrderDetailScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleCallSupport = () => {
-    Linking.openURL('tel:+919876543210');
+  const handleDownloadInvoice = () => {
+    Alert.alert('Coming Soon', 'Invoice download will be available soon');
   };
 
-  const renderStatusTimeline = () => {
-    const statuses = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
-    const currentIndex = statuses.indexOf(order.status);
+  const getProductImage = (item) => {
+    if (!item) return null;
+    const imageSource = 
+      item.productSnapshot?.image ||
+      item.product?.images?.[0] ||
+      null;
+    return imageSource ? getImageUrl(imageSource) : null;
+  };
 
-    if (order.status === 'cancelled') {
+  // Format expected date nicely
+  const formatExpectedDate = (dateString) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    const options = { weekday: 'short', day: 'numeric', month: 'short' };
+    return date.toLocaleDateString('en-IN', options);
+  };
+
+  // Check if a date is in the past
+  const isPastDate = (dateString) => {
+    if (!dateString) return false;
+    return new Date() > new Date(dateString);
+  };
+
+  // ✅ RENDER TRACKING TIMELINE (Flipkart Style)
+  const renderTrackingTimeline = () => {
+    // Use trackingTimeline from API if available
+    const timeline = order?.trackingTimeline || [];
+
+    if (order?.status === 'cancelled') {
       return (
-        <View style={styles.cancelledContainer}>
-          <Ionicons name="close-circle" size={48} color={COLORS.error} />
-          <Text style={styles.cancelledText}>Order Cancelled</Text>
-          {order.cancellation?.reason && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Order Status</Text>
+          <View style={styles.cancelledBox}>
+            <Ionicons name="close-circle" size={48} color={COLORS.error} />
+            <Text style={styles.cancelledTitle}>Order Cancelled</Text>
             <Text style={styles.cancelledReason}>
-              Reason: {order.cancellation.reason}
+              {order.cancellation?.reason || 'This order has been cancelled.'}
             </Text>
-          )}
+            <Text style={styles.cancelledDate}>
+              {formatDate(order.cancelledAt || order.updatedAt, 'datetime')}
+            </Text>
+          </View>
         </View>
       );
     }
 
-    return (
-      <View style={styles.timeline}>
-        {statuses.map((status, index) => {
-          const isCompleted = index <= currentIndex;
-          const isCurrent = index === currentIndex;
+    // If no timeline from API, build default
+    const steps = timeline.length > 0 ? timeline : buildDefaultTimeline();
 
-          return (
-            <View key={status} style={styles.timelineItem}>
-              <View style={styles.timelineLeft}>
-                <View
-                  style={[
+    return (
+      <View style={styles.section}>
+        <View style={styles.timelineHeader}>
+          <Text style={styles.sectionTitle}>Order Tracking</Text>
+          {order?.expectedDeliveryDate && (
+            <View style={styles.expectedDeliveryBadge}>
+              <Ionicons name="time-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.expectedDeliveryText}>
+                {order.isDelayed ? 'Delayed - ' : ''}
+                Expected by {formatExpectedDate(order.expectedDeliveryDate)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {order?.isDelayed && order?.delayReason && (
+          <View style={styles.delayBanner}>
+            <Ionicons name="warning" size={18} color="#B45309" />
+            <Text style={styles.delayText}>{order.delayReason}</Text>
+          </View>
+        )}
+
+        <View style={styles.timelineContainer}>
+          {steps.map((step, index) => {
+            const isCompleted = step.isCompleted || step.status === 'completed';
+            const isCurrent = step.isCurrent || step.status === 'current';
+            const isPending = step.isPending || step.status === 'pending';
+            const isDelayed = step.isDelayed;
+            const isLast = index === steps.length - 1;
+
+            return (
+              <View key={step.key || index} style={styles.timelineStep}>
+                {/* Left side - Line and Dot */}
+                <View style={styles.timelineLeft}>
+                  {/* Dot */}
+                  <View style={[
                     styles.timelineDot,
                     isCompleted && styles.timelineDotCompleted,
                     isCurrent && styles.timelineDotCurrent,
-                  ]}
-                >
-                  {isCompleted && (
-                    <Ionicons name="checkmark" size={12} color={COLORS.white} />
+                    isPending && styles.timelineDotPending,
+                    isDelayed && styles.timelineDotDelayed,
+                  ]}>
+                    {isCompleted && (
+                      <Ionicons name="checkmark" size={12} color={COLORS.white} />
+                    )}
+                    {isCurrent && !isCompleted && (
+                      <View style={styles.currentDotInner} />
+                    )}
+                  </View>
+
+                  {/* Line */}
+                  {!isLast && (
+                    <View style={[
+                      styles.timelineLine,
+                      isCompleted && !isCurrent && styles.timelineLineCompleted,
+                      isPending && styles.timelineLinePending,
+                    ]} />
                   )}
                 </View>
-                {index < statuses.length - 1 && (
-                  <View
-                    style={[
-                      styles.timelineLine,
-                      isCompleted && index < currentIndex && styles.timelineLineCompleted,
-                    ]}
-                  />
-                )}
-              </View>
-              <View style={styles.timelineContent}>
-                <Text
-                  style={[
-                    styles.timelineStatus,
-                    isCompleted && styles.timelineStatusCompleted,
-                    isCurrent && styles.timelineStatusCurrent,
-                  ]}
-                >
-                  {ORDER_STATUS_LABELS[status]}
-                </Text>
-                {isCurrent && order.statusHistory && (
-                  <Text style={styles.timelineDate}>
-                    {formatDate(order.statusHistory[order.statusHistory.length - 1]?.timestamp, 'datetime')}
+
+                {/* Right side - Content */}
+                <View style={styles.timelineContent}>
+                  <View style={styles.timelineMainRow}>
+                    <Text style={[
+                      styles.timelineTitle,
+                      isCompleted && styles.timelineTitleCompleted,
+                      isCurrent && styles.timelineTitleCurrent,
+                      isPending && styles.timelineTitlePending,
+                      isDelayed && styles.timelineTitleDelayed,
+                    ]}>
+                      {step.title}
+                    </Text>
+                    {isDelayed && (
+                      <View style={styles.delayedBadge}>
+                        <Text style={styles.delayedBadgeText}>Delayed</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text style={[
+                    styles.timelineDescription,
+                    isPending && styles.timelineDescriptionPending,
+                  ]}>
+                    {step.description}
                   </Text>
-                )}
+
+                  {/* Date info */}
+                  {isCompleted && (step.completedAt || step.actualDate) && (
+                    <Text style={styles.timelineDate}>
+                      {formatDate(step.completedAt || step.actualDate, 'datetime')}
+                    </Text>
+                  )}
+
+                  {isPending && step.expectedDate && (
+                    <Text style={[
+                      styles.timelineExpectedDate,
+                      isPastDate(step.expectedDate) && styles.timelineExpectedDateOverdue,
+                    ]}>
+                      {isPastDate(step.expectedDate) 
+                        ? `Was expected by ${formatExpectedDate(step.expectedDate)}`
+                        : `Expected by ${formatExpectedDate(step.expectedDate)}`
+                      }
+                    </Text>
+                  )}
+
+                  {step.note && (
+                    <Text style={styles.timelineNote}>📝 {step.note}</Text>
+                  )}
+                </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
       </View>
     );
+  };
+
+  // Build default timeline if not provided by API
+  const buildDefaultTimeline = () => {
+    const statusOrder = ['pending', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered'];
+    const currentIndex = statusOrder.indexOf(order?.status || 'pending');
+
+    const defaultSteps = [
+      { key: 'pending', title: 'Order Placed', description: 'Your order has been placed', icon: 'checkmark-circle' },
+      { key: 'confirmed', title: 'Order Confirmed', description: 'Seller has processed your order', icon: 'checkmark-done' },
+      { key: 'packed', title: 'Packed', description: 'Your item has been packed', icon: 'cube' },
+      { key: 'shipped', title: 'Shipped', description: 'Your item has been shipped', icon: 'airplane' },
+      { key: 'out_for_delivery', title: 'Out for Delivery', description: 'Your item is out for delivery', icon: 'car' },
+      { key: 'delivered', title: 'Delivered', description: 'Your item has been delivered', icon: 'checkmark-circle' },
+    ];
+
+    return defaultSteps.map((step, index) => ({
+      ...step,
+      isCompleted: index < currentIndex || (index === currentIndex && order?.status === 'delivered'),
+      isCurrent: index === currentIndex && order?.status !== 'delivered',
+      isPending: index > currentIndex,
+      completedAt: index === 0 ? order?.createdAt : null,
+      expectedDate: order?.expectedTimeline?.[step.key]?.expectedDate,
+      actualDate: order?.expectedTimeline?.[step.key]?.actualDate,
+      isDelayed: false,
+    }));
   };
 
   if (isLoading) {
@@ -168,28 +289,21 @@ const OrderDetailScreen = ({ navigation, route }) => {
     return null;
   }
 
-  const statusColor = ORDER_STATUS_COLORS[order.status] || COLORS.gray;
+  const firstItem = order.items?.[0];
+  const itemImage = getProductImage(firstItem);
+  const productTitle = firstItem?.productSnapshot?.title || 'Product';
+  const itemCount = order.items?.length || 1;
+  const canCancel = order.canCancel || order.nextStatuses?.includes('cancelled');
 
   return (
     <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-          <Text style={styles.orderDate}>{formatDate(order.createdAt, 'datetime')}</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.helpButton}
-          onPress={handleCallSupport}
-        >
-          <Ionicons name="call-outline" size={24} color={COLORS.textPrimary} />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Order Details</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -197,150 +311,190 @@ const OrderDetailScreen = ({ navigation, route }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Status Card */}
-        <Card style={styles.statusCard}>
-          <View style={styles.statusHeader}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {ORDER_STATUS_LABELS[order.status]}
+        {/* Top Product Card */}
+        <View style={styles.topProductCard}>
+          {itemImage ? (
+            <Image source={{ uri: itemImage }} style={styles.topImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.topImage, styles.imagePlaceholder]}>
+              <Ionicons name="cube-outline" size={32} color={COLORS.gray} />
+            </View>
+          )}
+          <View style={styles.topProductInfo}>
+            <Text style={styles.productTitle} numberOfLines={2}>{productTitle}</Text>
+            <Text style={styles.topMeta}>Ordered on {formatDate(order.createdAt, 'date')}</Text>
+            <Text style={styles.topMeta}>
+              quantity - {firstItem?.quantity || 1}
+              {itemCount > 1 && ` (+${itemCount - 1} more)`}
+            </Text>
+          </View>
+        </View>
+
+        {/* Order ID */}
+        <Text style={styles.orderId}>Order #{order.orderNumber}</Text>
+
+        {/* Expected Delivery Banner */}
+        {order.expectedDeliveryDate && order.status !== 'delivered' && order.status !== 'cancelled' && (
+          <View style={[
+            styles.deliveryBanner,
+            order.isDelayed && styles.deliveryBannerDelayed
+          ]}>
+            <Ionicons 
+              name={order.isDelayed ? "warning" : "time"} 
+              size={20} 
+              color={order.isDelayed ? "#B45309" : COLORS.primary} 
+            />
+            <View style={styles.deliveryBannerContent}>
+              <Text style={[
+                styles.deliveryBannerTitle,
+                order.isDelayed && styles.deliveryBannerTitleDelayed
+              ]}>
+                {order.isDelayed ? 'Delivery Delayed' : 'Expected Delivery'}
+              </Text>
+              <Text style={styles.deliveryBannerDate}>
+                {formatExpectedDate(order.expectedDeliveryDate)}
+              </Text>
+              {order.isDelayed && order.delayReason && (
+                <Text style={styles.deliveryBannerReason}>{order.delayReason}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Tracking Timeline */}
+        {renderTrackingTimeline()}
+
+        {/* Multiple Items Section */}
+        {itemCount > 1 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Order Items ({itemCount})</Text>
+            <View style={styles.itemsContainer}>
+              {order.items.map((item, index) => {
+                const itemImg = getProductImage(item);
+                return (
+                  <View
+                    key={item._id || index}
+                    style={[styles.itemRow, index < order.items.length - 1 && styles.itemRowBorder]}
+                  >
+                    {itemImg ? (
+                      <Image source={{ uri: itemImg }} style={styles.itemImage} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                        <Ionicons name="cube-outline" size={18} color={COLORS.gray} />
+                      </View>
+                    )}
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemTitle} numberOfLines={2}>
+                        {item.productSnapshot?.title || 'Product'}
+                      </Text>
+                      <Text style={styles.itemMeta}>
+                        {formatCurrency(item.unitPrice)} × {item.quantity}
+                      </Text>
+                    </View>
+                    <Text style={styles.itemSubtotal}>{formatCurrency(item.subtotal)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Delivery Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Delivery Details</Text>
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailRow}>
+              <Ionicons name="location" size={18} color={COLORS.primary} />
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Delivery Address</Text>
+                {order.deliveryAddress ? (
+                  <>
+                    <Text style={styles.detailValue}>
+                      {order.deliveryAddress.addressLine1}
+                      {order.deliveryAddress.addressLine2 && `, ${order.deliveryAddress.addressLine2}`}
+                    </Text>
+                    <Text style={styles.detailValue}>
+                      {order.deliveryAddress.city}, {order.deliveryAddress.state} - {order.deliveryAddress.pincode}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.detailValue}>Address not available</Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.detailDivider} />
+            <View style={styles.detailRow}>
+              <Ionicons name="person" size={18} color={COLORS.primary} />
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Recipient</Text>
+                <Text style={styles.detailValue}>
+                  {order.deliveryAddress?.shopName || order.customerSnapshot?.name || 'Customer'}
+                </Text>
+                {order.deliveryAddress?.contactPhone && (
+                  <Text style={styles.detailValuePhone}>📞 {order.deliveryAddress.contactPhone}</Text>
+                )}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Price Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Price Details</Text>
+          <View style={styles.priceContainer}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Sub total</Text>
+              <Text style={styles.priceValue}>{formatCurrency(order.subtotal)}</Text>
+            </View>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Shipping</Text>
+              <Text style={[styles.priceValue, { color: COLORS.success }]}>
+                {order.deliveryCharges > 0 ? formatCurrency(order.deliveryCharges) : 'FREE'}
               </Text>
             </View>
-            <Text style={styles.totalAmount}>{formatCurrency(order.totalAmount)}</Text>
-          </View>
-
-          {renderStatusTimeline()}
-        </Card>
-
-        {/* Items Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items</Text>
-          <Card style={styles.itemsCard}>
-            {order.items?.map((item, index) => (
-              <View
-                key={item._id}
-                style={[
-                  styles.orderItem,
-                  index < order.items.length - 1 && styles.orderItemBorder,
-                ]}
-              >
-                <View style={styles.orderItemInfo}>
-                  <Text style={styles.orderItemTitle} numberOfLines={2}>
-                    {item.productSnapshot?.title}
-                  </Text>
-                  <Text style={styles.orderItemMeta}>
-                    {formatCurrency(item.unitPrice)} × {item.quantity} {item.productSnapshot?.unit}
-                  </Text>
-                </View>
-                <Text style={styles.orderItemSubtotal}>
-                  {formatCurrency(item.subtotal)}
-                </Text>
-              </View>
-            ))}
-          </Card>
-        </View>
-
-        {/* Delivery Address */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery Address</Text>
-          <Card>
-            <View style={styles.addressHeader}>
-              <View style={styles.addressLabelBadge}>
-                <Text style={styles.addressLabelText}>
-                  {order.deliveryAddress?.label}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.shopName}>{order.deliveryAddress?.shopName}</Text>
-            <Text style={styles.addressText}>
-              {order.deliveryAddress?.addressLine1}
-              {order.deliveryAddress?.addressLine2 && `, ${order.deliveryAddress.addressLine2}`}
-            </Text>
-            <Text style={styles.addressText}>
-              {order.deliveryAddress?.city}, {order.deliveryAddress?.state} - {order.deliveryAddress?.pincode}
-            </Text>
-            <Text style={styles.contactText}>
-              📞 {order.deliveryAddress?.contactPhone}
-            </Text>
-          </Card>
-        </View>
-
-        {/* Payment Summary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Summary</Text>
-          <Card>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
-            </View>
             {order.discount > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Discount</Text>
-                <Text style={[styles.summaryValue, { color: COLORS.success }]}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Discount</Text>
+                <Text style={[styles.priceValue, { color: COLORS.success }]}>
                   -{formatCurrency(order.discount)}
                 </Text>
               </View>
             )}
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Delivery</Text>
-              <Text style={[styles.summaryValue, { color: COLORS.success }]}>FREE</Text>
+            <View style={styles.priceDivider} />
+            <View style={styles.priceRow}>
+              <Text style={styles.priceTotalLabel}>Total</Text>
+              <Text style={styles.priceTotalValue}>{formatCurrency(order.totalAmount)}</Text>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{formatCurrency(order.totalAmount)}</Text>
-            </View>
-            <View style={[styles.paymentStatusBadge, {
-              backgroundColor: order.paymentStatus === 'paid' ? COLORS.successLight : COLORS.warningLight,
-            }]}>
-              <Ionicons
-                name={order.paymentStatus === 'paid' ? 'checkmark-circle' : 'time'}
-                size={16}
-                color={order.paymentStatus === 'paid' ? COLORS.success : COLORS.warning}
-              />
-              <Text style={[styles.paymentStatusText, {
-                color: order.paymentStatus === 'paid' ? COLORS.success : COLORS.warning,
-              }]}>
-                {order.paymentStatus === 'paid' ? 'Paid' : 
-                 order.paymentStatus === 'partial' ? 'Partially Paid' : 'Payment Pending'}
-              </Text>
-            </View>
-          </Card>
+          </View>
         </View>
 
-        {/* Customer Notes */}
-        {order.customerNotes && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Order Notes</Text>
-            <Card>
-              <Text style={styles.notesText}>{order.customerNotes}</Text>
-            </Card>
-          </View>
-        )}
+        {/* Download Invoice */}
+        <TouchableOpacity style={styles.downloadBtn} onPress={handleDownloadInvoice} activeOpacity={0.8}>
+          <Ionicons name="download-outline" size={18} color={COLORS.textPrimary} />
+          <Text style={styles.downloadBtnText}>Download Invoice</Text>
+        </TouchableOpacity>
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
       {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
-        {order.canCancel && (
-          <Button
-            title="Cancel Order"
-            variant="outline"
-            onPress={handleCancelOrder}
-            loading={isCancelling}
-            style={styles.cancelButton}
-            textStyle={{ color: COLORS.error }}
-          />
-        )}
-        {order.status === 'delivered' && (
-          <Button
-            title="Reorder"
-            onPress={handleReorder}
-            style={styles.reorderButton}
-          />
-        )}
-      </View>
+      {(canCancel || order.status === 'delivered') && (
+        <View style={styles.bottomActions}>
+          {canCancel && order.status !== 'cancelled' && (
+            <Button
+              title="Cancel Order"
+              variant="outline"
+              onPress={handleCancelOrder}
+              loading={isCancelling}
+              style={styles.cancelButton}
+              textStyle={{ color: COLORS.error }}
+            />
+          )}
+          {order.status === 'delivered' && (
+            <Button title="Reorder" onPress={handleReorder} style={styles.reorderButton} />
+          )}
+        </View>
+      )}
     </Screen>
   );
 };
@@ -357,32 +511,14 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.card,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  orderNumber: {
+  headerTitle: {
     ...FONTS.h4,
     color: COLORS.textPrimary,
-  },
-  orderDate: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-    marginTop: 2,
-  },
-  helpButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.card,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,
@@ -390,224 +526,414 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: SPACING.screenPadding,
   },
-  statusCard: {
-    marginBottom: SPACING.lg,
+
+  // Top Product Card
+  topProductCard: {
+    flexDirection: 'row',
+    marginBottom: 8,
   },
-  statusHeader: {
+  topImage: {
+    width: 75,
+    height: 75,
+    borderRadius: 10,
+    marginRight: 12,
+    backgroundColor: COLORS.white,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  topProductInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  productTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  topMeta: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  orderId: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 12,
+  },
+
+  // Delivery Banner
+  deliveryBanner: {
+    flexDirection: 'row',
+    backgroundColor: '#EDE9DD',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  deliveryBannerDelayed: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  deliveryBannerContent: {
+    flex: 1,
+  },
+  deliveryBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  deliveryBannerTitleDelayed: {
+    color: '#B45309',
+  },
+  deliveryBannerDate: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginTop: 2,
+  },
+  deliveryBannerReason: {
+    fontSize: 12,
+    color: '#92400E',
+    marginTop: 4,
+  },
+
+  // Timeline
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  timelineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: 12,
   },
-  statusBadge: {
+  expectedDeliveryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: SPACING.buttonRadius,
+    backgroundColor: '#FEF9C3',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: SPACING.xs,
+  expectedDeliveryText: {
+    fontSize: 11,
+    color: '#92400E',
+    fontWeight: '500',
   },
-  statusText: {
-    ...FONTS.label,
-    fontWeight: '600',
-  },
-  totalAmount: {
-    ...FONTS.priceLarge,
-    color: COLORS.textPrimary,
-  },
-  timeline: {
-    paddingLeft: SPACING.sm,
-  },
-  timelineItem: {
+  delayBanner: {
     flexDirection: 'row',
-    minHeight: 50,
+    backgroundColor: '#FEF3C7',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+    gap: 8,
+  },
+  delayText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400E',
+  },
+  timelineContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+  },
+  timelineStep: {
+    flexDirection: 'row',
   },
   timelineLeft: {
+    width: 28,
     alignItems: 'center',
-    width: 24,
   },
   timelineDot: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: COLORS.lightGray,
+    backgroundColor: '#E5E7EB',
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.border,
   },
   timelineDotCompleted: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
+    backgroundColor: '#E6B800',
+    borderColor: '#E6B800',
   },
   timelineDotCurrent: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+    borderColor: '#E6B800',
+    borderWidth: 3,
+  },
+  timelineDotPending: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#D1D5DB',
+  },
+  timelineDotDelayed: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+  },
+  currentDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E6B800',
   },
   timelineLine: {
-    flex: 1,
     width: 2,
-    backgroundColor: COLORS.border,
-    marginVertical: 4,
+    height: 50,
+    backgroundColor: '#E6B800',
+    marginTop: 4,
   },
   timelineLineCompleted: {
-    backgroundColor: COLORS.success,
+    backgroundColor: '#E6B800',
+  },
+  timelineLinePending: {
+    backgroundColor: '#E5E7EB',
   },
   timelineContent: {
     flex: 1,
-    paddingLeft: SPACING.md,
-    paddingBottom: SPACING.sm,
+    paddingLeft: 12,
+    paddingBottom: 24,
   },
-  timelineStatus: {
-    ...FONTS.body,
-    color: COLORS.gray,
+  timelineMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  timelineStatusCompleted: {
+  timelineTitle: {
+    fontSize: 14,
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
-  timelineStatusCurrent: {
-    color: COLORS.primary,
-    fontWeight: '600',
+  timelineTitleCompleted: {
+    color: COLORS.textPrimary,
   },
-  timelineDate: {
-    ...FONTS.caption,
-    color: COLORS.gray,
+  timelineTitleCurrent: {
+    color: '#B45309',
+    fontWeight: '700',
+  },
+  timelineTitlePending: {
+    color: '#9CA3AF',
+  },
+  timelineTitleDelayed: {
+    color: '#B45309',
+  },
+  timelineDescription: {
+    fontSize: 12,
+    color: '#6B7280',
     marginTop: 2,
   },
-  cancelledContainer: {
-    alignItems: 'center',
-    paddingVertical: SPACING.lg,
+  timelineDescriptionPending: {
+    color: '#9CA3AF',
   },
-  cancelledText: {
-    ...FONTS.h4,
+  timelineDate: {
+    fontSize: 11,
+    color: '#059669',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  timelineExpectedDate: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  timelineExpectedDateOverdue: {
+    color: '#DC2626',
+  },
+  timelineNote: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  delayedBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  delayedBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+
+  // Cancelled Box
+  cancelledBox: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+  },
+  cancelledTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: COLORS.error,
-    marginTop: SPACING.sm,
+    marginTop: 12,
   },
   cancelledReason: {
-    ...FONTS.bodySmall,
-    color: COLORS.gray,
-    marginTop: SPACING.xs,
+    fontSize: 13,
+    color: '#666',
+    marginTop: 8,
+    textAlign: 'center',
   },
-  section: {
-    marginBottom: SPACING.lg,
+  cancelledDate: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 8,
   },
-  sectionTitle: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
+
+  // Items
+  itemsContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 12,
   },
-  itemsCard: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  orderItem: {
+  itemRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.cardPadding,
+    paddingVertical: 10,
   },
-  orderItemBorder: {
+  itemRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
-  orderItemInfo: {
-    flex: 1,
-    marginRight: SPACING.md,
+  itemImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: COLORS.lightGray,
   },
-  orderItemTitle: {
-    ...FONTS.body,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-    marginBottom: SPACING.xs,
-  },
-  orderItemMeta: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-  },
-  orderItemSubtotal: {
-    ...FONTS.price,
-    color: COLORS.textPrimary,
-  },
-  addressHeader: {
-    marginBottom: SPACING.sm,
-  },
-  addressLabelBadge: {
-    backgroundColor: COLORS.primaryLight + '30',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: SPACING.xs,
-    alignSelf: 'flex-start',
-  },
-  addressLabelText: {
-    ...FONTS.labelSmall,
-    color: COLORS.primary,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  shopName: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  addressText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-  },
-  contactText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.sm,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  summaryLabel: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-  },
-  summaryValue: {
-    ...FONTS.body,
-    color: COLORS.textPrimary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.sm,
-  },
-  totalLabel: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-  },
-  totalValue: {
-    ...FONTS.priceLarge,
-    color: COLORS.textPrimary,
-  },
-  paymentStatusBadge: {
-    flexDirection: 'row',
+  itemImagePlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.sm,
-    borderRadius: SPACING.cardRadiusSmall,
-    marginTop: SPACING.md,
-    gap: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  paymentStatusText: {
-    ...FONTS.label,
-    fontWeight: '600',
+  itemInfo: {
+    flex: 1,
+    marginRight: 12,
   },
-  notesText: {
-    ...FONTS.body,
+  itemTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  itemMeta: {
+    fontSize: 11,
     color: COLORS.textSecondary,
-    fontStyle: 'italic',
+  },
+  itemSubtotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+
+  // Details
+  detailsContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+    marginVertical: 8,
+    marginLeft: 30,
+  },
+  detailContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  detailValuePhone: {
+    fontSize: 13,
+    color: COLORS.primary,
+    marginTop: 4,
+  },
+
+  // Price
+  priceContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  priceLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  priceValue: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+  },
+  priceDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 10,
+  },
+  priceTotalLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  priceTotalValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+
+  // Download Button
+  downloadBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3EFE6',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 6,
+    gap: 8,
+  },
+  downloadBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
   },
   bottomSpacing: {
     height: 100,

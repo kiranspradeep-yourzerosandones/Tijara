@@ -7,25 +7,16 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
 import { Loading, EmptyState, Screen } from '../../components/common';
-import { OrderCard } from '../../components/orders';
 import { ordersAPI } from '../../api';
-
-const ORDER_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'confirmed', label: 'Confirmed' },
-  { key: 'shipped', label: 'Shipped' },
-  { key: 'delivered', label: 'Delivered' },
-  { key: 'cancelled', label: 'Cancelled' },
-];
+import { formatDate, getImageUrl } from '../../utils/helpers'; // ✅ Import getImageUrl
 
 const OrderListScreen = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
-  const [activeFilter, setActiveFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -33,7 +24,7 @@ const OrderListScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadOrders(true);
-  }, [activeFilter]);
+  }, []);
 
   const loadOrders = async (refresh = false) => {
     const currentPage = refresh ? 1 : page;
@@ -49,10 +40,6 @@ const OrderListScreen = ({ navigation }) => {
         page: currentPage,
         limit: 10,
       };
-
-      if (activeFilter !== 'all') {
-        params.status = activeFilter;
-      }
 
       const response = await ordersAPI.getOrders(params);
       const newOrders = response.data?.orders || [];
@@ -87,52 +74,116 @@ const OrderListScreen = ({ navigation }) => {
   };
 
   const handleOrderPress = (order) => {
-    navigation.navigate('OrderDetail', { orderId: order._id });
+    navigation.navigate('OrderDetail', { orderId: order._id || order.id });
   };
 
-  const renderFilterTabs = () => (
-    <View style={styles.filterContainer}>
-      <FlatList
-        horizontal
-        data={ORDER_FILTERS}
-        keyExtractor={(item) => item.key}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterList}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.filterTab,
-              activeFilter === item.key && styles.filterTabActive,
-            ]}
-            onPress={() => setActiveFilter(item.key)}
-          >
-            <Text
-              style={[
-                styles.filterTabText,
-                activeFilter === item.key && styles.filterTabTextActive,
-              ]}
-            >
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
-    </View>
-  );
+  const getOrderStatusText = (status, statusText) => {
+    if (statusText) return statusText;
+    
+    switch (status) {
+      case 'delivered':
+        return 'Item Delivered';
+      case 'cancelled':
+        return 'Order Cancelled';
+      case 'shipped':
+        return 'Item on the way';
+      case 'packed':
+        return 'Item being packed';
+      case 'confirmed':
+        return 'Order Confirmed';
+      default:
+        return 'Order Processing';
+    }
+  };
 
-  const renderOrder = ({ item }) => (
-    <OrderCard order={item} onPress={() => handleOrderPress(item)} />
-  );
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'delivered':
+        return COLORS.success;
+      case 'cancelled':
+        return COLORS.error;
+      case 'shipped':
+        return '#2196F3';
+      default:
+        return COLORS.primary;
+    }
+  };
+
+  // ✅ Get product image using existing helper
+  const getProductImage = (item) => {
+    if (!item) return null;
+
+    // Try different possible image sources from your API structure
+    const imageSource = 
+      item.productSnapshot?.image ||           // Your API: productSnapshot.image
+      item.product?.images?.[0] ||              // Fallback: product.images array
+      item.productSnapshot?.images?.[0] ||      // Another fallback
+      null;
+
+    return imageSource ? getImageUrl(imageSource) : null;
+  };
+
+  const renderOrder = ({ item }) => {
+    const firstItem = item.items?.[0];
+    const image = getProductImage(firstItem);
+    const itemCount = item.items?.length || item.totalItems || 1;
+    const productTitle = firstItem?.productSnapshot?.title || 
+                        firstItem?.product?.title ||
+                        'Product';
+
+    return (
+      <TouchableOpacity
+        style={styles.orderCard}
+        onPress={() => handleOrderPress(item)}
+        activeOpacity={0.8}
+      >
+        {/* Product Image */}
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            style={styles.orderImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.orderImage, styles.imagePlaceholder]}>
+            <Ionicons name="medkit-outline" size={28} color={COLORS.gray} />
+          </View>
+        )}
+
+        <View style={styles.orderContent}>
+          <Text style={styles.orderTitle} numberOfLines={1}>
+            {productTitle}
+          </Text>
+
+          <Text style={styles.orderMeta}>
+            Ordered on {formatDate(item.createdAt, 'date')}
+          </Text>
+
+          <Text style={styles.orderMeta}>
+            quantity - {firstItem?.quantity || 1}
+            {itemCount > 1 && ` (+${itemCount - 1} more item${itemCount > 2 ? 's' : ''})`}
+          </Text>
+
+          <Text 
+            style={[
+              styles.orderStatus,
+              { color: getStatusColor(item.status) }
+            ]}
+          >
+            {getOrderStatusText(item.status, item.statusText)}
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmpty = () => (
     <EmptyState
       icon="receipt-outline"
       title="No Orders Yet"
-      message={
-        activeFilter !== 'all'
-          ? `No ${activeFilter} orders found`
-          : "You haven't placed any orders yet"
-      }
+      message="You haven't placed any orders yet"
       actionText="Start Shopping"
       onAction={() => navigation.navigate('Home')}
     />
@@ -140,7 +191,11 @@ const OrderListScreen = ({ navigation }) => {
 
   const renderFooter = () => {
     if (!isLoading || orders.length === 0) return null;
-    return <Loading size="small" />;
+    return (
+      <View style={styles.footerLoader}>
+        <Loading size="small" />
+      </View>
+    );
   };
 
   if (isLoading && orders.length === 0) {
@@ -155,21 +210,13 @@ const OrderListScreen = ({ navigation }) => {
     <Screen backgroundColor={COLORS.backgroundLight}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Orders</Text>
-        <TouchableOpacity
-          style={styles.searchButton}
-          onPress={() => {/* TODO: Implement search */}}
-        >
-          <Ionicons name="search" size={24} color={COLORS.textPrimary} />
-        </TouchableOpacity>
+        <Text style={styles.title}>Your Orders</Text>
       </View>
-
-      {renderFilterTabs()}
 
       <FlatList
         data={orders}
         renderItem={renderOrder}
-        keyExtractor={(item) => item._id}
+        keyExtractor={(item) => item._id || item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -191,56 +238,63 @@ const OrderListScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: SPACING.screenPadding,
     paddingVertical: SPACING.md,
     backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   title: {
     ...FONTS.h3,
     color: COLORS.textPrimary,
   },
-  searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterContainer: {
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  filterList: {
-    paddingHorizontal: SPACING.screenPadding,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
-  },
-  filterTab: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: SPACING.buttonRadius,
-    backgroundColor: COLORS.card,
-    marginRight: SPACING.sm,
-  },
-  filterTabActive: {
-    backgroundColor: COLORS.primary,
-  },
-  filterTabText: {
-    ...FONTS.bodySmall,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  filterTabTextActive: {
-    color: COLORS.black,
-  },
   listContent: {
     padding: SPACING.screenPadding,
     paddingBottom: SPACING.tabBarHeight + SPACING.xl,
+    flexGrow: 1,
+  },
+  orderCard: {
+    flexDirection: 'row',
+    backgroundColor: '#EDE9DD',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  orderImage: {
+    width: 65,
+    height: 65,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: COLORS.white,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  orderContent: {
+    flex: 1,
+  },
+  orderTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  orderMeta: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  orderStatus: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  footerLoader: {
+    paddingVertical: SPACING.md,
   },
 });
 

@@ -2,21 +2,45 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import ProtectedPage from "@/components/admin/ProtectedPage";
 import { getAuthHeaders } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+const STATUS_COLORS = {
+  pending: "bg-yellow-100 text-yellow-800",
+  confirmed: "bg-blue-100 text-blue-800",
+  packed: "bg-indigo-100 text-indigo-800",
+  shipped: "bg-purple-100 text-purple-800",
+  on_the_way: "bg-cyan-100 text-cyan-800",
+  delivered: "bg-green-100 text-green-800",
+  cancelled: "bg-red-100 text-red-800"
+};
+
+const STATUS_LABELS = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  packed: "Packed",
+  shipped: "Shipped",
+  on_the_way: "Out for Delivery",
+  delivered: "Delivered",
+  cancelled: "Cancelled"
+};
+
 export default function Orders() {
+  const router = useRouter();
   const [filter, setFilter] = useState("all");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    allOrders: 0,
+    totalOrders: 0,
     pendingOrders: 0,
-    processingOrders: 0,
+    confirmedOrders: 0,
+    packedOrders: 0,
     shippedOrders: 0,
-    deliveredOrders: 0
+    deliveredOrders: 0,
+    cancelledOrders: 0
   });
 
   useEffect(() => {
@@ -51,25 +75,25 @@ export default function Orders() {
       
       if (res.ok) {
         const data = await res.json();
-        setStats(data.data?.stats || {
-          allOrders: 0,
-          pendingOrders: 0,
-          processingOrders: 0,
-          shippedOrders: 0,
-          deliveredOrders: 0
-        });
+        setStats(data.data?.stats || {});
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
     }
   };
 
+  const handleViewOrder = (orderId) => {
+    router.push(`/admin/orders/${orderId}`);
+  };
+
   const filterTabs = [
-    { id: "all", label: "All Orders", count: stats.allOrders || 0 },
+    { id: "all", label: "All Orders", count: stats.totalOrders || 0 },
     { id: "pending", label: "Pending", count: stats.pendingOrders || 0 },
-    { id: "processing", label: "Processing", count: stats.processingOrders || 0 },
+    { id: "confirmed", label: "Confirmed", count: stats.confirmedOrders || 0 },
+    { id: "packed", label: "Packed", count: stats.packedOrders || 0 },
     { id: "shipped", label: "Shipped", count: stats.shippedOrders || 0 },
-    { id: "delivered", label: "Delivered", count: stats.deliveredOrders || 0 }
+    { id: "delivered", label: "Delivered", count: stats.deliveredOrders || 0 },
+    { id: "cancelled", label: "Cancelled", count: stats.cancelledOrders || 0 }
   ];
 
   return (
@@ -81,27 +105,36 @@ export default function Orders() {
             <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
             <p className="text-gray-500">Manage orders from mobile app</p>
           </div>
+          <button
+            onClick={() => fetchOrders()}
+            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="bg-white mb-3 rounded-2xl border border-gray-100 p-2 flex gap-2 overflow-x-auto">
+        {/* Stats Cards */}
+        <div className="grid mb-5 grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           {filterTabs.map((tab) => (
-            <button
+            <div
               key={tab.id}
               onClick={() => setFilter(tab.id)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`p-4 rounded-xl cursor-pointer transition-all ${
                 filter === tab.id
-                  ? "bg-amber-100 text-amber-900"
-                  : "text-gray-600 hover:bg-gray-100"
+                  ? "bg-amber-500 text-white shadow-lg scale-105"
+                  : "bg-white border border-gray-100 hover:border-amber-200"
               }`}
             >
-              {tab.label}
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                filter === tab.id ? "bg-amber-500 text-white" : "bg-gray-200 text-gray-600"
-              }`}>
+              <p className={`text-2xl font-bold ${filter === tab.id ? "text-white" : "text-gray-900"}`}>
                 {tab.count}
-              </span>
-            </button>
+              </p>
+              <p className={`text-xs ${filter === tab.id ? "text-amber-100" : "text-gray-500"}`}>
+                {tab.label}
+              </p>
+            </div>
           ))}
         </div>
 
@@ -122,89 +155,91 @@ export default function Orders() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900">No Orders Yet</h3>
-              <p className="text-gray-500 mt-2 max-w-md mx-auto">
-                Orders from the mobile app will appear here. Once users start ordering products, you can manage them from this page.
+              <h3 className="text-2xl font-bold text-gray-900">No Orders Found</h3>
+              <p className="text-gray-500 mt-2">
+                {filter !== "all" 
+                  ? `No ${filter} orders at the moment` 
+                  : "Orders from the mobile app will appear here"}
               </p>
-
-              <div className="mt-8 max-w-md mx-auto bg-amber-50 rounded-xl p-6 text-left">
-                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  How it works
-                </h4>
-                <ul className="mt-3 space-y-2 text-sm text-gray-600">
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0">1</span>
-                    Users browse products on mobile app
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0">2</span>
-                    They place orders through the app
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0">3</span>
-                    Orders appear here for you to manage
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0">4</span>
-                    Update order status & track deliveries
-                  </li>
-                </ul>
-              </div>
             </div>
           ) : (
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Order ID</th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Customer</th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Products</th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Total</th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Status</th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Date</th>
-                  <th className="text-right px-6 py-4 text-sm font-semibold text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {orders.map((order) => (
-                  <tr key={order._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium text-gray-900">
-                      #{order.orderNumber}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {order.user?.name || "Unknown"}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {order.items?.length || 0} items
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-gray-900">
-                      ₹{order.totalAmount?.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        order.status === "delivered" ? "bg-emerald-100 text-emerald-700" :
-                        order.status === "shipped" ? "bg-blue-100 text-blue-700" :
-                        order.status === "processing" ? "bg-amber-100 text-amber-700" :
-                        order.status === "cancelled" ? "bg-red-100 text-red-700" :
-                        "bg-gray-100 text-gray-700"
-                      }`}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {new Date(order.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="text-amber-600 hover:text-amber-700 font-medium text-sm">
-                        View Details
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Order ID</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Customer</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Items</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Total</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Status</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Payment</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Date</th>
+                    <th className="text-right px-6 py-4 text-sm font-semibold text-gray-600">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {orders.map((order) => (
+                    <tr
+                      key={order._id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleViewOrder(order._id)}
+                    >
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-gray-900">#{order.orderNumber}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="font-medium text-gray-900">{order.customerSnapshot?.name || order.user?.name || "Unknown"}</p>
+                          <p className="text-sm text-gray-500">{order.customerSnapshot?.phone || ""}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {order.totalItems || order.items?.length || 0} items
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-gray-900">
+                        ₹{order.totalAmount?.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          STATUS_COLORS[order.status] || "bg-gray-100 text-gray-700"
+                        }`}>
+                          {STATUS_LABELS[order.status] || order.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          order.paymentStatus === "paid" 
+                            ? "bg-green-100 text-green-700" 
+                            : order.paymentStatus === "partial"
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}>
+                          {order.paymentStatus}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric"
+                        })}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewOrder(order._id);
+                          }}
+                          className="px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors font-medium text-sm"
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

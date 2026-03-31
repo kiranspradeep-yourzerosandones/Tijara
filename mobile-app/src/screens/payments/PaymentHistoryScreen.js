@@ -20,15 +20,28 @@ const PAYMENT_METHOD_ICONS = {
   cheque: 'document-text-outline',
   upi: 'phone-portrait-outline',
   credit: 'card-outline',
+  credit_note: 'document-outline',
   other: 'ellipsis-horizontal-outline',
+};
+
+const PAYMENT_METHOD_LABELS = {
+  cash: 'Cash',
+  bank_transfer: 'Bank Transfer',
+  cheque: 'Cheque',
+  upi: 'UPI',
+  credit: 'Credit',
+  credit_note: 'Credit Note',
+  other: 'Other',
 };
 
 const PaymentHistoryScreen = ({ navigation }) => {
   const [payments, setPayments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [totalAmount, setTotalAmount] = useState(0);
 
   useEffect(() => {
     loadPayments(true);
@@ -38,6 +51,9 @@ const PaymentHistoryScreen = ({ navigation }) => {
     const currentPage = refresh ? 1 : page;
     
     if (!refresh && !hasMore) return;
+    if (!refresh && isLoadingMore) return;
+
+    if (!refresh) setIsLoadingMore(true);
 
     try {
       const response = await paymentsAPI.getPayments({
@@ -49,106 +65,147 @@ const PaymentHistoryScreen = ({ navigation }) => {
 
       if (refresh) {
         setPayments(newPayments);
+        setPage(2);
       } else {
         setPayments(prev => [...prev, ...newPayments]);
+        setPage(currentPage + 1);
       }
 
       setHasMore(response.data?.pagination?.pages > currentPage);
-      setPage(currentPage + 1);
+      
+      // Calculate total from all payments
+      if (refresh && newPayments.length > 0) {
+        const total = newPayments.reduce((sum, p) => 
+          p.status === 'completed' ? sum + p.amount : sum, 0
+        );
+        setTotalAmount(total);
+      }
     } catch (error) {
       console.error('Load payments error:', error);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+      setIsLoadingMore(false);
     }
   };
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    setPage(1);
     setHasMore(true);
     loadPayments(true);
   };
 
   const handleEndReached = () => {
-    if (!isLoading && hasMore) {
+    if (!isLoading && !isLoadingMore && hasMore) {
       loadPayments(false);
     }
   };
 
-  const renderPayment = ({ item }) => (
-    <Card style={styles.paymentCard}>
-      <View style={styles.paymentHeader}>
-        <View style={styles.paymentIcon}>
-          <Ionicons 
-            name={PAYMENT_METHOD_ICONS[item.method] || 'card-outline'} 
-            size={22} 
-            color={COLORS.primary} 
-          />
-        </View>
-        <View style={styles.paymentInfo}>
-          <Text style={styles.paymentNumber}>{item.paymentNumber}</Text>
-          <Text style={styles.paymentDate}>
-            {formatDate(item.paymentDate, 'datetime')}
-          </Text>
-        </View>
-        <View style={styles.paymentAmountContainer}>
-          <Text style={styles.paymentAmount}>
-            {formatCurrency(item.amount)}
-          </Text>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: item.status === 'completed' ? COLORS.successLight : COLORS.warningLight }
-          ]}>
-            <Text style={[
-              styles.statusText,
-              { color: item.status === 'completed' ? COLORS.success : COLORS.warning }
-            ]}>
-              {item.status}
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed':
+        return { bg: COLORS.successLight, text: COLORS.success };
+      case 'pending':
+        return { bg: COLORS.warningLight, text: COLORS.warning };
+      case 'cancelled':
+      case 'failed':
+        return { bg: COLORS.errorLight, text: COLORS.error };
+      default:
+        return { bg: COLORS.grayLight, text: COLORS.gray };
+    }
+  };
+
+  const renderPayment = ({ item }) => {
+    const statusColors = getStatusColor(item.status);
+    
+    return (
+      <Card style={styles.paymentCard}>
+        <View style={styles.paymentHeader}>
+          <View style={styles.paymentIcon}>
+            <Ionicons 
+              name={PAYMENT_METHOD_ICONS[item.method] || 'card-outline'} 
+              size={20} 
+              color={COLORS.primary} 
+            />
+          </View>
+          <View style={styles.paymentInfo}>
+            <Text style={styles.paymentNumber} numberOfLines={1}>
+              {item.paymentNumber}
+            </Text>
+            <Text style={styles.paymentDate}>
+              {formatDate(item.paymentDate, 'datetime')}
             </Text>
           </View>
-        </View>
-      </View>
-
-      <View style={styles.paymentDetails}>
-        <View style={styles.paymentDetailRow}>
-          <Text style={styles.detailLabel}>Order</Text>
-          <TouchableOpacity
-            onPress={() => {
-              if (item.order?._id) {
-                navigation.navigate('OrderDetail', { orderId: item.order._id });
-              }
-            }}
-          >
-            <Text style={styles.detailValueLink}>
-              {item.order?.orderNumber || item.orderNumber}
+          <View style={styles.paymentAmountContainer}>
+            <Text style={styles.paymentAmount}>
+              {formatCurrency(item.amount)}
             </Text>
-          </TouchableOpacity>
+            <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+              <Text style={[styles.statusText, { color: statusColors.text }]}>
+                {item.status}
+              </Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.paymentDetailRow}>
-          <Text style={styles.detailLabel}>Method</Text>
-          <Text style={styles.detailValue}>
-            {item.method?.replace('_', ' ').toUpperCase()}
-          </Text>
+
+        <View style={styles.paymentDetails}>
+          <View style={styles.paymentDetailRow}>
+            <Text style={styles.detailLabel}>Order</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (item.order?._id) {
+                  navigation.navigate('OrderDetail', { orderId: item.order._id });
+                }
+              }}
+            >
+              <Text style={styles.detailValueLink}>
+                {item.order?.orderNumber || item.orderNumber}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.paymentDetailRow}>
+            <Text style={styles.detailLabel}>Method</Text>
+            <Text style={styles.detailValue}>
+              {PAYMENT_METHOD_LABELS[item.method] || item.method}
+            </Text>
+          </View>
+          {item.notes && (
+            <Text style={styles.paymentNotes} numberOfLines={2}>
+              {item.notes}
+            </Text>
+          )}
         </View>
-        {item.notes && (
-          <Text style={styles.paymentNotes}>{item.notes}</Text>
-        )}
+      </Card>
+    );
+  };
+
+  const renderHeader = () => {
+    if (payments.length === 0) return null;
+    
+    return (
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryLabel}>Total Payments</Text>
+        <Text style={styles.summaryAmount}>{formatCurrency(totalAmount)}</Text>
+        <Text style={styles.summaryCount}>{payments.length} transactions</Text>
       </View>
-    </Card>
-  );
+    );
+  };
 
   const renderEmpty = () => (
     <EmptyState
       icon="receipt-outline"
       title="No Payments Yet"
-      message="Your payment history will appear here"
+      message="Your payment history will appear here once payments are recorded"
     />
   );
 
   const renderFooter = () => {
-    if (!isLoading || payments.length === 0) return null;
-    return <Loading size="small" />;
+    if (!isLoadingMore) return <View style={styles.footerSpacing} />;
+    return (
+      <View style={styles.loadingMore}>
+        <Loading size="small" />
+      </View>
+    );
   };
 
   if (isLoading && payments.length === 0) {
@@ -177,6 +234,7 @@ const PaymentHistoryScreen = ({ navigation }) => {
         data={payments}
         renderItem={renderPayment}
         keyExtractor={(item) => item._id}
+        ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -184,6 +242,7 @@ const PaymentHistoryScreen = ({ navigation }) => {
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
           />
         }
         onEndReached={handleEndReached}
@@ -225,30 +284,50 @@ const styles = StyleSheet.create({
     padding: SPACING.screenPadding,
     paddingBottom: SPACING.xxxl,
   },
+  summaryCard: {
+    backgroundColor: COLORS.primary,
+    borderRadius: SPACING.cardRadius,
+    padding: SPACING.cardPadding,
+    marginBottom: SPACING.lg,
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    ...FONTS.bodySmall,
+    color: COLORS.black + 'CC',
+  },
+  summaryAmount: {
+    ...FONTS.h1,
+    color: COLORS.black,
+    marginVertical: SPACING.xs,
+  },
+  summaryCount: {
+    ...FONTS.caption,
+    color: COLORS.black + 'AA',
+  },
   paymentCard: {
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
   },
   paymentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.md,
   },
   paymentIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: COLORS.primaryLight + '30',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: SPACING.md,
+    marginRight: SPACING.sm,
   },
   paymentInfo: {
     flex: 1,
   },
   paymentNumber: {
-    ...FONTS.body,
+    ...FONTS.bodySmall,
     color: COLORS.textPrimary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   paymentDate: {
     ...FONTS.caption,
@@ -259,24 +338,27 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   paymentAmount: {
-    ...FONTS.price,
+    ...FONTS.body,
     color: COLORS.success,
+    fontWeight: '700',
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: SPACING.xs,
-    marginTop: SPACING.xs,
+    marginTop: 4,
   },
   statusText: {
     ...FONTS.caption,
     fontWeight: '600',
     textTransform: 'capitalize',
+    fontSize: 10,
   },
   paymentDetails: {
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
-    paddingTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    marginTop: SPACING.sm,
   },
   paymentDetailRow: {
     flexDirection: 'row',
@@ -285,23 +367,31 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   detailLabel: {
-    ...FONTS.bodySmall,
+    ...FONTS.caption,
     color: COLORS.gray,
   },
   detailValue: {
-    ...FONTS.bodySmall,
+    ...FONTS.caption,
     color: COLORS.textPrimary,
+    fontWeight: '500',
   },
   detailValueLink: {
-    ...FONTS.bodySmall,
+    ...FONTS.caption,
     color: COLORS.primary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   paymentNotes: {
     ...FONTS.caption,
     color: COLORS.textSecondary,
     fontStyle: 'italic',
-    marginTop: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  loadingMore: {
+    paddingVertical: SPACING.lg,
+    alignItems: 'center',
+  },
+  footerSpacing: {
+    height: SPACING.xl,
   },
 });
 

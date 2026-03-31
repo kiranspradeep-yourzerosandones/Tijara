@@ -1,3 +1,4 @@
+// backend/models/Order.js
 const mongoose = require("mongoose");
 
 // Order Item Schema (embedded)
@@ -7,143 +8,98 @@ const orderItemSchema = new mongoose.Schema({
     ref: "Product",
     required: true
   },
-
-  // Product details snapshot (preserved even if product changes/deleted)
   productSnapshot: {
-    title: {
-      type: String,
-      required: true
-    },
+    title: { type: String, required: true },
     slug: String,
     image: String,
     category: String,
     brand: String,
-    unit: {
-      type: String,
-      default: "piece"
-    }
+    unit: { type: String, default: "piece" }
   },
-
-  // Quantity ordered
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1
-  },
-
-  // Price per unit at time of order
-  unitPrice: {
-    type: Number,
-    required: true
-  },
-
-  // Item subtotal (quantity * unitPrice)
-  subtotal: {
-    type: Number,
-    required: true
-  }
-
+  quantity: { type: Number, required: true, min: 1 },
+  unitPrice: { type: Number, required: true },
+  subtotal: { type: Number, required: true }
 }, { _id: true });
 
 // Delivery Address Schema (embedded snapshot)
 const deliveryAddressSchema = new mongoose.Schema({
-  // Reference to original location (may be deleted later)
-  locationId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Location"
-  },
-
-  // Snapshot of address at time of order
+  locationId: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
   label: String,
-  shopName: {
-    type: String,
-    required: true
-  },
+  shopName: { type: String, required: true },
   contactPerson: String,
-  contactPhone: {
-    type: String,
-    required: true
-  },
-  addressLine1: {
-    type: String,
-    required: true
-  },
+  contactPhone: { type: String, required: true },
+  addressLine1: { type: String, required: true },
   addressLine2: String,
-  city: {
-    type: String,
-    required: true
-  },
-  state: {
-    type: String,
-    required: true
-  },
-  pincode: {
-    type: String,
-    required: true
-  },
-  country: {
-    type: String,
-    default: "India"
-  },
-  coordinates: {
-    latitude: Number,
-    longitude: Number
-  },
+  city: { type: String, required: true },
+  state: { type: String, required: true },
+  pincode: { type: String, required: true },
+  country: { type: String, default: "India" },
+  coordinates: { latitude: Number, longitude: Number },
   deliveryInstructions: String
-
 }, { _id: false });
 
-// Order Status History Schema (embedded)
+// Status History Schema (embedded)
 const statusHistorySchema = new mongoose.Schema({
-  status: {
-    type: String,
-    required: true
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
-  },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User"
-  },
+  status: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   note: String
-
 }, { _id: true });
+
+// ✅ NEW: Expected Timeline Schema
+const expectedTimelineSchema = new mongoose.Schema({
+  confirmed: {
+    expectedDate: Date,
+    actualDate: Date,
+    isCompleted: { type: Boolean, default: false },
+    note: String
+  },
+  packed: {
+    expectedDate: Date,
+    actualDate: Date,
+    isCompleted: { type: Boolean, default: false },
+    note: String
+  },
+  shipped: {
+    expectedDate: Date,
+    actualDate: Date,
+    isCompleted: { type: Boolean, default: false },
+    note: String
+  },
+  out_for_delivery: {
+    expectedDate: Date,
+    actualDate: Date,
+    isCompleted: { type: Boolean, default: false },
+    note: String
+  },
+  delivered: {
+    expectedDate: Date,
+    actualDate: Date,
+    isCompleted: { type: Boolean, default: false },
+    note: String
+  }
+}, { _id: false });
 
 // Main Order Schema
 const orderSchema = new mongoose.Schema({
-  // Unique order number
   orderNumber: {
     type: String,
     required: true,
     unique: true,
     index: true
   },
-
-  // Reference to customer
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
     index: true
   },
-
-  // Customer snapshot (in case user details change)
   customerSnapshot: {
-    name: {
-      type: String,
-      required: true
-    },
-    phone: {
-      type: String,
-      required: true
-    },
+    name: { type: String, required: true },
+    phone: { type: String, required: true },
     email: String,
     businessName: String
   },
-
-  // Order items
   items: {
     type: [orderItemSchema],
     required: true,
@@ -154,61 +110,46 @@ const orderSchema = new mongoose.Schema({
       message: "Order must have at least one item"
     }
   },
-
-  // Delivery address (snapshot)
   deliveryAddress: {
     type: deliveryAddressSchema,
     required: true
   },
 
   // Order amounts
-  subtotal: {
-    type: Number,
-    required: true
-  },
-
-  // Discount amount (if any)
-  discount: {
-    type: Number,
-    default: 0
-  },
-
-  // Tax amount (if applicable)
-  tax: {
-    type: Number,
-    default: 0
-  },
-
-  // Delivery charges (if any)
-  deliveryCharges: {
-    type: Number,
-    default: 0
-  },
-
-  // Grand total
-  totalAmount: {
-    type: Number,
-    required: true
-  },
+  subtotal: { type: Number, required: true },
+  discount: { type: Number, default: 0 },
+  tax: { type: Number, default: 0 },
+  deliveryCharges: { type: Number, default: 0 },
+  totalAmount: { type: Number, required: true },
 
   // Order status
   status: {
     type: String,
-    enum: [
-      "pending",      // Order placed, waiting for confirmation
-      "confirmed",    // Order confirmed by admin
-      "packed",       // Order packed and ready
-      "shipped",      // Order dispatched
-      "on_the_way",   // Out for delivery
-      "delivered",    // Order delivered
-      "cancelled"     // Order cancelled
-    ],
+    enum: ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"],
     default: "pending",
     index: true
   },
 
   // Status history
   statusHistory: [statusHistorySchema],
+
+  // ✅ NEW: Expected Timeline with dates for each step
+  expectedTimeline: {
+    type: expectedTimelineSchema,
+    default: {}
+  },
+
+  // ✅ NEW: Overall expected delivery date
+  expectedDeliveryDate: Date,
+
+  // ✅ NEW: Actual delivery date
+  actualDeliveryDate: Date,
+
+  // ✅ NEW: Is order delayed?
+  isDelayed: { type: Boolean, default: false },
+
+  // ✅ NEW: Delay reason (if delayed)
+  delayReason: String,
 
   // Payment status
   paymentStatus: {
@@ -218,51 +159,27 @@ const orderSchema = new mongoose.Schema({
     index: true
   },
 
-  // Payment details
   payment: {
-    // Amount paid so far
-    amountPaid: {
-      type: Number,
-      default: 0
-    },
-    // Payment method (for record keeping)
+    amountPaid: { type: Number, default: 0 },
     method: {
       type: String,
       enum: ["cash", "bank_transfer", "cheque", "upi", "credit", "other"],
       default: "credit"
     },
-    // Payment notes
     notes: String,
-    // Payment date
     paidAt: Date,
-    // Who marked as paid
-    markedPaidBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
-    }
+    markedPaidBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
   },
 
-  // Order notes
-  customerNotes: {
-    type: String,
-    maxlength: 500
-  },
+  customerNotes: { type: String, maxlength: 500 },
+  internalNotes: { type: String, maxlength: 1000 },
 
-  // Internal notes (admin only)
-  internalNotes: {
-    type: String,
-    maxlength: 1000
-  },
-
-  // Delivery OTP (for delivery confirmation)
+  // Delivery OTP
   deliveryOtp: {
     code: String,
     generatedAt: Date,
     expiresAt: Date,
-    verified: {
-      type: Boolean,
-      default: false
-    },
+    verified: { type: Boolean, default: false },
     verifiedAt: Date
   },
 
@@ -270,24 +187,16 @@ const orderSchema = new mongoose.Schema({
   confirmedAt: Date,
   packedAt: Date,
   shippedAt: Date,
+  outForDeliveryAt: Date,
   deliveredAt: Date,
   cancelledAt: Date,
 
   // Cancellation details
   cancellation: {
     reason: String,
-    cancelledBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
-    },
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     isCustomerCancelled: Boolean
-  },
-
-  // Expected delivery date (set by admin)
-  expectedDeliveryDate: Date,
-
-  // Actual delivery date
-  actualDeliveryDate: Date
+  }
 
 }, {
   timestamps: true,
@@ -300,8 +209,7 @@ orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ createdAt: -1 });
-orderSchema.index({ "deliveryAddress.city": 1 });
-orderSchema.index({ "deliveryAddress.pincode": 1 });
+orderSchema.index({ expectedDeliveryDate: 1 });
 
 // Virtual for total items count
 orderSchema.virtual('totalItems').get(function() {
@@ -317,9 +225,7 @@ orderSchema.virtual('uniqueProducts').get(function() {
 
 // Virtual for outstanding amount
 orderSchema.virtual('outstandingAmount').get(function() {
-  const total = this.totalAmount || 0;
-  const paid = this.payment?.amountPaid || 0;
-  return total - paid;
+  return (this.totalAmount || 0) - (this.payment?.amountPaid || 0);
 });
 
 // Virtual for is paid
@@ -337,12 +243,115 @@ orderSchema.virtual('isCompleted').get(function() {
   return ["delivered", "cancelled"].includes(this.status);
 });
 
-// Pre-save middleware to update status history
+// ✅ NEW: Virtual for tracking timeline (for mobile app)
+orderSchema.virtual('trackingTimeline').get(function() {
+  const steps = [
+    {
+      key: "pending",
+      title: "Order Placed",
+      description: "Your order has been placed",
+      icon: "checkmark-circle"
+    },
+    {
+      key: "confirmed",
+      title: "Order Confirmed",
+      description: "Seller has processed your order",
+      icon: "checkmark-done"
+    },
+    {
+      key: "packed",
+      title: "Packed",
+      description: "Your item has been packed",
+      icon: "cube"
+    },
+    {
+      key: "shipped",
+      title: "Shipped",
+      description: "Your item has been shipped",
+      icon: "airplane"
+    },
+    {
+      key: "out_for_delivery",
+      title: "Out for Delivery",
+      description: "Your item is out for delivery",
+      icon: "car"
+    },
+    {
+      key: "delivered",
+      title: "Delivered",
+      description: "Your item has been delivered",
+      icon: "checkmark-circle"
+    }
+  ];
+
+  const statusOrder = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered"];
+  const currentStatusIndex = statusOrder.indexOf(this.status);
+
+  // Handle cancelled orders
+  if (this.status === "cancelled") {
+    return [{
+      key: "cancelled",
+      title: "Order Cancelled",
+      description: this.cancellation?.reason || "Your order has been cancelled",
+      icon: "close-circle",
+      status: "cancelled",
+      isCompleted: true,
+      isCurrent: true,
+      completedAt: this.cancelledAt || this.updatedAt,
+      isDelayed: false
+    }];
+  }
+
+  return steps.map((step, index) => {
+    const stepKey = step.key;
+    const expectedInfo = this.expectedTimeline?.[stepKey] || {};
+    const isCompleted = index <= currentStatusIndex;
+    const isCurrent = index === currentStatusIndex;
+    const isPending = index > currentStatusIndex;
+
+    // Get completed date from status history
+    let completedAt = null;
+    if (isCompleted) {
+      const historyEntry = this.statusHistory?.find(h => h.status === stepKey);
+      completedAt = historyEntry?.timestamp;
+
+      // Special case for "pending" - use order creation date
+      if (stepKey === "pending") {
+        completedAt = this.createdAt;
+      }
+    }
+
+    // Check if this step is delayed
+    const now = new Date();
+    let isDelayed = false;
+    if (!isCompleted && expectedInfo.expectedDate) {
+      isDelayed = now > new Date(expectedInfo.expectedDate);
+    }
+
+    return {
+      key: stepKey,
+      title: step.title,
+      description: isDelayed 
+        ? `Delayed - ${step.description.toLowerCase()}` 
+        : step.description,
+      icon: step.icon,
+      status: isCompleted ? "completed" : isPending ? "pending" : "current",
+      isCompleted,
+      isCurrent,
+      isPending,
+      completedAt,
+      expectedDate: expectedInfo.expectedDate,
+      actualDate: expectedInfo.actualDate || completedAt,
+      note: expectedInfo.note,
+      isDelayed
+    };
+  });
+});
+
+// Pre-save middleware
 orderSchema.pre("save", function() {
-  // If status changed, add to history
   if (this.isModified("status")) {
-    // Don't add duplicate status to history (it's already added in controller)
-    const lastHistoryStatus = this.statusHistory.length > 0 
+    const lastHistoryStatus = this.statusHistory?.length > 0 
       ? this.statusHistory[this.statusHistory.length - 1].status 
       : null;
     
@@ -353,27 +362,70 @@ orderSchema.pre("save", function() {
       });
     }
 
-    // Update timestamp fields
+    // Update timestamp fields and expectedTimeline
+    const now = new Date();
     switch (this.status) {
       case "confirmed":
-        this.confirmedAt = new Date();
+        this.confirmedAt = now;
+        if (this.expectedTimeline) {
+          this.expectedTimeline.confirmed = {
+            ...this.expectedTimeline.confirmed,
+            actualDate: now,
+            isCompleted: true
+          };
+        }
         break;
       case "packed":
-        this.packedAt = new Date();
+        this.packedAt = now;
+        if (this.expectedTimeline) {
+          this.expectedTimeline.packed = {
+            ...this.expectedTimeline.packed,
+            actualDate: now,
+            isCompleted: true
+          };
+        }
         break;
       case "shipped":
-        this.shippedAt = new Date();
+        this.shippedAt = now;
+        if (this.expectedTimeline) {
+          this.expectedTimeline.shipped = {
+            ...this.expectedTimeline.shipped,
+            actualDate: now,
+            isCompleted: true
+          };
+        }
+        break;
+      case "out_for_delivery":
+        this.outForDeliveryAt = now;
+        if (this.expectedTimeline) {
+          this.expectedTimeline.out_for_delivery = {
+            ...this.expectedTimeline.out_for_delivery,
+            actualDate: now,
+            isCompleted: true
+          };
+        }
         break;
       case "delivered":
-        this.deliveredAt = new Date();
-        this.actualDeliveryDate = new Date();
+        this.deliveredAt = now;
+        this.actualDeliveryDate = now;
+        if (this.expectedTimeline) {
+          this.expectedTimeline.delivered = {
+            ...this.expectedTimeline.delivered,
+            actualDate: now,
+            isCompleted: true
+          };
+        }
         break;
       case "cancelled":
-        this.cancelledAt = new Date();
+        this.cancelledAt = now;
         break;
     }
+
+    // Check if order is delayed
+    if (this.expectedDeliveryDate && now > this.expectedDeliveryDate && this.status !== "delivered") {
+      this.isDelayed = true;
+    }
   }
-  // No next() needed - Mongoose handles this automatically for non-async functions too in newer versions
 });
 
 // Static method to get status display text
@@ -383,7 +435,7 @@ orderSchema.statics.getStatusText = function(status) {
     confirmed: "Order Confirmed",
     packed: "Packed & Ready",
     shipped: "Shipped",
-    on_the_way: "Out for Delivery",
+    out_for_delivery: "Out for Delivery",
     delivered: "Delivered",
     cancelled: "Cancelled"
   };
@@ -396,8 +448,8 @@ orderSchema.statics.getNextStatuses = function(currentStatus) {
     pending: ["confirmed", "cancelled"],
     confirmed: ["packed", "cancelled"],
     packed: ["shipped", "cancelled"],
-    shipped: ["on_the_way", "delivered"],
-    on_the_way: ["delivered"],
+    shipped: ["out_for_delivery", "delivered"],
+    out_for_delivery: ["delivered"],
     delivered: [],
     cancelled: []
   };
@@ -410,6 +462,53 @@ orderSchema.methods.canTransitionTo = function(newStatus) {
   return validTransitions.includes(newStatus);
 };
 
+// ✅ NEW: Method to set expected timeline dates
+orderSchema.methods.setExpectedDates = function(expectedDeliveryDate, processingDays = 1, shippingDays = 2) {
+  const orderDate = this.createdAt || new Date();
+  
+  // Calculate expected dates for each step
+  const confirmDate = new Date(orderDate);
+  confirmDate.setHours(confirmDate.getHours() + 12); // 12 hours to confirm
+
+  const packDate = new Date(orderDate);
+  packDate.setDate(packDate.getDate() + processingDays);
+
+  const shipDate = new Date(packDate);
+  shipDate.setDate(shipDate.getDate() + 1);
+
+  const outForDeliveryDate = new Date(expectedDeliveryDate);
+  outForDeliveryDate.setHours(8, 0, 0, 0); // 8 AM on delivery day
+
+  this.expectedDeliveryDate = expectedDeliveryDate;
+  this.expectedTimeline = {
+    confirmed: {
+      expectedDate: confirmDate,
+      isCompleted: ["confirmed", "packed", "shipped", "out_for_delivery", "delivered"].includes(this.status),
+      actualDate: this.confirmedAt
+    },
+    packed: {
+      expectedDate: packDate,
+      isCompleted: ["packed", "shipped", "out_for_delivery", "delivered"].includes(this.status),
+      actualDate: this.packedAt
+    },
+    shipped: {
+      expectedDate: shipDate,
+      isCompleted: ["shipped", "out_for_delivery", "delivered"].includes(this.status),
+      actualDate: this.shippedAt
+    },
+    out_for_delivery: {
+      expectedDate: outForDeliveryDate,
+      isCompleted: ["out_for_delivery", "delivered"].includes(this.status),
+      actualDate: this.outForDeliveryAt
+    },
+    delivered: {
+      expectedDate: expectedDeliveryDate,
+      isCompleted: this.status === "delivered",
+      actualDate: this.deliveredAt
+    }
+  };
+};
+
 // Method to get order summary
 orderSchema.methods.getSummary = function() {
   return {
@@ -420,6 +519,8 @@ orderSchema.methods.getSummary = function() {
     totalAmount: this.totalAmount,
     paymentStatus: this.paymentStatus,
     outstandingAmount: this.outstandingAmount,
+    expectedDeliveryDate: this.expectedDeliveryDate,
+    isDelayed: this.isDelayed,
     createdAt: this.createdAt
   };
 };

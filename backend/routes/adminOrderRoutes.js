@@ -10,7 +10,9 @@ const {
   adminAddNote,
   adminGetOrderStats,
   adminGenerateDeliveryOtp,
-  adminVerifyDeliveryOtp
+  adminVerifyDeliveryOtp,
+  adminSetExpectedDates,  
+  adminMarkDelayed 
 } = require("../controllers/orderController");
 
 const { protect } = require("../middleware/auth");
@@ -31,6 +33,11 @@ router.get("/:id", checkPermission("manageOrders"), adminGetOrder);
 router.put("/:id/status", checkPermission("manageOrders"), adminUpdateOrderStatus);
 router.put("/:id/payment", checkPermission("managePayments"), adminUpdatePaymentStatus);
 router.put("/:id/notes", checkPermission("manageOrders"), adminAddNote);
+
+// ✅ NEW: Expected dates management
+router.put("/:id/expected-dates", checkPermission("manageOrders"), adminSetExpectedDates);
+router.put("/:id/delay", checkPermission("manageOrders"), adminMarkDelayed);
+
 
 // Delivery OTP - manageOrders permission
 router.post("/:id/delivery-otp", checkPermission("manageOrders"), adminGenerateDeliveryOtp);
