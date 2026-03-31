@@ -1,5 +1,5 @@
 // src/screens/locations/LocationListScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Loading, EmptyState, Card, Screen } from '../../components/common';
@@ -19,9 +20,12 @@ const LocationListScreen = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadLocations();
-  }, []);
+  // Use useFocusEffect to reload locations when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadLocations();
+    }, [])
+  );
 
   const loadLocations = async () => {
     try {
@@ -43,7 +47,7 @@ const LocationListScreen = ({ navigation }) => {
   const handleSetDefault = async (locationId) => {
     try {
       await locationsAPI.setDefaultLocation(locationId);
-      loadLocations();
+      loadLocations(); // Refresh list after setting default
     } catch (error) {
       Alert.alert('Error', error.message);
     }
@@ -61,7 +65,7 @@ const LocationListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await locationsAPI.deleteLocation(location._id);
-              loadLocations();
+              loadLocations(); // Refresh list after deletion
             } catch (error) {
               Alert.alert('Error', error.message);
             }

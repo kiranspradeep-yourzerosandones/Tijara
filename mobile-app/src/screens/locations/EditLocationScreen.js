@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Alert,
   Switch,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
@@ -129,6 +131,7 @@ const EditLocationScreen = ({ navigation, route }) => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Label Selection */}
         <View style={styles.section}>
@@ -238,16 +241,25 @@ const EditLocationScreen = ({ navigation, route }) => {
           />
         </View>
 
-        {/* Delivery Instructions */}
+        {/* Delivery Instructions - Custom Multiline Input */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Instructions</Text>
-          <Input
-            placeholder="Any special instructions for delivery..."
-            value={formData.deliveryInstructions}
-            onChangeText={(v) => updateField('deliveryInstructions', v)}
-            multiline
-            numberOfLines={3}
-          />
+          <View style={styles.textAreaContainer}>
+            <TextInput
+              style={styles.textArea}
+              placeholder="Any special instructions for delivery..."
+              placeholderTextColor={COLORS.placeholder || COLORS.gray}
+              value={formData.deliveryInstructions}
+              onChangeText={(v) => updateField('deliveryInstructions', v)}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={500}
+            />
+          </View>
+          <Text style={styles.charCount}>
+            {formData.deliveryInstructions.length}/500
+          </Text>
         </View>
 
         {/* Default Toggle */}
@@ -357,6 +369,30 @@ const styles = StyleSheet.create({
   },
   halfInput: {
     flex: 1,
+  },
+  // Multiline Text Area Styles
+  textAreaContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: SPACING.inputRadius || 8,
+    backgroundColor: COLORS.card,
+    overflow: 'hidden',
+  },
+  textArea: {
+    ...FONTS.body,
+    color: COLORS.textPrimary,
+    paddingHorizontal: SPACING.md,
+    paddingTop: Platform.OS === 'ios' ? SPACING.md : SPACING.sm,
+    paddingBottom: SPACING.sm,
+    minHeight: 100,
+    maxHeight: 150,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    ...FONTS.caption,
+    color: COLORS.gray,
+    textAlign: 'right',
+    marginTop: SPACING.xs,
   },
   defaultToggle: {
     flexDirection: 'row',

@@ -72,7 +72,7 @@ function AdminLayoutContent({ children }) {
       <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       <div className={`transition-all duration-300 ${isCollapsed ? "sm:ml-[72px]" : "sm:ml-64"}`}>
         <Navbar isCollapsed={isCollapsed} />
-        <main className="p-4 sm:p-6 pt-20 sm:pt-24">
+        <main className="p-4 sm:p-6 pt-20 sm:pt-5">
           {children}
         </main>
       </div>

@@ -1,5 +1,5 @@
 // src/screens/categories/CategoriesScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,14 @@ import {
   TextInput,
   Image,
   Dimensions,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING } from '../../theme';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Loading, Screen } from '../../components/common';
+import SearchSuggestions from '../../components/search/SearchSuggestions';
 import { productsAPI } from '../../api';
+import { useSearch } from '../../hooks';
 import { getImageUrl, formatCurrency, calculateDiscount } from '../../utils/helpers';
 import { useCartStore } from '../../store';
 
@@ -46,10 +49,37 @@ const CategoriesScreen = ({ navigation }) => {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState(null);
 
-  const { addToCart, getItemQuantity } = useCartStore();
+  const { addToCart, getItemQuantity, totalItems } = useCartStore();
+
+  // 🔍 Search hook with backend suggestions - WITH ALL REQUIRED PROPERTIES
+  const {
+    query: searchQuery,
+    suggestions,
+    isSearching,
+    isLoadingSuggestions,
+    showSuggestions,
+    recentSearches,
+    trendingSearches,          // ✅ Added
+    error: searchError,
+    setQuery: setSearchQuery,
+    fillSearch,                // ✅ Added
+    clearSearch,
+    hideSuggestions,
+    openSuggestions,
+    selectSuggestion,
+    addToRecentSearches,       // ✅ Added
+    removeRecentSearch,        // ✅ Added
+    clearRecentSearches,
+    fetchSuggestions,
+  } = useSearch({
+    debounceMs: 300,
+    minQueryLength: 2,
+    maxSuggestions: 8,
+    enableBackendSearch: true,
+    localProducts: products,
+  });
 
   useEffect(() => {
     loadCategories();
@@ -58,20 +88,26 @@ const CategoriesScreen = ({ navigation }) => {
   useEffect(() => {
     if (selectedCategory) {
       loadProducts(selectedCategory.name);
-      setSearchQuery('');
+      clearSearch();
       setSortOrder(null);
     }
   }, [selectedCategory]);
 
-  // Filter & Sort
+  // Filter & Sort products based on local search query
   useEffect(() => {
     let result = [...products];
 
-    if (searchQuery.trim()) {
+    // Local filtering when not using suggestions dropdown
+    if (searchQuery.trim() && !showSuggestions) {
       const query = searchQuery.toLowerCase();
-      result = result.filter((p) => p.title?.toLowerCase().includes(query));
+      result = result.filter((p) => 
+        p.title?.toLowerCase().includes(query) ||
+        p.description?.toLowerCase().includes(query) ||
+        p.sku?.toLowerCase().includes(query)
+      );
     }
 
+    // Sort
     if (sortOrder === 'low') {
       result.sort((a, b) => a.price - b.price);
     } else if (sortOrder === 'high') {
@@ -79,7 +115,7 @@ const CategoriesScreen = ({ navigation }) => {
     }
 
     setFilteredProducts(result);
-  }, [products, searchQuery, sortOrder]);
+  }, [products, searchQuery, sortOrder, showSuggestions]);
 
   const loadCategories = async () => {
     try {
@@ -111,23 +147,88 @@ const CategoriesScreen = ({ navigation }) => {
     }
   };
 
-  const handleProductPress = (product) => {
+  const handleProductPress = useCallback((product) => {
+    hideSuggestions();
+    Keyboard.dismiss();
     navigation.navigate('ProductDetail', { product });
-  };
+  }, [hideSuggestions, navigation]);
 
-  const handleAddToCart = async (product) => {
+  const handleAddToCart = useCallback(async (product) => {
     try {
       await addToCart(product._id, 1);
     } catch (error) {
       console.error('Add to cart error:', error);
     }
-  };
+  }, [addToCart]);
 
-  const handleSortPress = () => {
+  const handleSortPress = useCallback(() => {
     if (sortOrder === null) setSortOrder('low');
     else if (sortOrder === 'low') setSortOrder('high');
     else setSortOrder(null);
-  };
+  }, [sortOrder]);
+
+  // Handle search submit
+  const handleSearchSubmit = useCallback(() => {
+    if (searchQuery.trim()) {
+      addToRecentSearches(searchQuery.trim());
+    }
+    hideSuggestions();
+    Keyboard.dismiss();
+  }, [searchQuery, addToRecentSearches, hideSuggestions]);
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = useCallback((suggestion) => {
+    if (typeof suggestion === 'string') {
+      setSearchQuery(suggestion);
+      addToRecentSearches(suggestion);
+      hideSuggestions();
+    } else {
+      selectSuggestion(suggestion);
+    }
+    Keyboard.dismiss();
+  }, [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion]);
+
+  // Handle product selection from suggestions
+  const handleSelectProductSuggestion = useCallback((product) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    navigation.navigate('ProductDetail', { product });
+  }, [hideSuggestions, navigation]);
+
+  // Handle category selection from suggestions
+  const handleSelectCategorySuggestion = useCallback((categoryName) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    
+    // Find and select the category
+    const category = categories.find(
+      c => c.name.toLowerCase() === categoryName.toLowerCase()
+    );
+    if (category) {
+      setSelectedCategory(category);
+    } else {
+      // Navigate to product list if category not in current list
+      navigation.navigate('ProductList', {
+        category: categoryName,
+        title: categoryName,
+      });
+    }
+  }, [hideSuggestions, categories, navigation]);
+
+  // Handle fill search (arrow button in suggestions)
+  const handleFillSearch = useCallback((text) => {
+    fillSearch(text);
+  }, [fillSearch]);
+
+  // Handle remove recent search item
+  const handleRemoveRecentSearch = useCallback((searchTerm) => {
+    removeRecentSearch(searchTerm);
+  }, [removeRecentSearch]);
+
+  // Navigate to cart
+  const handleGoToCart = useCallback(() => {
+    navigation.navigate('Cart');
+  }, [navigation]);
 
   // ============================================================
   // SIDEBAR CATEGORY - Compact Circular Image
@@ -189,45 +290,71 @@ const CategoriesScreen = ({ navigation }) => {
   };
 
   // ============================================================
-  // SEARCH + SORT BAR
+  // SEARCH + SORT BAR WITH SUGGESTIONS
   // ============================================================
   const renderTopBar = () => (
-    <View style={styles.topBar}>
-      <View style={styles.topSearchBox}>
-        <Ionicons name="search" size={16} color={COLORS.gray} />
-        <TextInput
-          style={styles.topSearchInput}
-          placeholder="Search in category"
-          placeholderTextColor="#BBB"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={16} color={COLORS.gray} />
-          </TouchableOpacity>
-        )}
-      </View>
+    <View style={styles.topBarWrapper}>
+      <View style={styles.topBar}>
+        {/* Search Box with Suggestions */}
+        <View style={styles.searchBoxWrapper}>
+          <View style={styles.topSearchBox}>
+            <Ionicons name="search" size={16} color={COLORS.gray} />
+            <TextInput
+              style={styles.topSearchInput}
+              placeholder="Search in category"
+              placeholderTextColor="#BBB"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={openSuggestions}
+              onSubmitEditing={handleSearchSubmit}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={clearSearch}>
+                <Ionicons name="close-circle" size={16} color={COLORS.gray} />
+              </TouchableOpacity>
+            )}
+          </View>
 
-      <TouchableOpacity
-        style={[styles.sortButton, sortOrder && styles.sortButtonActive]}
-        onPress={handleSortPress}
-        activeOpacity={0.7}
-      >
-        <Ionicons
-          name="swap-vertical"
-          size={16}
-          color={sortOrder ? COLORS.primary : COLORS.textSecondary}
-        />
-        <Text style={[styles.sortText, sortOrder && styles.sortTextActive]}>
-          {sortOrder === 'low'
-            ? 'Low'
-            : sortOrder === 'high'
-            ? 'High'
-            : 'Sort'}
-        </Text>
-      </TouchableOpacity>
+          {/* Search Suggestions Dropdown */}
+          <SearchSuggestions
+            suggestions={suggestions}
+            query={searchQuery}
+            isLoading={isLoadingSuggestions}
+            recentSearches={recentSearches}
+            trendingSearches={trendingSearches}
+            visible={showSuggestions}
+            onSelectSuggestion={handleSelectSuggestion}
+            onSelectProduct={handleSelectProductSuggestion}
+            onSelectCategory={handleSelectCategorySuggestion}
+            onClearRecent={clearRecentSearches}
+            onRemoveRecentItem={handleRemoveRecentSearch}
+            onFillSearch={handleFillSearch}
+          />
+        </View>
+
+        {/* Sort Button */}
+        <TouchableOpacity
+          style={[styles.sortButton, sortOrder && styles.sortButtonActive]}
+          onPress={handleSortPress}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="swap-vertical"
+            size={16}
+            color={sortOrder ? COLORS.primary : COLORS.textSecondary}
+          />
+          <Text style={[styles.sortText, sortOrder && styles.sortTextActive]}>
+            {sortOrder === 'low'
+              ? 'Low'
+              : sortOrder === 'high'
+              ? 'High'
+              : 'Sort'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -317,6 +444,28 @@ const CategoriesScreen = ({ navigation }) => {
   };
 
   // ============================================================
+  // FLOATING CART BUTTON
+  // ============================================================
+  const renderFloatingCart = () => {
+    if (totalItems === 0) return null;
+
+    return (
+      <TouchableOpacity
+        style={styles.floatingCartButton}
+        onPress={handleGoToCart}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="cart" size={24} color={COLORS.black} />
+        <View style={styles.floatingCartBadge}>
+          <Text style={styles.floatingCartBadgeText}>
+            {totalItems > 99 ? '99+' : totalItems}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // ============================================================
   // LOADING STATE
   // ============================================================
   if (isLoading) {
@@ -371,6 +520,7 @@ const CategoriesScreen = ({ navigation }) => {
             <Text style={styles.countText}>
               {filteredProducts.length} product
               {filteredProducts.length !== 1 ? 's' : ''}
+              {searchQuery && !showSuggestions ? ` for "${searchQuery}"` : ''}
             </Text>
             {selectedCategory && (
               <Text style={styles.categoryBreadcrumb}>
@@ -391,6 +541,8 @@ const CategoriesScreen = ({ navigation }) => {
               columnWrapperStyle={styles.productRow}
               contentContainerStyle={styles.productsList}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onScrollBeginDrag={hideSuggestions}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <Ionicons
@@ -406,12 +558,23 @@ const CategoriesScreen = ({ navigation }) => {
                       ? 'Try a different search term'
                       : 'No products in this category yet'}
                   </Text>
+                  {searchQuery && (
+                    <TouchableOpacity 
+                      style={styles.clearSearchButton}
+                      onPress={clearSearch}
+                    >
+                      <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               }
             />
           )}
         </View>
       </View>
+
+      {/* Floating Cart Button */}
+      {renderFloatingCart()}
     </Screen>
   );
 };
@@ -523,8 +686,11 @@ const styles = StyleSheet.create({
   },
 
   // ============================================================
-  // TOP BAR - Search + Sort
+  // TOP BAR - Search + Sort with Suggestions
   // ============================================================
+  topBarWrapper: {
+    zIndex: 1000,
+  },
   topBar: {
     flexDirection: 'row',
     paddingHorizontal: PRODUCT_GAP,
@@ -533,8 +699,12 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: COLORS.white,
   },
-  topSearchBox: {
+  searchBoxWrapper: {
     flex: 1,
+    position: 'relative',
+    zIndex: 1000,
+  },
+  topSearchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F5F5F5',
@@ -594,6 +764,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#777',
     fontWeight: '500',
+    flex: 1,
   },
   categoryBreadcrumb: {
     fontSize: 12,
@@ -754,6 +925,56 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     marginTop: SPACING.xs,
     textAlign: 'center',
+  },
+  clearSearchButton: {
+    marginTop: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+  },
+  clearSearchButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+
+  // ============================================================
+  // FLOATING CART BUTTON
+  // ============================================================
+  floatingCartButton: {
+    position: 'absolute',
+    bottom: SPACING.tabBarHeight + SPACING.lg,
+    right: SPACING.screenPadding,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.large,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.4,
+    zIndex: 100,
+  },
+  floatingCartBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  floatingCartBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.black,
   },
 });
 

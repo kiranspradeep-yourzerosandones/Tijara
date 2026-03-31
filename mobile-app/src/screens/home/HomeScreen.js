@@ -1,5 +1,5 @@
 // src/screens/home/HomeScreen.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,16 @@ import {
   RefreshControl,
   Dimensions,
   Animated,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING } from '../../theme';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Loading, Screen } from '../../components/common';
+import SearchSuggestions from '../../components/search/SearchSuggestions';
 import TijaraLogo from '../../components/common/TijaraLogo';
 import { productsAPI } from '../../api';
 import { useAuthStore, useCartStore, useNotificationStore } from '../../store';
+import { useSearch } from '../../hooks';
 import { getImageUrl, formatCurrency, calculateDiscount } from '../../utils/helpers';
 
 const { width } = Dimensions.get('window');
@@ -39,7 +42,7 @@ const CATEGORY_IMAGES = {
   chemicals: require('../../../assets/chemicals.jpg'),
 };
 
-// 🎯 Banner data - Simple array
+// 🎯 Banner data
 const BANNER_DATA = [
   {
     id: '1',
@@ -76,33 +79,74 @@ const DEFAULT_CATEGORIES = [
 const HomeScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // 🎯 SIMPLE BANNER STATE
+  // Banner state
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  
+  // Floating cart animation
+  const floatingCartScale = useRef(new Animated.Value(0)).current;
 
+  // Store hooks
   const { user } = useAuthStore();
-  const { addToCart, getItemQuantity, fetchCart } = useCartStore();
+  const { addToCart, getItemQuantity, fetchCart, totalItems } = useCartStore();
   const { fetchUnreadCount } = useNotificationStore();
 
+  // 🔍 Search hook - WITH ALL REQUIRED PROPERTIES
+  const {
+    query: searchQuery,
+    suggestions,
+    filteredProducts,
+    isSearching,
+    isLoadingSuggestions,
+    showSuggestions,
+    recentSearches,
+    trendingSearches,          // ✅ Added
+    error: searchError,
+    setQuery: setSearchQuery,
+    fillSearch,                // ✅ Added
+    clearSearch,
+    hideSuggestions,
+    openSuggestions,
+    selectSuggestion,
+    addToRecentSearches,
+    removeRecentSearch,        // ✅ Added
+    clearRecentSearches,
+    fetchSuggestions,
+  } = useSearch({
+    debounceMs: 300,
+    minQueryLength: 2,
+    maxSuggestions: 8,
+    enableBackendSearch: true,
+    localProducts: products,
+    categories: categories,
+  });
+
   // ============================================================
-  // SIMPLE AUTO-CHANGE BANNER (Every 5 seconds)
+  // FLOATING CART ANIMATION
+  // ============================================================
+  useEffect(() => {
+    Animated.spring(floatingCartScale, {
+      toValue: totalItems > 0 ? 1 : 0,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 40,
+    }).start();
+  }, [totalItems, floatingCartScale]);
+
+  // ============================================================
+  // BANNER AUTO-CHANGE
   // ============================================================
   useEffect(() => {
     const interval = setInterval(() => {
-      // Fade out
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start(() => {
-        // Change content
         setCurrentBannerIndex((prev) => (prev + 1) % BANNER_DATA.length);
-        
-        // Fade in
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
@@ -139,7 +183,7 @@ const HomeScreen = ({ navigation }) => {
 
   const loadProducts = async () => {
     try {
-      const response = await productsAPI.getProducts({ limit: 20 });
+      const response = await productsAPI.getProducts({ limit: 50 });
       setProducts(response.data?.products || []);
     } catch (error) {
       console.error('Load products error:', error);
@@ -161,44 +205,107 @@ const HomeScreen = ({ navigation }) => {
     setIsRefreshing(false);
   };
 
-  const handleSearch = () => {
+  // ============================================================
+  // NAVIGATION HANDLERS
+  // ============================================================
+  const handleSearch = useCallback(() => {
     if (searchQuery.trim()) {
+      hideSuggestions();
+      Keyboard.dismiss();
+      addToRecentSearches(searchQuery.trim());
       navigation.navigate('ProductList', {
         searchQuery: searchQuery.trim(),
         title: `Search: ${searchQuery.trim()}`,
       });
     }
-  };
+  }, [searchQuery, hideSuggestions, addToRecentSearches, navigation]);
 
-  const handleProductPress = (product) => {
+  const handleProductPress = useCallback((product) => {
+    hideSuggestions();
+    Keyboard.dismiss();
     navigation.navigate('ProductDetail', { product });
-  };
+  }, [hideSuggestions, navigation]);
 
-  const handleViewAllProducts = () => {
+  const handleViewAllProducts = useCallback(() => {
     navigation.navigate('ProductList', { title: 'All Products' });
-  };
+  }, [navigation]);
 
-  const handleCategoryPress = (category) => {
+  const handleViewAllSearchResults = useCallback(() => {
+    hideSuggestions();
+    Keyboard.dismiss();
     navigation.navigate('ProductList', {
-      category: category.name,
-      title: category.name,
+      searchQuery: searchQuery.trim(),
+      title: `Search: ${searchQuery.trim()}`,
     });
-  };
+  }, [hideSuggestions, searchQuery, navigation]);
 
-  const handleSupportPress = () => {
+  const handleCategoryPress = useCallback((category) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    navigation.navigate('ProductList', {
+      category: typeof category === 'string' ? category : category.name,
+      title: typeof category === 'string' ? category : category.name,
+    });
+  }, [hideSuggestions, navigation]);
+
+  const handleSupportPress = useCallback(() => {
     navigation.navigate('Profile');
-  };
+  }, [navigation]);
 
-  const handleAddToCart = async (product) => {
+  const handleGoToCart = useCallback(() => {
+    navigation.navigate('Cart');
+  }, [navigation]);
+
+  const handleAddToCart = useCallback(async (product) => {
     try {
       await addToCart(product._id, 1);
     } catch (error) {
       console.error('Add to cart error:', error);
     }
-  };
+  }, [addToCart]);
 
-  // Handle dot press
-  const handleDotPress = (index) => {
+  // Handle suggestion selection
+  const handleSelectSuggestion = useCallback((suggestion) => {
+    if (typeof suggestion === 'string') {
+      setSearchQuery(suggestion);
+      addToRecentSearches(suggestion);
+      hideSuggestions();
+      Keyboard.dismiss();
+      navigation.navigate('ProductList', {
+        searchQuery: suggestion,
+        title: `Search: ${suggestion}`,
+      });
+    } else {
+      selectSuggestion(suggestion);
+    }
+  }, [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion, navigation]);
+
+  // Handle product selection from suggestions
+  const handleSelectProductSuggestion = useCallback((product) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    handleProductPress(product);
+  }, [hideSuggestions, handleProductPress]);
+
+  // Handle category selection from suggestions
+  const handleSelectCategorySuggestion = useCallback((categoryName) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    handleCategoryPress(categoryName);
+  }, [hideSuggestions, handleCategoryPress]);
+
+  // Handle fill search (arrow button in suggestions)
+  const handleFillSearch = useCallback((text) => {
+    fillSearch(text);
+  }, [fillSearch]);
+
+  // Handle remove recent search item
+  const handleRemoveRecentSearch = useCallback((searchTerm) => {
+    removeRecentSearch(searchTerm);
+  }, [removeRecentSearch]);
+
+  // Handle dot press for banner
+  const handleDotPress = useCallback((index) => {
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 200,
@@ -211,10 +318,10 @@ const HomeScreen = ({ navigation }) => {
         useNativeDriver: true,
       }).start();
     });
-  };
+  }, [fadeAnim]);
 
   // ============================================================
-  // HEADER
+  // RENDER: HEADER
   // ============================================================
   const renderHeader = () => (
     <View style={styles.header}>
@@ -238,32 +345,76 @@ const HomeScreen = ({ navigation }) => {
   );
 
   // ============================================================
-  // SEARCH BAR
+  // RENDER: SEARCH BAR WITH SUGGESTIONS
   // ============================================================
   const renderSearchBar = () => (
-    <View style={styles.searchContainer}>
-      <Ionicons name="search" size={18} color={COLORS.gray} />
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search your products"
-        placeholderTextColor={COLORS.gray}
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        onSubmitEditing={handleSearch}
-        returnKeyType="search"
+    <View style={styles.searchWrapper}>
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={18} color={COLORS.gray} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search your products"
+          placeholderTextColor={COLORS.gray}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+          onFocus={openSuggestions}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+            <Ionicons name="close-circle" size={18} color={COLORS.gray} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Search Suggestions Dropdown */}
+      <SearchSuggestions
+        suggestions={suggestions}
+        query={searchQuery}
+        isLoading={isLoadingSuggestions}
+        recentSearches={recentSearches}
+        trendingSearches={trendingSearches}
+        visible={showSuggestions}
+        onSelectSuggestion={handleSelectSuggestion}
+        onSelectProduct={handleSelectProductSuggestion}
+        onSelectCategory={handleSelectCategorySuggestion}
+        onClearRecent={clearRecentSearches}
+        onRemoveRecentItem={handleRemoveRecentSearch}
+        onFillSearch={handleFillSearch}
       />
-      {searchQuery.length > 0 && (
-        <TouchableOpacity onPress={() => setSearchQuery('')}>
-          <Ionicons name="close-circle" size={18} color={COLORS.gray} />
-        </TouchableOpacity>
-      )}
     </View>
   );
 
   // ============================================================
-  // SIMPLE AUTO-CHANGING BANNER
+  // RENDER: SEARCH RESULTS HEADER
+  // ============================================================
+  const renderSearchHeader = () => {
+    if (!isSearching || showSuggestions) return null;
+
+    return (
+      <View style={styles.searchResultsHeader}>
+        <View style={styles.searchResultsInfo}>
+          <Ionicons name="search" size={16} color={COLORS.textSecondary} />
+          <Text style={styles.searchResultsText}>
+            {filteredProducts.length} result{filteredProducts.length !== 1 ? 's' : ''} for "{searchQuery}"
+          </Text>
+        </View>
+        <TouchableOpacity onPress={clearSearch}>
+          <Text style={styles.clearSearchText}>Clear</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // ============================================================
+  // RENDER: BANNER
   // ============================================================
   const renderBanner = () => {
+    if (isSearching) return null;
+
     const currentBanner = BANNER_DATA[currentBannerIndex];
 
     return (
@@ -282,13 +433,11 @@ const HomeScreen = ({ navigation }) => {
               },
             ]}
           >
-            {/* Background Pattern */}
             <View style={styles.bannerPattern}>
               <View style={[styles.patternCircle, styles.patternCircle1]} />
               <View style={[styles.patternCircle, styles.patternCircle2]} />
             </View>
 
-            {/* Content */}
             <View style={styles.bannerContent}>
               <View style={styles.bannerTextSection}>
                 <Text style={styles.bannerTitle} numberOfLines={1}>
@@ -312,7 +461,6 @@ const HomeScreen = ({ navigation }) => {
           </Animated.View>
         </TouchableOpacity>
 
-        {/* Dot Indicators */}
         <View style={styles.dotsContainer}>
           {BANNER_DATA.map((_, index) => (
             <TouchableOpacity
@@ -334,9 +482,11 @@ const HomeScreen = ({ navigation }) => {
   };
 
   // ============================================================
-  // CATEGORIES
+  // RENDER: CATEGORIES
   // ============================================================
   const renderCategories = () => {
+    if (isSearching) return null;
+
     const getCategoryWithImage = (category, index) => {
       const categoryNameLower = category.name?.toLowerCase() || '';
       
@@ -390,7 +540,7 @@ const HomeScreen = ({ navigation }) => {
   };
 
   // ============================================================
-  // COMPACT PRODUCT CARD
+  // RENDER: COMPACT PRODUCT CARD
   // ============================================================
   const renderCompactProductCard = (product, index) => {
     const quantity = getItemQuantity(product._id);
@@ -464,34 +614,112 @@ const HomeScreen = ({ navigation }) => {
   };
 
   // ============================================================
-  // PRODUCTS - 3 COLUMN GRID
+  // RENDER: PRODUCTS GRID
   // ============================================================
-  const renderProducts = () => (
-    <View style={styles.productsSection}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Our Products</Text>
-        <TouchableOpacity onPress={handleViewAllProducts}>
-          <Text style={styles.seeAllText}>See all →</Text>
-        </TouchableOpacity>
-      </View>
+  const renderProducts = () => {
+    const displayProducts = isSearching ? filteredProducts : products;
+    const maxProducts = isSearching ? 12 : 9;
+    const sectionTitle = isSearching ? 'Search Results' : 'Our Products';
+    
+    return (
+      <View style={styles.productsSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+          {!isSearching && (
+            <TouchableOpacity onPress={handleViewAllProducts}>
+              <Text style={styles.seeAllText}>See all →</Text>
+            </TouchableOpacity>
+          )}
+          {isSearching && filteredProducts.length > maxProducts && (
+            <TouchableOpacity onPress={handleViewAllSearchResults}>
+              <Text style={styles.seeAllText}>View all →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-      <View style={styles.productsGrid}>
-        {products.slice(0, 9).map((product, index) => 
-          renderCompactProductCard(product, index)
+        {/* No results message */}
+        {isSearching && filteredProducts.length === 0 && (
+          <View style={styles.noResultsContainer}>
+            <Ionicons name="search-outline" size={48} color={COLORS.gray} />
+            <Text style={styles.noResultsTitle}>No products found</Text>
+            <Text style={styles.noResultsText}>
+              Try searching with different keywords
+            </Text>
+            <TouchableOpacity 
+              style={styles.clearSearchButton}
+              onPress={clearSearch}
+            >
+              <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Products grid */}
+        {displayProducts.length > 0 && (
+          <View style={styles.productsGrid}>
+            {displayProducts.slice(0, maxProducts).map((product, index) => 
+              renderCompactProductCard(product, index)
+            )}
+          </View>
+        )}
+
+        {/* View more button */}
+        {!isSearching && products.length > 9 && (
+          <TouchableOpacity
+            style={styles.viewMoreButton}
+            onPress={handleViewAllProducts}
+          >
+            <Text style={styles.viewMoreText}>View More Products</Text>
+            <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+          </TouchableOpacity>
+        )}
+
+        {isSearching && filteredProducts.length > maxProducts && (
+          <TouchableOpacity
+            style={styles.viewMoreButton}
+            onPress={handleViewAllSearchResults}
+          >
+            <Text style={styles.viewMoreText}>
+              View All {filteredProducts.length} Results
+            </Text>
+            <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+          </TouchableOpacity>
         )}
       </View>
+    );
+  };
 
-      {products.length > 9 && (
+  // ============================================================
+  // RENDER: FLOATING CART
+  // ============================================================
+  const renderFloatingCart = () => {
+    if (totalItems === 0) return null;
+
+    return (
+      <Animated.View
+        style={[
+          styles.floatingCartContainer,
+          {
+            transform: [{ scale: floatingCartScale }],
+            opacity: floatingCartScale,
+          },
+        ]}
+      >
         <TouchableOpacity
-          style={styles.viewMoreButton}
-          onPress={handleViewAllProducts}
+          style={styles.floatingCartButton}
+          onPress={handleGoToCart}
+          activeOpacity={0.8}
         >
-          <Text style={styles.viewMoreText}>View More Products</Text>
-          <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+          <Ionicons name="cart" size={24} color={COLORS.black} />
+          <View style={styles.floatingCartBadge}>
+            <Text style={styles.floatingCartBadgeText}>
+              {totalItems > 99 ? '99+' : totalItems}
+            </Text>
+          </View>
         </TouchableOpacity>
-      )}
-    </View>
-  );
+      </Animated.View>
+    );
+  };
 
   // ============================================================
   // LOADING STATE
@@ -512,6 +740,8 @@ const HomeScreen = ({ navigation }) => {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={hideSuggestions}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -523,11 +753,14 @@ const HomeScreen = ({ navigation }) => {
       >
         {renderHeader()}
         {renderSearchBar()}
+        {renderSearchHeader()}
         {renderBanner()}
         {renderCategories()}
         {renderProducts()}
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {renderFloatingCart()}
     </Screen>
   );
 };
@@ -540,9 +773,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ============================================================
-  // HEADER STYLES
-  // ============================================================
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -591,18 +822,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ============================================================
-  // SEARCH BAR STYLES
-  // ============================================================
+  // Search
+  searchWrapper: {
+    marginHorizontal: SPACING.screenPadding,
+    marginBottom: SPACING.md,
+    zIndex: 1000,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: SPACING.screenPadding,
     paddingHorizontal: SPACING.md,
     height: 44,
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
-    marginBottom: SPACING.md,
   },
   searchInput: {
     flex: 1,
@@ -610,10 +842,69 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginLeft: SPACING.sm,
   },
+  clearButton: {
+    padding: 4,
+  },
 
-  // ============================================================
-  // SIMPLE AUTO-CHANGING BANNER STYLES
-  // ============================================================
+  // Search Results Header
+  searchResultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.card,
+    marginHorizontal: SPACING.screenPadding,
+    marginBottom: SPACING.md,
+    borderRadius: 8,
+  },
+  searchResultsInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  searchResultsText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  clearSearchText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+
+  // No Results
+  noResultsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xxxl,
+  },
+  noResultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginTop: SPACING.md,
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
+  },
+  clearSearchButton: {
+    marginTop: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+  },
+  clearSearchButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+
+  // Banner
   bannerWrapper: {
     marginBottom: SPACING.lg,
     paddingHorizontal: BANNER_HORIZONTAL_PADDING,
@@ -701,8 +992,6 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     fontWeight: '700',
   },
-
-  // Dot Indicators
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -726,9 +1015,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
 
-  // ============================================================
-  // CATEGORIES STYLES
-  // ============================================================
+  // Categories
   categoriesSection: {
     marginBottom: SPACING.lg,
     paddingHorizontal: SPACING.screenPadding,
@@ -782,9 +1069,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // ============================================================
-  // PRODUCTS SECTION
-  // ============================================================
+  // Products
   productsSection: {
     paddingHorizontal: SPACING.screenPadding,
   },
@@ -805,9 +1090,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // ============================================================
-  // COMPACT PRODUCT CARD STYLES
-  // ============================================================
+  // Product Card
   compactProductCard: {
     width: PRODUCT_CARD_WIDTH,
     backgroundColor: COLORS.white,
@@ -902,9 +1185,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // ============================================================
-  // BOTTOM SPACING
-  // ============================================================
+  // Floating Cart
+  floatingCartContainer: {
+    position: 'absolute',
+    bottom: SPACING.tabBarHeight + SPACING.lg,
+    right: SPACING.screenPadding,
+    zIndex: 1000,
+  },
+  floatingCartButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.large,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.4,
+  },
+  floatingCartBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  floatingCartBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+
+  // Bottom Spacing
   bottomSpacing: {
     height: SPACING.tabBarHeight + SPACING.lg,
   },

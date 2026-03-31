@@ -2,9 +2,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING } from '../theme';
+import { COLORS, SPACING, FONTS } from '../theme';
 import { useCartStore } from '../store';
 
 // Screens
@@ -62,23 +62,18 @@ const ProfileStack = () => (
   </Stack.Navigator>
 );
 
-// Tab Bar Icon with Badge
-const TabBarIcon = ({ name, focused, badgeCount }) => (
+// Tab Bar Icon Component
+const TabBarIcon = ({ name, focused }) => (
   <View style={styles.iconContainer}>
     <Ionicons
       name={focused ? name : `${name}-outline`}
       size={24}
-      color={focused ? COLORS.primary : COLORS.gray}
+      color={focused ? COLORS.primary : COLORS.black}
     />
-    {badgeCount > 0 && (
-      <View style={styles.badge}>
-        <Ionicons name="ellipse" size={8} color={COLORS.primary} />
-      </View>
-    )}
   </View>
 );
 
-// Cart Tab Icon with Count
+// Cart Tab Icon with Badge Count
 const CartTabIcon = ({ focused }) => {
   const { totalItems } = useCartStore();
   
@@ -87,15 +82,24 @@ const CartTabIcon = ({ focused }) => {
       <Ionicons
         name={focused ? 'cart' : 'cart-outline'}
         size={24}
-        color={focused ? COLORS.primary : COLORS.gray}
+        color={focused ? COLORS.primary : COLORS.black}
       />
       {totalItems > 0 && (
-        <View style={styles.cartBadge}>
-          <Ionicons 
-            name="ellipse" 
-            size={totalItems > 9 ? 16 : 14} 
-            color={COLORS.primary} 
-          />
+        <View 
+          style={[
+            styles.cartBadge,
+            focused && styles.cartBadgeActive,
+            totalItems > 9 && styles.cartBadgeLarge,
+          ]}
+        >
+          <Text 
+            style={[
+              styles.cartBadgeText,
+              totalItems > 9 && styles.cartBadgeTextSmall,
+            ]}
+          >
+            {totalItems > 99 ? '99+' : totalItems}
+          </Text>
         </View>
       )}
     </View>
@@ -110,8 +114,9 @@ const TabNavigator = () => (
       tabBarShowLabel: true,
       tabBarStyle: styles.tabBar,
       tabBarActiveTintColor: COLORS.primary,
-      tabBarInactiveTintColor: COLORS.gray,
+      tabBarInactiveTintColor: COLORS.black,
       tabBarLabelStyle: styles.tabBarLabel,
+      tabBarHideOnKeyboard: true,  // ✅ Hide tab bar when keyboard is open
     }}
   >
     <Tab.Screen
@@ -185,23 +190,48 @@ const styles = StyleSheet.create({
   },
   tabBarLabel: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     marginTop: 2,
   },
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -2,
-    right: -6,
+    width: 30,
+    height: 28,
   },
   cartBadge: {
     position: 'absolute',
-    top: -4,
-    right: -8,
+    top: -6,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+  },
+  cartBadgeActive: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.primary,
+  },
+  cartBadgeLarge: {
+    minWidth: 22,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 3,
+  },
+  cartBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.black,
+    textAlign: 'center',
+  },
+  cartBadgeTextSmall: {
+    fontSize: 9,
   },
 });
 

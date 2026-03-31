@@ -222,6 +222,8 @@ exports.getLocation = async (req, res) => {
   }
 };
 
+
+
 /**
  * @desc    Update location
  * @route   PUT /api/locations/:id
@@ -317,14 +319,25 @@ exports.updateLocation = async (req, res) => {
       }
     }
 
-    // Update default status
-    if (isDefault !== undefined) {
-      location.isDefault = isDefault;
+    // Handle default status explicitly (more reliable than pre-save hook)
+    if (isDefault === true) {
+      // Remove default from all other locations first
+      await Location.updateMany(
+        { 
+          user: req.user._id, 
+          _id: { $ne: id },
+          isDefault: true 
+        },
+        { isDefault: false }
+      );
+      location.isDefault = true;
+    } else if (isDefault === false) {
+      location.isDefault = false;
     }
 
     await location.save();
 
-    console.log(`📍 Location updated: ${location._id}`);
+    console.log(`📍 Location updated: ${location._id}, isDefault: ${location.isDefault}`);
 
     res.status(200).json({
       success: true,
@@ -350,7 +363,6 @@ exports.updateLocation = async (req, res) => {
     });
   }
 };
-
 /**
  * @desc    Delete location (soft delete)
  * @route   DELETE /api/locations/:id
