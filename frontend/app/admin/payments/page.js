@@ -180,7 +180,7 @@ export default function PaymentsPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
           <div className="bg-white rounded-2xl border border-gray-200 p-5">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
@@ -239,73 +239,73 @@ export default function PaymentsPage() {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by payment ID, order number..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
-              />
-            </div>
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-2">
+  <div className="flex flex-col lg:flex-row gap-4">
+    {/* Search */}
+    <div className="flex-1 relative">
+      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input
+        type="text"
+        placeholder="Search by payment ID, order number..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+        className="w-full pl-10 pr-4 py-2.5 border border-black rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 text-black placeholder:text-black/60"
+      />
+    </div>
 
-            {/* Method Filter */}
-            <select
-              value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
-                setPagination(prev => ({ ...prev, current: 1 }));
-              }}
-              className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
-            >
-              <option value="all">All Methods</option>
-              <option value="cash">Cash</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="upi">UPI</option>
-              <option value="cheque">Cheque</option>
-              <option value="credit">Credit</option>
-            </select>
+    {/* Method Filter */}
+    <select
+      value={filter}
+      onChange={(e) => {
+        setFilter(e.target.value);
+        setPagination(prev => ({ ...prev, current: 1 }));
+      }}
+      className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white text-black"
+    >
+      <option value="all" className="text-black">All Methods</option>
+      <option value="cash" className="text-black">Cash</option>
+      <option value="bank_transfer" className="text-black">Bank Transfer</option>
+      <option value="upi" className="text-black">UPI</option>
+      <option value="cheque" className="text-black">Cheque</option>
+      <option value="credit" className="text-black">Credit</option>
+    </select>
 
-            {/* Date Range */}
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => {
-                  setDateRange(prev => ({ ...prev, start: e.target.value }));
-                  setPagination(prev => ({ ...prev, current: 1 }));
-                }}
-                className="px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
-              />
-              <input
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => {
-                  setDateRange(prev => ({ ...prev, end: e.target.value }));
-                  setPagination(prev => ({ ...prev, current: 1 }));
-                }}
-                className="px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
-              />
-            </div>
+    {/* Date Range */}
+    <div className="flex gap-2">
+      <input
+        type="date"
+        value={dateRange.start}
+        onChange={(e) => {
+          setDateRange(prev => ({ ...prev, start: e.target.value }));
+          setPagination(prev => ({ ...prev, current: 1 }));
+        }}
+        className="px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 text-black [&::-webkit-calendar-picker-indicator]:opacity-100"
+      />
+      <input
+        type="date"
+        value={dateRange.end}
+        onChange={(e) => {
+          setDateRange(prev => ({ ...prev, end: e.target.value }));
+          setPagination(prev => ({ ...prev, current: 1 }));
+        }}
+        className="px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 text-black [&::-webkit-calendar-picker-indicator]:opacity-100"
+      />
+    </div>
 
-            {/* Search Button */}
-            <button
-              onClick={handleSearch}
-              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-          </div>
-        </div>
+    {/* Search Button */}
+    <button
+      onClick={handleSearch}
+      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+    >
+      <svg className="w-5 h-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    </button>
+  </div>
+</div>
 
         {/* Payments List */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

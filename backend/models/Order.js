@@ -46,7 +46,7 @@ const statusHistorySchema = new mongoose.Schema({
   note: String
 }, { _id: true });
 
-// ✅ NEW: Expected Timeline Schema
+// Expected Timeline Schema
 const expectedTimelineSchema = new mongoose.Schema({
   confirmed: {
     expectedDate: Date,
@@ -85,14 +85,12 @@ const orderSchema = new mongoose.Schema({
   orderNumber: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true // ✅ This already creates an index
   },
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true,
-    index: true
+    required: true
   },
   customerSnapshot: {
     name: { type: String, required: true },
@@ -126,37 +124,35 @@ const orderSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"],
-    default: "pending",
-    index: true
+    default: "pending"
   },
 
   // Status history
   statusHistory: [statusHistorySchema],
 
-  // ✅ NEW: Expected Timeline with dates for each step
+  // Expected Timeline with dates for each step
   expectedTimeline: {
     type: expectedTimelineSchema,
     default: {}
   },
 
-  // ✅ NEW: Overall expected delivery date
+  // Overall expected delivery date
   expectedDeliveryDate: Date,
 
-  // ✅ NEW: Actual delivery date
+  // Actual delivery date
   actualDeliveryDate: Date,
 
-  // ✅ NEW: Is order delayed?
+  // Is order delayed?
   isDelayed: { type: Boolean, default: false },
 
-  // ✅ NEW: Delay reason (if delayed)
+  // Delay reason (if delayed)
   delayReason: String,
 
   // Payment status
   paymentStatus: {
     type: String,
     enum: ["pending", "paid", "partial", "refunded"],
-    default: "pending",
-    index: true
+    default: "pending"
   },
 
   payment: {
@@ -204,7 +200,9 @@ const orderSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
+// ============================================================
+// INDEXES - ✅ FIXED: Removed orderNumber (already indexed by unique: true)
+// ============================================================
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1 });
@@ -243,7 +241,7 @@ orderSchema.virtual('isCompleted').get(function() {
   return ["delivered", "cancelled"].includes(this.status);
 });
 
-// ✅ NEW: Virtual for tracking timeline (for mobile app)
+// Virtual for tracking timeline (for mobile app)
 orderSchema.virtual('trackingTimeline').get(function() {
   const steps = [
     {
@@ -462,13 +460,13 @@ orderSchema.methods.canTransitionTo = function(newStatus) {
   return validTransitions.includes(newStatus);
 };
 
-// ✅ NEW: Method to set expected timeline dates
+// Method to set expected timeline dates
 orderSchema.methods.setExpectedDates = function(expectedDeliveryDate, processingDays = 1, shippingDays = 2) {
   const orderDate = this.createdAt || new Date();
   
   // Calculate expected dates for each step
   const confirmDate = new Date(orderDate);
-  confirmDate.setHours(confirmDate.getHours() + 12); // 12 hours to confirm
+  confirmDate.setHours(confirmDate.getHours() + 12);
 
   const packDate = new Date(orderDate);
   packDate.setDate(packDate.getDate() + processingDays);
@@ -477,7 +475,7 @@ orderSchema.methods.setExpectedDates = function(expectedDeliveryDate, processing
   shipDate.setDate(shipDate.getDate() + 1);
 
   const outForDeliveryDate = new Date(expectedDeliveryDate);
-  outForDeliveryDate.setHours(8, 0, 0, 0); // 8 AM on delivery day
+  outForDeliveryDate.setHours(8, 0, 0, 0);
 
   this.expectedDeliveryDate = expectedDeliveryDate;
   this.expectedTimeline = {

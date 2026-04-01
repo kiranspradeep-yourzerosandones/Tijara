@@ -1,10 +1,10 @@
+// D:\yzo_ongoing\Tijara\backend\models\OtpLog.js
 const mongoose = require("mongoose");
 
 const otpLogSchema = new mongoose.Schema({
   phone: {
     type: String,
-    required: true,
-    index: true
+    required: true
   },
 
   purpose: {
@@ -19,12 +19,11 @@ const otpLogSchema = new mongoose.Schema({
 
   createdAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   }
 });
 
-// Auto-delete after 24 hours
+// ✅ FIXED: Combined into one index with TTL
 otpLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
 
 module.exports = mongoose.model("OtpLog", otpLogSchema);

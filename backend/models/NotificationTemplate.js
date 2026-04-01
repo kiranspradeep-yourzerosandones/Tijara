@@ -1,3 +1,4 @@
+// D:\yzo_ongoing\Tijara\backend\models\NotificationTemplate.js
 const mongoose = require("mongoose");
 
 const notificationTemplateSchema = new mongoose.Schema({
@@ -6,7 +7,7 @@ const notificationTemplateSchema = new mongoose.Schema({
     type: String,
     required: [true, "Template name is required"],
     trim: true,
-    unique: true,
+    unique: true, // ✅ This already creates an index
     maxlength: 100
   },
 
@@ -14,7 +15,7 @@ const notificationTemplateSchema = new mongoose.Schema({
   slug: {
     type: String,
     required: true,
-    unique: true,
+    unique: true, // ✅ This already creates an index - NO need for schema.index()
     lowercase: true
   },
 
@@ -108,8 +109,10 @@ const notificationTemplateSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-notificationTemplateSchema.index({ slug: 1 });
+// ============================================================
+// INDEXES - ✅ FIXED: Removed slug (already has unique: true)
+// ============================================================
+// notificationTemplateSchema.index({ slug: 1 }); // ❌ REMOVED - duplicate!
 notificationTemplateSchema.index({ type: 1, isActive: 1 });
 
 // Pre-save to generate slug

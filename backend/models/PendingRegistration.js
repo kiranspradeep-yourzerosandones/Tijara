@@ -1,11 +1,11 @@
+// backend/models/PendingRegistration.js
 const mongoose = require("mongoose");
 
 const pendingRegistrationSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
   },
 
   verificationId: {
@@ -38,7 +38,7 @@ const pendingRegistrationSchema = new mongoose.Schema({
   }
 });
 
-// Auto-delete after 30 minutes
+// ✅ FIXED: Combined into one index with TTL
 pendingRegistrationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 1800 });
 
 module.exports = mongoose.model("PendingRegistration", pendingRegistrationSchema);

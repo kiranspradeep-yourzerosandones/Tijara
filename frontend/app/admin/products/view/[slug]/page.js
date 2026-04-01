@@ -173,7 +173,7 @@ export default function ProductDetail() {
 
             {/* Full Description */}
             {product.description && (
-              <div className="bg-white border border-gray-200 rounded-xl p-8">
+              <div className="bg-white mt-2 border border-gray-200 rounded-xl p-8">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Description</h3>
                 {isHtml(product.description) ? (
                   <div className="rich-content text-gray-700 prose max-w-none" dangerouslySetInnerHTML={{ __html: product.description }} />
@@ -185,7 +185,7 @@ export default function ProductDetail() {
 
             {/* Storage / Specs */}
             {product.storage && (
-              <div className="bg-white border border-gray-200 rounded-xl p-8">
+              <div className="bg-white border mt-2 border-gray-200 rounded-xl p-8">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Storage & Specifications</h3>
                 {isHtml(product.storage) ? (
                   <div className="rich-content text-gray-700 prose max-w-none" dangerouslySetInnerHTML={{ __html: product.storage }} />
@@ -200,7 +200,7 @@ export default function ProductDetail() {
           <div className="lg:col-span-2">
             <div className="lg:sticky lg:top-6 space-y-6">
               {/* Pricing Card */}
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div className="bg-white mb-2 border border-gray-200 rounded-xl p-6 shadow-sm">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Pricing</h3>
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-bold text-gray-900">{formatPrice(product.price)}</span>
@@ -229,7 +229,7 @@ export default function ProductDetail() {
               </div>
 
               {/* Details Card */}
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div className="bg-white mb-2 border border-gray-200 rounded-xl p-6 shadow-sm">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Details</h3>
                 <div className="space-y-3 text-sm">
                   {product.brand && (
@@ -265,7 +265,7 @@ export default function ProductDetail() {
 
               {/* Short Description */}
               {product.shortDescription && (
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                <div className="bg-white mb-2 border border-gray-200 rounded-xl p-6 shadow-sm">
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Summary</h3>
                   <p className="text-gray-700 text-sm leading-relaxed">{product.shortDescription}</p>
                 </div>

@@ -58,7 +58,6 @@ const adminSchema = new mongoose.Schema({
   lastLoginAt: Date,
   notes: { type: String, maxlength: 1000 },
 
-  // Password Reset Fields
   passwordResetToken: String,
   passwordResetExpires: Date,
   passwordChangedAt: Date,
@@ -81,16 +80,12 @@ adminSchema.index({ passwordResetToken: 1 });
 
 // ============================================================
 // PRE-SAVE HOOK - Hash Password
-// IMPORTANT: Use async function WITHOUT next() parameter
-// Mongoose handles it automatically when returning a promise
 // ============================================================
 adminSchema.pre("save", async function() {
-  // Only hash if password is modified
   if (!this.isModified("password")) {
     return;
   }
 
-  // Don't hash if already hashed (bcrypt hashes start with $2a$ or $2b$)
   if (this.password.startsWith("$2a$") || this.password.startsWith("$2b$")) {
     console.log("Password already hashed, skipping...");
     return;

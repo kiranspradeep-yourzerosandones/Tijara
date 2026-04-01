@@ -9,48 +9,139 @@ import { getAuthHeaders } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-// Status configuration
+// SVG Icon Components
+const Icons = {
+  clock: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  check: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
+  ),
+  checkCircle: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  package: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  ),
+  truck: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+    </svg>
+  ),
+  delivery: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  delivered: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  cancel: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  warning: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+  ),
+  calendar: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  money: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
+  phone: (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+    </svg>
+  ),
+  note: (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  settings: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  arrowLeft: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+    </svg>
+  ),
+  x: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  ),
+  cube: (
+    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  ),
+};
+
+// Status configuration with icon components
 const STATUS_CONFIG = {
   pending: {
     label: "Pending",
     color: "bg-yellow-100 text-yellow-800",
-    icon: "🕐",
+    icon: Icons.clock,
     description: "Order placed, waiting for confirmation"
   },
   confirmed: {
     label: "Confirmed",
     color: "bg-blue-100 text-blue-800",
-    icon: "✓",
+    icon: Icons.check,
     description: "Order confirmed by admin"
   },
   packed: {
     label: "Packed",
     color: "bg-indigo-100 text-indigo-800",
-    icon: "📦",
+    icon: Icons.package,
     description: "Order packed and ready for shipping"
   },
   shipped: {
     label: "Shipped",
     color: "bg-purple-100 text-purple-800",
-    icon: "🚚",
+    icon: Icons.truck,
     description: "Order dispatched for delivery"
   },
   out_for_delivery: {
     label: "Out for Delivery",
     color: "bg-cyan-100 text-cyan-800",
-    icon: "🛵",
+    icon: Icons.delivery,
     description: "Order is out for delivery"
   },
   delivered: {
     label: "Delivered",
     color: "bg-green-100 text-green-800",
-    icon: "✅",
+    icon: Icons.delivered,
     description: "Order delivered successfully"
   },
   cancelled: {
     label: "Cancelled",
     color: "bg-red-100 text-red-800",
-    icon: "❌",
+    icon: Icons.cancel,
     description: "Order cancelled"
   }
 };
@@ -343,22 +434,35 @@ export default function OrderDetail() {
     return new Date().toISOString().split("T")[0];
   };
 
+  // Get icon for tracking step
+  const getStepIcon = (key) => {
+    const iconMap = {
+      pending: Icons.clock,
+      confirmed: Icons.check,
+      packed: Icons.package,
+      shipped: Icons.truck,
+      out_for_delivery: Icons.delivery,
+      delivered: Icons.delivered,
+      cancelled: Icons.cancel
+    };
+    return iconMap[key] || Icons.clock;
+  };
+
   // Build tracking timeline for display
   const buildTrackingTimeline = () => {
     const allSteps = [
-      { key: "pending", label: "Order Placed", icon: "🕐" },
-      { key: "confirmed", label: "Confirmed", icon: "✓" },
-      { key: "packed", label: "Packed", icon: "📦" },
-      { key: "shipped", label: "Shipped", icon: "🚚" },
-      { key: "out_for_delivery", label: "Out for Delivery", icon: "🛵" },
-      { key: "delivered", label: "Delivered", icon: "✅" }
+      { key: "pending", label: "Order Placed" },
+      { key: "confirmed", label: "Confirmed" },
+      { key: "packed", label: "Packed" },
+      { key: "shipped", label: "Shipped" },
+      { key: "out_for_delivery", label: "Out for Delivery" },
+      { key: "delivered", label: "Delivered" }
     ];
 
     if (order?.status === "cancelled") {
       return [{
         key: "cancelled",
         label: "Cancelled",
-        icon: "❌",
         isCompleted: true,
         isCurrent: true,
         date: order.cancelledAt,
@@ -412,7 +516,7 @@ export default function OrderDetail() {
               <div className="absolute inset-0 rounded-full border-4 border-gray-100"></div>
               <div className="absolute inset-0 rounded-full border-4 border-amber-400 border-t-transparent animate-spin"></div>
             </div>
-            <p className="text-gray-500 font-medium">Loading order details...</p>
+            <p className="text-gray-900 font-medium">Loading order details...</p>
           </div>
         </div>
       </ProtectedPage>
@@ -429,7 +533,7 @@ export default function OrderDetail() {
             </svg>
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Order Not Found</h2>
-          <p className="text-gray-500 mb-6">{error || "The order you're looking for doesn't exist."}</p>
+          <p className="text-gray-900 mb-6">{error || "The order you're looking for doesn't exist."}</p>
           <Link href="/admin/orders" className="text-amber-600 hover:text-amber-700 font-medium">
             ← Back to Orders
           </Link>
@@ -452,15 +556,13 @@ export default function OrderDetail() {
               href="/admin/orders"
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
+              {Icons.arrowLeft}
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
                 Order #{order.orderNumber}
               </h1>
-              <p className="text-gray-500">
+              <p className="text-gray-900">
                 Placed on {formatDate(order.createdAt)}
               </p>
             </div>
@@ -469,13 +571,15 @@ export default function OrderDetail() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* Delay Badge */}
             {order.isDelayed && (
-              <span className="px-3 py-1.5 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
-                ⚠️ Delayed
+              <span className="px-3 py-1.5 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300 flex items-center gap-1.5">
+                {Icons.warning}
+                Delayed
               </span>
             )}
             {/* Current Status Badge */}
-            <span className={`px-4 py-2 rounded-full text-sm font-semibold ${currentStatus.color}`}>
-              {currentStatus.icon} {currentStatus.label}
+            <span className={`px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5 ${currentStatus.color}`}>
+              {currentStatus.icon}
+              {currentStatus.label}
             </span>
           </div>
         </div>
@@ -483,9 +587,9 @@ export default function OrderDetail() {
         {/* Delay Banner */}
         {order.isDelayed && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3">
-            <svg className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+            <div className="text-yellow-600 flex-shrink-0 mt-0.5">
+              {Icons.warning}
+            </div>
             <div className="flex-1">
               <h3 className="font-semibold text-yellow-800">Order Delayed</h3>
               {order.delayReason && (
@@ -500,9 +604,10 @@ export default function OrderDetail() {
             <button
               onClick={removeDelay}
               disabled={updating}
-              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1.5"
             >
-              ✓ Mark On-Time
+              {Icons.check}
+              Mark On-Time
             </button>
           </div>
         )}
@@ -526,17 +631,15 @@ export default function OrderDetail() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
+                        Icons.cube
                       )}
                     </div>
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-900">{item.productSnapshot?.title}</h3>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-900">
                         {item.productSnapshot?.brand} • {item.productSnapshot?.unit}
                       </p>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-900 mt-1">
                         {formatCurrency(item.unitPrice)} × {item.quantity}
                       </p>
                     </div>
@@ -549,17 +652,17 @@ export default function OrderDetail() {
               <div className="p-4 bg-gray-50 border-t border-gray-100">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Subtotal</span>
+                    <span className="text-gray-900">Subtotal</span>
                     <span className="text-gray-900">{formatCurrency(order.subtotal)}</span>
                   </div>
                   {order.discount > 0 && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Discount</span>
+                      <span className="text-gray-900">Discount</span>
                       <span className="text-green-600">-{formatCurrency(order.discount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Delivery</span>
+                    <span className="text-gray-900">Delivery</span>
                     <span className="text-gray-900">
                       {order.deliveryCharges > 0 ? formatCurrency(order.deliveryCharges) : "FREE"}
                     </span>
@@ -577,12 +680,13 @@ export default function OrderDetail() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-gray-900">Order Tracking</h2>
                 {order.expectedDeliveryDate && (
-                  <div className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                  <div className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 ${
                     order.isDelayed 
                       ? "bg-yellow-100 text-yellow-800" 
                       : "bg-green-100 text-green-800"
                   }`}>
-                    {order.isDelayed ? "⚠️" : "📅"} Expected: {formatDateShort(order.expectedDeliveryDate)}
+                    {order.isDelayed ? Icons.warning : Icons.calendar}
+                    Expected: {formatDateShort(order.expectedDeliveryDate)}
                   </div>
                 )}
               </div>
@@ -590,19 +694,20 @@ export default function OrderDetail() {
               <div className="space-y-0">
                 {trackingTimeline.map((step, index) => {
                   const isLast = index === trackingTimeline.length - 1;
+                  const stepIcon = getStepIcon(step.key);
 
                   return (
                     <div key={step.key} className="flex gap-4">
                       {/* Left - Line and Dot */}
                       <div className="flex flex-col items-center">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg border-2 ${
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
                           step.isCompleted 
                             ? "bg-amber-400 border-amber-400 text-white" 
                             : step.isDelayed
-                            ? "bg-yellow-100 border-yellow-400"
-                            : "bg-gray-100 border-gray-300"
+                            ? "bg-yellow-100 border-yellow-400 text-yellow-600"
+                            : "bg-gray-100 border-gray-300 text-gray-400"
                         }`}>
-                          {step.isCompleted ? "✓" : step.icon}
+                          {step.isCompleted ? Icons.check : stepIcon}
                         </div>
                         {!isLast && (
                           <div className={`w-0.5 h-12 my-1 ${
@@ -639,20 +744,24 @@ export default function OrderDetail() {
 
                         {/* Dates */}
                         {step.isCompleted && step.actualDate && (
-                          <p className="text-sm text-green-600 mt-1">
-                            ✓ Completed: {formatDate(step.actualDate)}
+                          <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Completed: {formatDate(step.actualDate)}
                           </p>
                         )}
                         {step.isPending && step.expectedDate && (
-                          <p className={`text-sm mt-1 ${
-                            step.isDelayed ? "text-yellow-600" : "text-gray-500"
+                          <p className={`text-sm mt-1 flex items-center gap-1 ${
+                            step.isDelayed ? "text-yellow-600" : "text-gray-900"
                           }`}>
-                            {step.isDelayed ? "⚠️ Was expected by: " : "Expected by: "}
+                            {step.isDelayed && Icons.warning}
+                            {step.isDelayed ? "Was expected by: " : "Expected by: "}
                             {formatDateShort(step.expectedDate)}
                           </p>
                         )}
                         {step.note && (
-                          <p className="text-sm text-gray-500 mt-1 italic">
+                          <p className="text-sm text-gray-900 mt-1 italic">
                             Note: {step.note}
                           </p>
                         )}
@@ -674,8 +783,8 @@ export default function OrderDetail() {
                   return (
                     <div key={index} className="flex gap-4">
                       <div className="flex flex-col items-center">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                          isLast ? "bg-amber-100" : "bg-gray-100"
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          isLast ? "bg-amber-100 text-amber-600" : "bg-gray-100 text-gray-600"
                         }`}>
                           {statusConf.icon}
                         </div>
@@ -686,10 +795,10 @@ export default function OrderDetail() {
                       <div className="flex-1 pb-4">
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <h3 className="font-semibold text-gray-900">{statusConf.label}</h3>
-                          <span className="text-sm text-gray-500">{formatDate(history.timestamp)}</span>
+                          <span className="text-sm text-gray-900">{formatDate(history.timestamp)}</span>
                         </div>
                         {history.note && (
-                          <p className="text-sm text-gray-600 mt-1">{history.note}</p>
+                          <p className="text-sm text-gray-900 mt-1">{history.note}</p>
                         )}
                       </div>
                     </div>
@@ -708,7 +817,7 @@ export default function OrderDetail() {
               {/* Update Status */}
               {nextStatuses.length > 0 && order.status !== "delivered" && order.status !== "cancelled" && (
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-black mb-2">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
                     Update Status
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -721,13 +830,14 @@ export default function OrderDetail() {
                             setSelectedStatus(status);
                             setShowStatusModal(true);
                           }}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-colors ${
+                          className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-colors flex items-center gap-1.5 ${
                             status === "cancelled"
                               ? "border-red-200 text-red-700 hover:bg-red-50"
                               : "border-amber-200 text-amber-700 hover:bg-amber-50"
                           }`}
                         >
-                          {conf?.icon} {conf?.label || status}
+                          {conf?.icon}
+                          {conf?.label || status}
                         </button>
                       );
                     })}
@@ -737,13 +847,14 @@ export default function OrderDetail() {
 
               {/* Status completed message */}
               {(order.status === "delivered" || order.status === "cancelled") && (
-                <div className={`p-4 rounded-lg mb-4 ${
+                <div className={`p-4 rounded-lg mb-4 flex items-center gap-2 ${
                   order.status === "delivered" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
                 }`}>
+                  {order.status === "delivered" ? Icons.delivered : Icons.cancel}
                   <p className="text-sm font-medium">
                     {order.status === "delivered" 
-                      ? "✅ This order has been delivered" 
-                      : "❌ This order has been cancelled"}
+                      ? "This order has been delivered" 
+                      : "This order has been cancelled"}
                   </p>
                 </div>
               )}
@@ -751,7 +862,7 @@ export default function OrderDetail() {
               {/* Payment Status */}
               <div className="pt-4 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-black">Payment Status</span>
+                  <span className="text-sm font-semibold text-gray-900">Payment Status</span>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     PAYMENT_STATUS_CONFIG[order.paymentStatus]?.color || "bg-gray-100"
                   }`}>
@@ -773,9 +884,10 @@ export default function OrderDetail() {
                       });
                       setShowPaymentModal(true);
                     }}
-                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2"
                   >
-                    💰 Mark as Paid
+                    {Icons.money}
+                    Mark as Paid
                   </button>
                 )}
               </div>
@@ -783,7 +895,10 @@ export default function OrderDetail() {
 
             {/* Delivery Schedule Card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">📅 Delivery Schedule</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                {Icons.calendar}
+                Delivery Schedule
+              </h2>
               
               {/* Current Expected Date */}
               {order.expectedDeliveryDate ? (
@@ -794,13 +909,9 @@ export default function OrderDetail() {
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
                     {order.isDelayed ? (
-                      <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
+                      <div className="text-yellow-600">{Icons.warning}</div>
                     ) : (
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                      <div className="text-green-600">{Icons.checkCircle}</div>
                     )}
                     <span className={`font-semibold ${order.isDelayed ? "text-yellow-700" : "text-green-700"}`}>
                       {order.isDelayed ? "Delayed" : "On Track"}
@@ -817,7 +928,7 @@ export default function OrderDetail() {
                 </div>
               ) : (
                 <div className="p-4 bg-gray-50 rounded-lg mb-4 border border-dashed border-gray-300">
-                  <p className="text-gray-500 text-sm text-center">
+                  <p className="text-gray-900 text-sm text-center">
                     No expected delivery date set
                   </p>
                 </div>
@@ -839,9 +950,7 @@ export default function OrderDetail() {
                     }}
                     className="w-full px-4 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-medium flex items-center justify-center gap-2"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
+                    {Icons.calendar}
                     {order.expectedDeliveryDate ? "Update Delivery Date" : "Set Delivery Date"}
                   </button>
 
@@ -851,9 +960,7 @@ export default function OrderDetail() {
                       onClick={() => setShowDelayModal(true)}
                       className="w-full px-4 py-2.5 border-2 border-yellow-400 text-yellow-700 rounded-lg hover:bg-yellow-50 transition-colors font-medium flex items-center justify-center gap-2"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
+                      {Icons.warning}
                       Mark as Delayed
                     </button>
                   )}
@@ -865,9 +972,7 @@ export default function OrderDetail() {
                       disabled={updating}
                       className="w-full px-4 py-2.5 border-2 border-green-400 text-green-700 rounded-lg hover:bg-green-50 transition-colors font-medium flex items-center justify-center gap-2"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                      {Icons.checkCircle}
                       Mark as On-Time
                     </button>
                   )}
@@ -880,18 +985,18 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer</h2>
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-gray-500">Name</p>
+                  <p className="text-sm text-gray-900">Name</p>
                   <p className="font-medium text-gray-900">{order.customerSnapshot?.name || "N/A"}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Phone</p>
+                  <p className="text-sm text-gray-900">Phone</p>
                   <a href={`tel:${order.customerSnapshot?.phone}`} className="font-medium text-amber-600">
                     {order.customerSnapshot?.phone || "N/A"}
                   </a>
                 </div>
                 {order.customerSnapshot?.businessName && (
                   <div>
-                    <p className="text-sm text-gray-500">Business</p>
+                    <p className="text-sm text-gray-900">Business</p>
                     <p className="font-medium text-gray-900">{order.customerSnapshot.businessName}</p>
                   </div>
                 )}
@@ -904,19 +1009,21 @@ export default function OrderDetail() {
               {order.deliveryAddress && (
                 <div className="space-y-2 text-sm">
                   <p className="font-medium text-gray-900">{order.deliveryAddress.shopName}</p>
-                  <p className="text-gray-600">{order.deliveryAddress.addressLine1}</p>
+                  <p className="text-gray-900">{order.deliveryAddress.addressLine1}</p>
                   {order.deliveryAddress.addressLine2 && (
-                    <p className="text-gray-600">{order.deliveryAddress.addressLine2}</p>
+                    <p className="text-gray-900">{order.deliveryAddress.addressLine2}</p>
                   )}
-                  <p className="text-gray-600">
+                  <p className="text-gray-900">
                     {order.deliveryAddress.city}, {order.deliveryAddress.state} - {order.deliveryAddress.pincode}
                   </p>
-                  <p className="text-gray-500 pt-2">
-                    📞 {order.deliveryAddress.contactPhone}
+                  <p className="text-gray-900 pt-2 flex items-center gap-1.5">
+                    {Icons.phone}
+                    {order.deliveryAddress.contactPhone}
                   </p>
                   {order.deliveryAddress.deliveryInstructions && (
-                    <p className="text-gray-500 italic pt-2">
-                      📝 {order.deliveryAddress.deliveryInstructions}
+                    <p className="text-gray-900 italic pt-2 flex items-start gap-1.5">
+                      {Icons.note}
+                      {order.deliveryAddress.deliveryInstructions}
                     </p>
                   )}
                 </div>
@@ -927,7 +1034,7 @@ export default function OrderDetail() {
             {order.customerNotes && (
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Notes</h2>
-                <p className="text-sm text-gray-600 italic">"{order.customerNotes}"</p>
+                <p className="text-sm text-gray-900 italic">"{order.customerNotes}"</p>
               </div>
             )}
           </div>
@@ -946,21 +1053,22 @@ export default function OrderDetail() {
                 Change status from <strong>{STATUS_CONFIG[order.status]?.label}</strong> to{" "}
                 <strong className="text-amber-600">{STATUS_CONFIG[selectedStatus]?.label}</strong>
               </p>
-              <div className={`p-3 rounded-lg ${STATUS_CONFIG[selectedStatus]?.color || "bg-gray-100"}`}>
+              <div className={`p-3 rounded-lg flex items-center gap-2 ${STATUS_CONFIG[selectedStatus]?.color || "bg-gray-100"}`}>
+                {STATUS_CONFIG[selectedStatus]?.icon}
                 <p className="text-sm">
-                  {STATUS_CONFIG[selectedStatus]?.icon} {STATUS_CONFIG[selectedStatus]?.description}
+                  {STATUS_CONFIG[selectedStatus]?.description}
                 </p>
               </div>
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-black mb-2">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
                 Note (optional)
               </label>
               <textarea
                 value={statusNote}
                 onChange={(e) => setStatusNote(e.target.value)}
                 placeholder="Add a note about this status change..."
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-black placeholder:text-gray-600"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                 rows={3}
               />
             </div>
@@ -1001,22 +1109,22 @@ export default function OrderDetail() {
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Payment Status
                 </label>
                 <select
                   value={paymentData.paymentStatus}
                   onChange={(e) => setPaymentData({ ...paymentData, paymentStatus: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black bg-white"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
                 >
-                  <option value="" className="text-gray-600">Select Status</option>
-                  <option value="pending" className="text-black">Pending</option>
-                  <option value="partial" className="text-black">Partial</option>
-                  <option value="paid" className="text-black">Paid</option>
+                  <option value="" className="text-gray-500">Select Status</option>
+                  <option value="pending" className="text-gray-900">Pending</option>
+                  <option value="partial" className="text-gray-900">Partial</option>
+                  <option value="paid" className="text-gray-900">Paid</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Amount Paid
                 </label>
                 <input
@@ -1024,37 +1132,37 @@ export default function OrderDetail() {
                   value={paymentData.amountPaid}
                   onChange={(e) => setPaymentData({ ...paymentData, amountPaid: Number(e.target.value) })}
                   placeholder="Enter amount"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black placeholder:text-gray-600"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
                   max={order.totalAmount}
                 />
                 <p className="text-xs text-gray-900 mt-1">Order Total: {formatCurrency(order.totalAmount)}</p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Payment Method
                 </label>
                 <select
                   value={paymentData.method}
                   onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black bg-white"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
                 >
-                  <option value="cash" className="text-black">Cash</option>
-                  <option value="bank_transfer" className="text-black">Bank Transfer</option>
-                  <option value="upi" className="text-black">UPI</option>
-                  <option value="cheque" className="text-black">Cheque</option>
-                  <option value="credit" className="text-black">Credit</option>
-                  <option value="other" className="text-black">Other</option>
+                  <option value="cash" className="text-gray-900">Cash</option>
+                  <option value="bank_transfer" className="text-gray-900">Bank Transfer</option>
+                  <option value="upi" className="text-gray-900">UPI</option>
+                  <option value="cheque" className="text-gray-900">Cheque</option>
+                  <option value="credit" className="text-gray-900">Credit</option>
+                  <option value="other" className="text-gray-900">Other</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Notes
                 </label>
                 <textarea
                   value={paymentData.notes}
                   onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
                   placeholder="Payment notes..."
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black placeholder:text-gray-600"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
                   rows={2}
                 />
               </div>
@@ -1088,17 +1196,18 @@ export default function OrderDetail() {
       {showExpectedDatesModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              📅 Set Expected Delivery Dates
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              {Icons.calendar}
+              Set Expected Delivery Dates
             </h3>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-900 mb-4">
               Set the expected delivery date. The system will automatically calculate expected dates for each step.
             </p>
             
             <div className="space-y-4">
               {/* Main Delivery Date */}
               <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Expected Delivery Date *
                 </label>
                 <input
@@ -1106,58 +1215,59 @@ export default function OrderDetail() {
                   value={expectedDatesData.expectedDeliveryDate}
                   onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedDeliveryDate: e.target.value })}
                   min={getMinDate()}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                 />
               </div>
 
               {/* Optional: Individual Step Dates */}
               <details className="border border-gray-200 rounded-lg">
-                <summary className="px-4 py-3 cursor-pointer font-medium text-gray-700 hover:bg-gray-50">
-                  ⚙️ Advanced: Set individual step dates (optional)
+                <summary className="px-4 py-3 cursor-pointer font-medium text-gray-900 hover:bg-gray-50 flex items-center gap-2">
+                  {Icons.settings}
+                  Advanced: Set individual step dates (optional)
                 </summary>
                 <div className="p-4 space-y-4 border-t border-gray-200">
                   <div>
-                    <label className="block text-sm font-semibold text-black mb-2">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
                       Expected Confirm Date
                     </label>
                     <input
                       type="datetime-local"
                       value={expectedDatesData.expectedConfirmDate}
                       onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedConfirmDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-black mb-2">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
                       Expected Pack Date
                     </label>
                     <input
                       type="datetime-local"
                       value={expectedDatesData.expectedPackDate}
                       onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedPackDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-black mb-2">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
                       Expected Ship Date
                     </label>
                     <input
                       type="datetime-local"
                       value={expectedDatesData.expectedShipDate}
                       onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedShipDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-black mb-2">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
                       Expected Out for Delivery Date
                     </label>
                     <input
                       type="datetime-local"
                       value={expectedDatesData.expectedOutForDeliveryDate}
                       onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedOutForDeliveryDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                     />
                   </div>
                 </div>
@@ -1165,14 +1275,14 @@ export default function OrderDetail() {
 
               {/* Note */}
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Note (optional)
                 </label>
                 <textarea
                   value={expectedDatesData.note}
                   onChange={(e) => setExpectedDatesData({ ...expectedDatesData, note: e.target.value })}
                   placeholder="Add a note about the delivery schedule..."
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black placeholder:text-gray-600"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
                   rows={2}
                 />
               </div>
@@ -1215,28 +1325,26 @@ export default function OrderDetail() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <div className="text-yellow-600">{Icons.warning}</div>
               Mark Order as Delayed
             </h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Delay Reason *
                 </label>
                 <textarea
                   value={delayData.delayReason}
                   onChange={(e) => setDelayData({ ...delayData, delayReason: e.target.value })}
                   placeholder="Enter the reason for delay..."
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black placeholder:text-gray-600"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
                   rows={3}
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-semibold text-black mb-2">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
                   New Expected Delivery Date (optional)
                 </label>
                 <input
@@ -1244,9 +1352,9 @@ export default function OrderDetail() {
                   value={delayData.newExpectedDeliveryDate}
                   onChange={(e) => setDelayData({ ...delayData, newExpectedDeliveryDate: e.target.value })}
                   min={getMinDate()}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-black"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                 />
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-900 mt-1">
                   Leave empty to keep current expected date: {order.expectedDeliveryDate ? formatDateShort(order.expectedDeliveryDate) : "Not set"}
                 </p>
               </div>

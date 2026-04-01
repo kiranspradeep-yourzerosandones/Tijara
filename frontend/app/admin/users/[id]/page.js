@@ -474,7 +474,7 @@ export default function UserDetailPage() {
           {/* ═══════════════════════════ LEFT COLUMN ═══════════════════════════ */}
           <div className="xl:col-span-7 space-y-6">
             {/* ── Customer Information Card ── */}
-            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -617,7 +617,7 @@ export default function UserDetailPage() {
             </div>
 
             {/* ── Recent Orders Card ── */}
-            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
@@ -766,7 +766,7 @@ export default function UserDetailPage() {
           <div className="xl:col-span-5 space-y-6">
             <div className="xl:sticky xl:top-24 space-y-6">
               {/* ── Credit Summary Card ── */}
-              <div className="bg-gradient-to-br from-amber-400 to-amber-500 rounded-2xl p-6 text-gray-900 shadow-xl shadow-amber-500/20">
+              <div className="mb-2 bg-gradient-to-br from-amber-400 to-amber-500 rounded-2xl p-6 text-gray-900 shadow-xl shadow-amber-500/20">
                 <h3 className="text-xs font-bold opacity-80 uppercase tracking-wider mb-5">
                   Credit Summary
                 </h3>
@@ -827,7 +827,7 @@ export default function UserDetailPage() {
               </div>
 
               {/* ── Quick Actions Card ── */}
-              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+              <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">

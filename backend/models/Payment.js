@@ -1,106 +1,86 @@
+// D:\yzo_ongoing\Tijara\backend\models\Payment.js
 const mongoose = require("mongoose");
 
 const paymentSchema = new mongoose.Schema({
-  // Reference to order
   order: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order",
-    required: true,
-    index: true
+    required: true
   },
 
-  // Reference to user (customer)
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true,
-    index: true
+    required: true
   },
 
-  // Payment reference number (for tracking)
   paymentNumber: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true // ✅ This already creates an index - NO need for schema.index()
   },
 
-  // Order number snapshot
   orderNumber: {
     type: String,
     required: true
   },
 
-  // Amount paid in this transaction
   amount: {
     type: Number,
     required: true,
     min: [0.01, "Amount must be greater than 0"]
   },
 
-  // Payment method
   method: {
     type: String,
     enum: ["cash", "bank_transfer", "cheque", "upi", "credit_note", "other"],
     required: true
   },
 
-  // Payment method details
   methodDetails: {
-    // For bank transfer
     bankName: String,
     accountNumber: String,
     transactionId: String,
     
-    // For cheque
     chequeNumber: String,
     chequeDate: Date,
     chequeBankName: String,
     
-    // For UPI
     upiId: String,
     upiTransactionId: String,
     
-    // For credit note
     creditNoteNumber: String,
     creditNoteReason: String
   },
 
-  // Payment status
   status: {
     type: String,
     enum: ["pending", "completed", "failed", "cancelled", "refunded"],
-    default: "completed",
-    index: true
+    default: "completed"
   },
 
-  // Payment date (when payment was actually made)
   paymentDate: {
     type: Date,
     required: true,
     default: Date.now
   },
 
-  // Notes
   notes: {
     type: String,
     maxlength: 500
   },
 
-  // Internal notes (admin only)
   internalNotes: {
     type: String,
     maxlength: 1000
   },
 
-  // Who recorded this payment
   recordedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true
   },
 
-  // Verification status (for cheques, etc.)
   isVerified: {
     type: Boolean,
     default: true
@@ -113,10 +93,8 @@ const paymentSchema = new mongoose.Schema({
 
   verifiedAt: Date,
 
-  // Receipt number (if physical receipt given)
   receiptNumber: String,
 
-  // Attachments (receipt images, etc.)
   attachments: [{
     filename: String,
     url: String,
@@ -132,13 +110,15 @@ const paymentSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
+// ============================================================
+// INDEXES - ✅ FIXED: Removed paymentNumber (already has unique: true)
+// ============================================================
 paymentSchema.index({ user: 1, createdAt: -1 });
 paymentSchema.index({ order: 1, createdAt: -1 });
+// paymentSchema.index({ paymentNumber: 1 }); // ❌ REMOVED - duplicate!
 paymentSchema.index({ paymentDate: -1 });
 paymentSchema.index({ status: 1, paymentDate: -1 });
 
-// Static method to generate payment number
 paymentSchema.statics.generatePaymentNumber = async function() {
   const today = new Date();
   const year = today.getFullYear();
@@ -146,7 +126,6 @@ paymentSchema.statics.generatePaymentNumber = async function() {
   const day = String(today.getDate()).padStart(2, '0');
   const datePrefix = `${year}${month}${day}`;
 
-  // Get today's payment count
   const startOfDay = new Date(today.setHours(0, 0, 0, 0));
   const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
@@ -158,7 +137,6 @@ paymentSchema.statics.generatePaymentNumber = async function() {
   return `PAY-${datePrefix}-${sequence}`;
 };
 
-// Static method to get total payments for an order
 paymentSchema.statics.getOrderPayments = async function(orderId) {
   const payments = await this.find({
     order: orderId,
@@ -170,7 +148,6 @@ paymentSchema.statics.getOrderPayments = async function(orderId) {
   return { payments, totalPaid };
 };
 
-// Static method to get user payment summary
 paymentSchema.statics.getUserPaymentSummary = async function(userId) {
   const result = await this.aggregate([
     {

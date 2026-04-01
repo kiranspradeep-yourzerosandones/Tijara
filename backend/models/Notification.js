@@ -1,6 +1,6 @@
+// D:\yzo_ongoing\Tijara\backend\models\Notification.js
 const mongoose = require("mongoose");
 
-// Recipient Schema (for tracking delivery to each user)
 const recipientSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -8,7 +8,6 @@ const recipientSchema = new mongoose.Schema({
     required: true
   },
 
-  // Delivery status per channel
   channels: {
     sms: {
       sent: { type: Boolean, default: false },
@@ -48,7 +47,6 @@ const recipientSchema = new mongoose.Schema({
     }
   },
 
-  // In-app notification status
   isRead: {
     type: Boolean,
     default: false
@@ -57,9 +55,7 @@ const recipientSchema = new mongoose.Schema({
 
 }, { _id: true });
 
-// Main Notification Schema
 const notificationSchema = new mongoose.Schema({
-  // Notification title
   title: {
     type: String,
     required: [true, "Title is required"],
@@ -67,7 +63,6 @@ const notificationSchema = new mongoose.Schema({
     maxlength: 200
   },
 
-  // Notification message/body
   message: {
     type: String,
     required: [true, "Message is required"],
@@ -75,37 +70,33 @@ const notificationSchema = new mongoose.Schema({
     maxlength: 2000
   },
 
-  // Short message (for SMS - max 160 chars)
   shortMessage: {
     type: String,
     trim: true,
     maxlength: 160
   },
 
-  // Notification type
   type: {
     type: String,
     enum: [
-      "order_update",      // Order status changes
-      "payment_reminder",  // Payment due/overdue
-      "payment_received",  // Payment confirmation
-      "promotional",       // Marketing/offers
-      "announcement",      // General announcements
-      "new_product",       // New product launch
-      "system",           // System notifications
-      "custom"            // Admin custom message
+      "order_update",
+      "payment_reminder",
+      "payment_received",
+      "promotional",
+      "announcement",
+      "new_product",
+      "system",
+      "custom"
     ],
     default: "custom"
   },
 
-  // Priority level
   priority: {
     type: String,
     enum: ["low", "normal", "high", "urgent"],
     default: "normal"
   },
 
-  // Channels to send through
   channels: {
     sms: { type: Boolean, default: false },
     email: { type: Boolean, default: false },
@@ -114,34 +105,24 @@ const notificationSchema = new mongoose.Schema({
     inApp: { type: Boolean, default: true }
   },
 
-  // Target audience
   targetType: {
     type: String,
     enum: ["all", "selected", "segment"],
     default: "selected"
   },
 
-  // Segment filters (if targetType is 'segment')
   segmentFilters: {
-    // Filter by city
     cities: [String],
-    // Filter by business type
     businessTypes: [String],
-    // Filter by credit status
     hasPendingPayment: Boolean,
-    // Filter by order history
     hasOrdered: Boolean,
-    // Filter by last order date
     lastOrderDays: Number,
-    // Filter by registration date
     registeredAfter: Date,
     registeredBefore: Date
   },
 
-  // Recipients list
   recipients: [recipientSchema],
 
-  // Reference to related entities
   relatedOrder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order"
@@ -155,29 +136,19 @@ const notificationSchema = new mongoose.Schema({
     ref: "Product"
   },
 
-  // Action URL (for push notifications)
   actionUrl: String,
-
-  // Image URL (for rich notifications)
   imageUrl: String,
 
-  // Notification status
   status: {
     type: String,
     enum: ["draft", "scheduled", "sending", "sent", "partial", "failed", "cancelled"],
     default: "draft"
   },
 
-  // Schedule for future sending
   scheduledAt: Date,
-
-  // Actual send time
   sentAt: Date,
-
-  // Completion time
   completedAt: Date,
 
-  // Statistics
   stats: {
     totalRecipients: { type: Number, default: 0 },
     smsSent: { type: Number, default: 0 },
@@ -197,20 +168,17 @@ const notificationSchema = new mongoose.Schema({
     inAppRead: { type: Number, default: 0 }
   },
 
-  // Created by admin
   createdBy: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Admin",  // ✅ Changed from "User" to "Admin"
-  required: true
-},
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    required: true
+  },
 
-  // Template used (if any)
   template: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "NotificationTemplate"
   },
 
-  // Internal notes
   notes: String
 
 }, {
@@ -219,14 +187,13 @@ const notificationSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
+// ✅ FIXED: Removed duplicate index definitions
 notificationSchema.index({ status: 1, scheduledAt: 1 });
 notificationSchema.index({ createdBy: 1, createdAt: -1 });
 notificationSchema.index({ type: 1, createdAt: -1 });
 notificationSchema.index({ "recipients.user": 1 });
 notificationSchema.index({ "recipients.isRead": 1 });
 
-// Virtual for delivery rate
 notificationSchema.virtual('deliveryRate').get(function() {
   if (this.stats.totalRecipients === 0) return 0;
   const totalDelivered = this.stats.smsDelivered + this.stats.emailDelivered + 
@@ -237,7 +204,6 @@ notificationSchema.virtual('deliveryRate').get(function() {
   return Math.round((totalDelivered / totalSent) * 100);
 });
 
-// Method to update stats
 notificationSchema.methods.updateStats = function() {
   const stats = {
     totalRecipients: this.recipients.length,
@@ -249,29 +215,24 @@ notificationSchema.methods.updateStats = function() {
   };
 
   for (const recipient of this.recipients) {
-    // SMS
     if (recipient.channels.sms.sent) stats.smsSent++;
     if (recipient.channels.sms.delivered) stats.smsDelivered++;
     if (recipient.channels.sms.failed) stats.smsFailed++;
     
-    // Email
     if (recipient.channels.email.sent) stats.emailSent++;
     if (recipient.channels.email.delivered) stats.emailDelivered++;
     if (recipient.channels.email.failed) stats.emailFailed++;
     
-    // WhatsApp
     if (recipient.channels.whatsapp.sent) stats.whatsappSent++;
     if (recipient.channels.whatsapp.delivered) stats.whatsappDelivered++;
     if (recipient.channels.whatsapp.read) stats.whatsappRead++;
     if (recipient.channels.whatsapp.failed) stats.whatsappFailed++;
     
-    // Push
     if (recipient.channels.push.sent) stats.pushSent++;
     if (recipient.channels.push.delivered) stats.pushDelivered++;
     if (recipient.channels.push.clicked) stats.pushClicked++;
     if (recipient.channels.push.failed) stats.pushFailed++;
     
-    // In-app
     if (recipient.isRead) stats.inAppRead++;
   }
 

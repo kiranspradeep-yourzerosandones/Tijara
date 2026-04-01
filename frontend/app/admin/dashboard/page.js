@@ -3,16 +3,28 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { productAPI, categoryAPI, userAPI, getAuthHeaders } from "@/lib/api";
+import { getImageUrl, ImagePlaceholder } from "@/lib/imageHelper";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalCategories: 0,
     pendingOrders: 0,
-    completedOrders: 0
+    completedOrders: 0,
+    totalOrders: 0,
+    totalCustomers: 0,
+    totalRevenue: 0,
+    pendingAmount: 0,
+    todayOrders: 0,
+    newCustomers: 0
   });
   const [recentProducts, setRecentProducts] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchDashboardData();
@@ -20,34 +32,150 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/products");
-      const data = await res.json();
-      
-      const products = Array.isArray(data?.products) 
-        ? data.products 
-        : Array.isArray(data) 
-        ? data 
-        : [];
-      
-      const categories = products
-        .map(p => p?.category)
-        .filter(cat => cat && cat.trim() !== "");
-      
-      const uniqueCategories = [...new Set(categories)];
-      
+      setLoading(true);
+      setError("");
+
+      // Fetch all data in parallel
+      const [productsRes, categoriesRes, ordersRes, customersRes] = await Promise.allSettled([
+        productAPI.getAll({ limit: 5, sort: "-createdAt" }),
+        categoryAPI.getAll(),
+        fetch(`${API_URL}/admin/orders?limit=500`, { headers: getAuthHeaders() }).then(r => r.json()),
+        userAPI.getAll({ limit: 1000 })
+      ]);
+
+      // ========== PROCESS PRODUCTS ==========
+      let products = [];
+      let totalProducts = 0;
+      if (productsRes.status === "fulfilled" && productsRes.value?.success) {
+        const data = productsRes.value;
+        products = data.data?.products || data.products || [];
+        totalProducts = data.data?.total || data.total || products.length;
+      }
+
+      // ========== PROCESS CATEGORIES ==========
+      let totalCategories = 0;
+      if (categoriesRes.status === "fulfilled" && categoriesRes.value?.success) {
+        const data = categoriesRes.value;
+        const categories = data.categories || data.data?.categories || [];
+        totalCategories = Array.isArray(categories) ? categories.length : 0;
+      }
+
+      // ========== PROCESS ORDERS ==========
+      let pendingOrders = 0;
+      let completedOrders = 0;
+      let totalOrders = 0;
+      let totalRevenue = 0;
+      let pendingAmount = 0;
+      let todayOrders = 0;
+      let recentOrdersList = [];
+
+      if (ordersRes.status === "fulfilled" && ordersRes.value?.success) {
+        const ordersData = ordersRes.value;
+        const orders = ordersData.data?.orders || ordersData.orders || [];
+        
+        if (Array.isArray(orders)) {
+          // Filter out cancelled for total count display (optional)
+          const activeOrders = orders.filter(o => o.status !== "cancelled");
+          totalOrders = activeOrders.length;
+          recentOrdersList = orders.slice(0, 5);
+
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          orders.forEach(order => {
+            const status = (order.status || "").toLowerCase().trim();
+            
+            // Skip cancelled orders for calculations
+            if (status === "cancelled") return;
+
+            const orderDate = new Date(order.createdAt);
+            orderDate.setHours(0, 0, 0, 0);
+
+            // Today's orders
+            if (orderDate.getTime() === today.getTime()) {
+              todayOrders++;
+            }
+
+            // Pending orders
+            const pendingStatuses = ["pending", "confirmed", "processing", "shipped", "out_for_delivery", "out-for-delivery"];
+            if (pendingStatuses.includes(status)) {
+              pendingOrders++;
+            }
+
+            // Completed/Delivered orders
+            if (status === "delivered" || status === "completed" || status === "complete") {
+              completedOrders++;
+            }
+
+            // Revenue calculation
+            const orderTotal = order.totalAmount || order.total || order.grandTotal || 0;
+            const amountPaid = order.payment?.amountPaid || 0;
+
+            if (order.paymentStatus === "paid" || status === "delivered" || status === "completed") {
+              totalRevenue += orderTotal;
+            }
+
+            // Pending amount
+            if ((order.paymentStatus === "pending" || order.paymentStatus === "partial") && status !== "cancelled") {
+              pendingAmount += (orderTotal - amountPaid);
+            }
+          });
+        }
+      }
+
+      // ========== PROCESS CUSTOMERS ==========
+      let totalCustomers = 0;
+      let newCustomers = 0;
+
+      if (customersRes.status === "fulfilled" && customersRes.value?.success) {
+        const data = customersRes.value;
+        const customers = data.data?.customers || data.customers || [];
+        
+        if (Array.isArray(customers)) {
+          totalCustomers = customers.length;
+
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          newCustomers = customers.filter(c => {
+            const joinDate = new Date(c.createdAt);
+            joinDate.setHours(0, 0, 0, 0);
+            return joinDate.getTime() === today.getTime();
+          }).length;
+        }
+      }
+
+      // Set all stats
       setStats({
-        totalProducts: products.length,
-        totalCategories: uniqueCategories.length,
-        pendingOrders: 0,
-        completedOrders: 0
+        totalProducts,
+        totalCategories,
+        pendingOrders,
+        completedOrders,
+        totalOrders,
+        totalCustomers,
+        totalRevenue,
+        pendingAmount,
+        todayOrders,
+        newCustomers
       });
-      
-      setRecentProducts(products.slice(0, 5));
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
+
+      setRecentProducts(Array.isArray(products) ? products.slice(0, 5) : []);
+      setRecentOrders(recentOrdersList);
+
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+      setError(err.message || "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 0
+    }).format(price || 0);
   };
 
   const statCards = [
@@ -85,10 +213,10 @@ export default function Dashboard() {
       ),
       bgColor: "bg-[#ffe494]",
       iconBg: "bg-orange-300/50",
-      link: "/admin/orders"
+      link: "/admin/orders?status=pending"
     },
     {
-      title: "Completed",
+      title: "Delivered",
       value: stats.completedOrders,
       icon: (
         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +225,7 @@ export default function Dashboard() {
       ),
       bgColor: "bg-[#ffe494]",
       iconBg: "bg-emerald-300/50",
-      link: "/admin/orders"
+      link: "/admin/orders?status=delivered"
     }
   ];
 
@@ -124,7 +252,7 @@ export default function Dashboard() {
       ),
       link: "/admin/categories",
       color: "bg-blue-50 hover:bg-blue-100 border-blue-200",
-      iconColor: "bg-blue-400 text-blac"
+      iconColor: "bg-blue-400 text-white"
     },
     {
       title: "View Orders",
@@ -139,30 +267,74 @@ export default function Dashboard() {
       iconColor: "bg-purple-400 text-white"
     },
     {
-      title: "Manage Users",
-      description: "View all customers",
+      title: "Pending Credits",
+      description: "View outstanding payments",
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
       ),
-      link: "/admin/users",
-      color: "bg-green-50 hover:bg-green-100 border-green-200",
-      iconColor: "bg-green-400 text-white"
+      link: "/admin/pending-credits",
+      color: "bg-red-50 hover:bg-red-100 border-red-200",
+      iconColor: "bg-red-400 text-white"
     }
   ];
 
+  const getStatusBadge = (status) => {
+    const s = (status || "").toLowerCase();
+    const config = {
+      pending: "bg-yellow-50 text-yellow-700 border-yellow-200",
+      confirmed: "bg-blue-50 text-blue-700 border-blue-200",
+      processing: "bg-purple-50 text-purple-700 border-purple-200",
+      shipped: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      "out_for_delivery": "bg-cyan-50 text-cyan-700 border-cyan-200",
+      "out-for-delivery": "bg-cyan-50 text-cyan-700 border-cyan-200",
+      delivered: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      cancelled: "bg-red-50 text-red-700 border-red-200"
+    };
+    return config[s] || "bg-gray-50 text-gray-700 border-gray-200";
+  };
+
   return (
     <div className="min-h-screen">
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200/60 text-red-800 flex items-center gap-3 text-sm rounded-2xl">
+          <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+            <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <span className="flex-1 font-medium">{error}</span>
+          <button onClick={() => setError("")} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
-      <div className="mb-8 ">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 mt-1">Welcome back! Here's what's happening today.</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-500 mt-1">Welcome back! Here's what's happening today.</p>
+        </div>
+        <button
+          onClick={fetchDashboardData}
+          disabled={loading}
+          className="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
+          title="Refresh Data"
+        >
+          <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
       </div>
 
       {/* Welcome Banner */}
       <div className="relative overflow-hidden bg-[#ffe494] rounded-2xl sm:rounded-3xl p-6 sm:p-8 mb-8">
-        {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 right-0 w-40 h-40 bg-amber-400 rounded-full blur-3xl"></div>
           <div className="absolute bottom-0 left-0 w-40 h-40 bg-amber-400 rounded-full blur-3xl"></div>
@@ -178,7 +350,10 @@ export default function Dashboard() {
                 Welcome back, Admin! 👋
               </h2>
               <p className="text-gray-700 mt-1 text-sm sm:text-base">
-                Manage your products and track orders from here.
+                {stats.todayOrders > 0 
+                  ? `You have ${stats.todayOrders} new order${stats.todayOrders > 1 ? 's' : ''} today!`
+                  : "Manage your products and track orders from here."
+                }
               </p>
             </div>
           </div>
@@ -195,8 +370,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+      {/* Main Stats Grid - 4 Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
         {statCards.map((card, index) => (
           <Link key={index} href={card.link} className="group">
             <div className={`${card.bgColor} rounded-2xl p-5 sm:p-6 text-black transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}>
@@ -220,6 +395,136 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Secondary Stats Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Total Orders */}
+        <Link href="/admin/orders" className="group">
+          <div className="bg-white border border-purple-200 rounded-xl p-4 transition-all hover:shadow-md hover:border-purple-300">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-100 text-purple-600 p-2.5 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs font-medium">Total Orders</p>
+                <p className="text-xl font-bold text-purple-700">
+                  {loading ? <span className="inline-block w-8 h-6 bg-gray-100 animate-pulse rounded"></span> : stats.totalOrders}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* Total Customers */}
+        <Link href="/admin/users" className="group">
+          <div className="bg-white border border-green-200 rounded-xl p-4 transition-all hover:shadow-md hover:border-green-300">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-100 text-green-600 p-2.5 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs font-medium">Total Customers</p>
+                <p className="text-xl font-bold text-green-700">
+                  {loading ? <span className="inline-block w-8 h-6 bg-gray-100 animate-pulse rounded"></span> : stats.totalCustomers}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* Today's Orders */}
+        <Link href="/admin/orders" className="group">
+          <div className="bg-white border border-blue-200 rounded-xl p-4 transition-all hover:shadow-md hover:border-blue-300">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-100 text-blue-600 p-2.5 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs font-medium">Today's Orders</p>
+                <p className="text-xl font-bold text-blue-700">
+                  {loading ? <span className="inline-block w-8 h-6 bg-gray-100 animate-pulse rounded"></span> : stats.todayOrders}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* New Customers */}
+        <Link href="/admin/users" className="group">
+          <div className="bg-white border border-indigo-200 rounded-xl p-4 transition-all hover:shadow-md hover:border-indigo-300">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-100 text-indigo-600 p-2.5 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs font-medium">New Customers</p>
+                <p className="text-xl font-bold text-indigo-700">
+                  {loading ? <span className="inline-block w-8 h-6 bg-gray-100 animate-pulse rounded"></span> : stats.newCustomers}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Finance Stats Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        {/* Total Revenue */}
+        <Link href="/admin/payments" className="group">
+          <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-5 transition-all hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-emerald-100 text-emerald-600 p-3 rounded-xl">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-700">
+                    {loading ? <span className="inline-block w-28 h-8 bg-emerald-100 animate-pulse rounded"></span> : formatPrice(stats.totalRevenue)}
+                  </p>
+                </div>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </Link>
+
+        {/* Pending Amount */}
+        <Link href="/admin/pending-credits" className="group">
+          <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-5 transition-all hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-red-100 text-red-600 p-3 rounded-xl">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm font-medium">Pending Amount</p>
+                  <p className="text-2xl font-bold text-red-700">
+                    {loading ? <span className="inline-block w-28 h-8 bg-red-100 animate-pulse rounded"></span> : formatPrice(stats.pendingAmount)}
+                  </p>
+                </div>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 group-hover:text-red-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </Link>
+      </div>
+
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
         
@@ -231,7 +536,7 @@ export default function Dashboard() {
               <p className="text-gray-500 text-sm mt-1">Common tasks at a glance</p>
             </div>
             
-            <div className="p-4  sm:p-5 space-y-3">
+            <div className="p-4 sm:p-5 space-y-3">
               {quickActions.map((action, index) => (
                 <Link key={index} href={action.link}>
                   <div className={`flex items-center mb-2 gap-4 p-4 rounded-xl border ${action.color} transition-all duration-200 group cursor-pointer`}>
@@ -252,9 +557,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Products */}
-        <div className="xl:col-span-2">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden h-full">
+        {/* Recent Products & Orders */}
+        <div className="xl:col-span-2 space-y-6">
+          {/* Recent Products */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-5 sm:p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Recent Products</h3>
@@ -306,103 +612,163 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {recentProducts.map((product, index) => (
+                  {recentProducts.map((product) => (
                     <Link
                       key={product._id}
                       href={`/admin/products/view/${product.slug || product._id}`}
                       className="flex items-center gap-4 p-3 sm:p-4 rounded-xl hover:bg-gray-50 transition-all group"
                     >
-                      {/* Product Image */}
                       <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                         {product.images && product.images[0] ? (
                           <img
-                            src={`http://localhost:5000${product.images[0]}`}
+                            src={getImageUrl(product.images[0])}
                             alt={product.title || "Product"}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                            onError={(e) => { e.target.style.display = 'none'; }}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-300">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
+                            <ImagePlaceholder className="w-6 h-6" />
                           </div>
                         )}
                       </div>
                       
-                      {/* Product Info */}
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-gray-900 truncate text-sm sm:text-base group-hover:text-amber-600 transition-colors">
                           {product.title || "Untitled Product"}
                         </h4>
                         <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                          {product.category || "Uncategorized"}
+                          {product.category?.name || product.category || "Uncategorized"}
                         </p>
                       </div>
                       
-                      {/* Status Badge */}
+                      <span className="text-sm font-semibold text-gray-900">
+                        {formatPrice(product.price || product.sellingPrice)}
+                      </span>
+                      
                       <span className={`hidden sm:inline-flex px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
-                        product.isActive 
+                        product.isActive !== false
                           ? "bg-emerald-50 text-emerald-600 border border-emerald-200" 
                           : "bg-red-50 text-red-600 border border-red-200"
                       }`}>
-                        {product.isActive ? "Active" : "Inactive"}
+                        {product.isActive !== false ? "Active" : "Inactive"}
                       </span>
-                      
-                      {/* Mobile Status Dot */}
-                      <span className={`sm:hidden w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                        product.isActive ? "bg-emerald-500" : "bg-red-500"
-                      }`}></span>
                     </Link>
                   ))}
                 </div>
               )}
             </div>
           </div>
+
+          {/* Recent Orders */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-5 sm:p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Recent Orders</h3>
+                <p className="text-gray-500 text-sm mt-1">Latest customer orders</p>
+              </div>
+              <Link 
+                href="/admin/orders" 
+                className="text-sm text-amber-600 hover:text-amber-700 font-medium inline-flex items-center gap-1"
+              >
+                View All
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+            
+            <div className="divide-y divide-gray-100">
+              {loading ? (
+                <div className="p-4 space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 animate-pulse">
+                      <div className="w-10 h-10 bg-gray-100 rounded-xl"></div>
+                      <div className="flex-1">
+                        <div className="w-24 h-4 bg-gray-100 rounded mb-2"></div>
+                        <div className="w-32 h-3 bg-gray-100 rounded"></div>
+                      </div>
+                      <div className="w-20 h-6 bg-gray-100 rounded-full"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : recentOrders.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <h4 className="text-gray-900 font-semibold">No orders yet</h4>
+                  <p className="text-gray-500 text-sm mt-1">Orders will appear here</p>
+                </div>
+              ) : (
+                recentOrders.map((order) => (
+                  <Link
+                    key={order._id}
+                    href={`/admin/orders/${order._id}`}
+                    className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-all"
+                  >
+                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-gray-900 text-sm">{order.orderNumber}</p>
+                        <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full border capitalize ${getStatusBadge(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {order.customerSnapshot?.name || order.user?.name || "Customer"} • {new Date(order.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-900 text-sm">{formatPrice(order.totalAmount)}</p>
+                      <p className={`text-xs ${order.paymentStatus === 'paid' ? 'text-emerald-600' : order.paymentStatus === 'partial' ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {order.paymentStatus === 'paid' ? 'Paid' : order.paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Info Banner */}
-      <div className="mt-8 bg-[#ffe494] rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <svg className="absolute right-0 top-0 h-full" viewBox="0 0 400 400" fill="none">
-            <circle cx="300" cy="200" r="200" fill="white"/>
-          </svg>
-        </div>
-        
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
-          <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-            <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-black font-bold text-lg sm:text-xl">Mobile App Coming Soon! 📱</h3>
-            <p className="text-gray-700 mt-1 text-sm sm:text-base">
-              Your customers will be able to browse and order products directly from their phones.
-            </p>
-          </div>
-          <button className="bg-white hover:bg-blue-50 text-blue-600 px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors">
-            Learn More
-          </button>
-        </div>
-      </div>
 
-      {/* Footer Stats */}
-      <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* Footer Stats Summary */}
+      <div className="mt-8 grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div className="bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">0</p>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1">Orders Today</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+            {loading ? <span className="inline-block w-10 h-7 bg-gray-100 animate-pulse rounded"></span> : stats.totalProducts}
+          </p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">Products</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">₹0</p>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1">Revenue Today</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+            {loading ? <span className="inline-block w-10 h-7 bg-gray-100 animate-pulse rounded"></span> : stats.totalOrders}
+          </p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">Orders</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">0</p>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1">New Customers</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+            {loading ? <span className="inline-block w-10 h-7 bg-gray-100 animate-pulse rounded"></span> : stats.totalCustomers}
+          </p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">Customers</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-100 text-center">
+          <p className="text-2xl sm:text-3xl font-bold text-emerald-600">
+            {loading ? <span className="inline-block w-16 h-7 bg-gray-100 animate-pulse rounded"></span> : formatPrice(stats.totalRevenue)}
+          </p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">Revenue</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 border border-gray-100 text-center col-span-2 sm:col-span-1">
           <p className="text-2xl sm:text-3xl font-bold text-emerald-600">100%</p>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">System Health</p>
         </div>

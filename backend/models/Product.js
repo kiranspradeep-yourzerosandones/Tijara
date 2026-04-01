@@ -17,7 +17,7 @@ const productSchema = new mongoose.Schema({
 
   slug: {
     type: String,
-    unique: true
+    unique: true // ✅ This already creates an index
   },
 
   brand: String,
@@ -67,15 +67,11 @@ const productSchema = new mongoose.Schema({
   },
 
   // ========== INVENTORY ==========
-  // Stock status toggle
   inStock: {
     type: Boolean,
     default: true
   },
 
-  // Track stock quantity (optional)
-  // If null/undefined = unlimited stock (just use inStock toggle)
-  // If number = limited stock, track quantity
   trackQuantity: {
     type: Boolean,
     default: false
@@ -87,7 +83,6 @@ const productSchema = new mongoose.Schema({
     min: 0
   },
 
-  // Low stock alert threshold
   lowStockThreshold: {
     type: Number,
     default: 10
@@ -119,8 +114,9 @@ const productSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-// Indexes
-productSchema.index({ slug: 1 });
+// ============================================================
+// INDEXES - ✅ FIXED: Removed slug (already indexed by unique: true)
+// ============================================================
 productSchema.index({ category: 1 });
 productSchema.index({ isActive: 1 });
 productSchema.index({ price: 1 });
@@ -167,7 +163,7 @@ productSchema.virtual('stockStatus').get(function() {
 // Virtual for available quantity (for cart/order validation)
 productSchema.virtual('availableQuantity').get(function() {
   if (!this.inStock) return 0;
-  if (!this.trackQuantity) return this.maxOrderQuantity || 9999; // Unlimited
+  if (!this.trackQuantity) return this.maxOrderQuantity || 9999;
   return this.stockQuantity || 0;
 });
 
@@ -188,7 +184,6 @@ productSchema.methods.decrementStock = async function(quantity) {
 
   this.stockQuantity -= quantity;
   
-  // Auto update inStock status
   if (this.stockQuantity <= 0) {
     this.inStock = false;
   }

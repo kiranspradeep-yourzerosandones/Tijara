@@ -4,9 +4,6 @@ const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema({
-  // ============================================================
-  // BASIC INFO
-  // ============================================================
   name: {
     type: String,
     required: [true, "Name is required"],
@@ -19,8 +16,7 @@ const userSchema = new mongoose.Schema({
     required: [true, "Phone number is required"],
     unique: true,
     trim: true,
-    match: [/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"],
-    index: true
+    match: [/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"]
   },
 
   email: {
@@ -38,9 +34,6 @@ const userSchema = new mongoose.Schema({
     select: false
   },
 
-  // ============================================================
-  // VERIFICATION
-  // ============================================================
   isPhoneVerified: {
     type: Boolean,
     default: false
@@ -53,13 +46,9 @@ const userSchema = new mongoose.Schema({
 
   isActive: {
     type: Boolean,
-    default: true,
-    index: true
+    default: true
   },
 
-  // ============================================================
-  // PASSWORD RESET (Email-based)
-  // ============================================================
   passwordResetToken: {
     type: String,
     select: false
@@ -70,10 +59,6 @@ const userSchema = new mongoose.Schema({
     select: false
   },
 
-  // ============================================================
-  // OTP FIELDS (SMS-based)
-  // ============================================================
-  // Login OTP
   loginVerificationId: String,
   loginOtpExpires: Date,
   loginOtpAttempts: { 
@@ -81,7 +66,6 @@ const userSchema = new mongoose.Schema({
     default: 0 
   },
 
-  // Password Reset OTP
   resetVerificationId: String,
   resetOtpExpires: Date,
   resetOtpAttempts: { 
@@ -89,7 +73,6 @@ const userSchema = new mongoose.Schema({
     default: 0 
   },
 
-  // OTP Lockout
   otpCycleFailures: { 
     type: Number, 
     default: 0 
@@ -97,9 +80,6 @@ const userSchema = new mongoose.Schema({
   
   otpLockedUntil: Date,
 
-  // ============================================================
-  // BUSINESS DETAILS
-  // ============================================================
   businessName: { 
     type: String, 
     trim: true 
@@ -117,9 +97,6 @@ const userSchema = new mongoose.Schema({
     match: [/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, "Please enter a valid GST number"]
   },
 
-  // ============================================================
-  // CREDIT & PAYMENT
-  // ============================================================
   creditLimit: { 
     type: Number, 
     default: 0,
@@ -135,8 +112,7 @@ const userSchema = new mongoose.Schema({
   pendingAmount: { 
     type: Number, 
     default: 0,
-    min: 0,
-    index: true
+    min: 0
   },
   
   totalPaid: { 
@@ -154,11 +130,9 @@ const userSchema = new mongoose.Schema({
     max: 365
   },
 
-  // Credit Block
   isCreditBlocked: { 
     type: Boolean, 
-    default: false,
-    index: true
+    default: false
   },
   
   creditBlockedReason: String,
@@ -170,9 +144,6 @@ const userSchema = new mongoose.Schema({
     ref: "Admin"
   },
 
-  // ============================================================
-  // PROFILE
-  // ============================================================
   profileImage: String,
   
   address: {
@@ -190,9 +161,6 @@ const userSchema = new mongoose.Schema({
     }
   },
 
-  // ============================================================
-  // MISC
-  // ============================================================
   fcmToken: String,
   
   lastLoginAt: Date,
@@ -217,8 +185,6 @@ const userSchema = new mongoose.Schema({
 // ============================================================
 // INDEXES
 // ============================================================
-userSchema.index({ phone: 1 });
-userSchema.index({ email: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ isCreditBlocked: 1 });
 userSchema.index({ pendingAmount: 1 });
@@ -228,79 +194,57 @@ userSchema.index({ createdAt: -1 });
 // VIRTUALS
 // ============================================================
 
-/**
- * Available Credit = Credit Limit - Pending Amount
- * Returns 0 if credit is blocked
- */
 userSchema.virtual('availableCredit').get(function() {
   if (this.isCreditBlocked) return 0;
   return Math.max(0, (this.creditLimit || 0) - (this.pendingAmount || 0));
 });
 
-/**
- * Credit Utilization Percentage
- * Returns percentage of credit limit used
- */
 userSchema.virtual('creditUtilization').get(function() {
   if (!this.creditLimit || this.creditLimit === 0) return 0;
   return Math.round(((this.pendingAmount || 0) / this.creditLimit) * 100);
 });
 
-/**
- * Full Name (for future use if we split first/last name)
- */
 userSchema.virtual('fullName').get(function() {
   return this.name;
 });
 
 // ============================================================
-// PRE-SAVE HOOKS
+// PRE-SAVE HOOKS - ✅ FIXED
 // ============================================================
 
 /**
  * Hash password before saving
  */
-userSchema.pre("save", async function(next) {
-  // Only hash if password is modified
+userSchema.pre("save", async function() {
   if (!this.isModified("password")) {
-    return next();
+    return;
   }
 
   try {
-    // Generate salt and hash password
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
     console.log(`✅ Password hashed for user: ${this.phone}`);
-    next();
   } catch (error) {
     console.error("❌ Password hashing error:", error);
-    next(error);
+    throw error;
   }
 });
 
 /**
  * Validate credit limit vs pending amount
  */
-userSchema.pre("save", function(next) {
-  // Ensure pending amount doesn't exceed credit limit (unless manually set)
+userSchema.pre("save", function() {
   if (this.isModified("pendingAmount") || this.isModified("creditLimit")) {
     if (this.pendingAmount > this.creditLimit && this.creditLimit > 0) {
       console.warn(`⚠️ Pending amount (${this.pendingAmount}) exceeds credit limit (${this.creditLimit}) for user: ${this.phone}`);
-      // Don't block - just log warning
     }
   }
-  next();
 });
 
 // ============================================================
 // INSTANCE METHODS
 // ============================================================
 
-/**
- * Compare password for login
- * @param {string} candidatePassword - Plain text password
- * @returns {Promise<boolean>} - True if password matches
- */
 userSchema.methods.comparePassword = async function(candidatePassword) {
   try {
     return await bcrypt.compare(candidatePassword, this.password);
@@ -310,31 +254,19 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
-/**
- * Generate password reset token (for email-based reset)
- * @returns {string} - Plain reset token (send via email)
- */
 userSchema.methods.generatePasswordResetToken = function() {
-  // Generate random token
   const resetToken = crypto.randomBytes(32).toString('hex');
   
-  // Hash token and save to database
   this.passwordResetToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
   
-  // Set expiry (1 hour)
   this.passwordResetExpires = Date.now() + 60 * 60 * 1000;
   
-  // Return plain token (to send via email)
   return resetToken;
 };
 
-/**
- * Get public profile (safe to send to frontend)
- * @returns {Object} - Public user data
- */
 userSchema.methods.getPublicProfile = function() {
   return {
     id: this._id,
@@ -345,49 +277,40 @@ userSchema.methods.getPublicProfile = function() {
     isEmailVerified: this.isEmailVerified,
     isActive: this.isActive,
     
-    // Business Info
     businessName: this.businessName,
     businessType: this.businessType,
     gstNumber: this.gstNumber,
     
-    // Credit Info (includes virtuals)
     creditLimit: this.creditLimit || 0,
     pendingAmount: this.pendingAmount || 0,
     totalPaid: this.totalPaid || 0,
     totalCredit: this.totalCredit || 0,
-    availableCredit: this.availableCredit, // Virtual
-    creditUtilization: this.creditUtilization, // Virtual
+    availableCredit: this.availableCredit,
+    creditUtilization: this.creditUtilization,
     isCreditBlocked: this.isCreditBlocked || false,
     creditBlockedReason: this.creditBlockedReason,
     paymentTerms: this.paymentTerms || 30,
     lastPaymentDate: this.lastPaymentDate,
     
-    // Profile
     profileImage: this.profileImage,
     address: this.address,
     
-    // Timestamps
     lastLoginAt: this.lastLoginAt,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
     
-    // Role
     role: this.role || "customer"
   };
 };
 
-/**
- * Get credit summary
- * @returns {Object} - Credit information
- */
 userSchema.methods.getCreditSummary = function() {
   return {
     creditLimit: this.creditLimit || 0,
     pendingAmount: this.pendingAmount || 0,
     totalPaid: this.totalPaid || 0,
     totalCredit: this.totalCredit || 0,
-    availableCredit: this.availableCredit, // Virtual
-    creditUtilization: this.creditUtilization, // Virtual
+    availableCredit: this.availableCredit,
+    creditUtilization: this.creditUtilization,
     isCreditBlocked: this.isCreditBlocked || false,
     creditBlockedReason: this.creditBlockedReason,
     creditBlockedAt: this.creditBlockedAt,
@@ -396,37 +319,23 @@ userSchema.methods.getCreditSummary = function() {
   };
 };
 
-/**
- * Clear login OTP fields
- */
 userSchema.methods.clearLoginOtp = function() {
   this.loginVerificationId = undefined;
   this.loginOtpExpires = undefined;
   this.loginOtpAttempts = 0;
 };
 
-/**
- * Clear password reset OTP fields
- */
 userSchema.methods.clearResetOtp = function() {
   this.resetVerificationId = undefined;
   this.resetOtpExpires = undefined;
   this.resetOtpAttempts = 0;
 };
 
-/**
- * Clear password reset token (email-based)
- */
 userSchema.methods.clearPasswordReset = function() {
   this.passwordResetToken = undefined;
   this.passwordResetExpires = undefined;
 };
 
-/**
- * Check if user can place order
- * @param {number} orderAmount - Order total amount
- * @returns {Object} - { allowed: boolean, reason?: string }
- */
 userSchema.methods.canPlaceOrder = function(orderAmount) {
   if (!this.isActive) {
     return { 
@@ -452,20 +361,12 @@ userSchema.methods.canPlaceOrder = function(orderAmount) {
   return { allowed: true };
 };
 
-/**
- * Update credit after order
- * @param {number} amount - Order amount to add to pending
- */
 userSchema.methods.addToPending = async function(amount) {
   this.pendingAmount = (this.pendingAmount || 0) + amount;
   this.totalCredit = (this.totalCredit || 0) + amount;
   return this.save();
 };
 
-/**
- * Update credit after payment
- * @param {number} amount - Payment amount to deduct from pending
- */
 userSchema.methods.recordPayment = async function(amount) {
   this.pendingAmount = Math.max(0, (this.pendingAmount || 0) - amount);
   this.totalPaid = (this.totalPaid || 0) + amount;
@@ -473,10 +374,6 @@ userSchema.methods.recordPayment = async function(amount) {
   return this.save();
 };
 
-/**
- * Check if account is locked due to OTP failures
- * @returns {Object} - { locked: boolean, minutesRemaining?: number }
- */
 userSchema.methods.isOtpLocked = function() {
   if (!this.otpLockedUntil) return { locked: false };
   
@@ -498,29 +395,18 @@ userSchema.methods.isOtpLocked = function() {
 // STATIC METHODS
 // ============================================================
 
-/**
- * Verify password reset token
- * @param {string} token - Plain reset token from email
- * @returns {Promise<User|null>} - User if token is valid
- */
 userSchema.statics.verifyPasswordResetToken = async function(token) {
-  // Hash the token to compare with stored hash
   const hashedToken = crypto
     .createHash('sha256')
     .update(token)
     .digest('hex');
 
-  // Find user with valid token
   return this.findOne({
     passwordResetToken: hashedToken,
     passwordResetExpires: { $gt: Date.now() }
   }).select('+passwordResetToken +passwordResetExpires');
 };
 
-/**
- * Find active users with pending credit
- * @returns {Promise<Array>} - Users with pending amount > 0
- */
 userSchema.statics.findUsersWithPendingCredit = function() {
   return this.find({
     isActive: true,
@@ -528,11 +414,6 @@ userSchema.statics.findUsersWithPendingCredit = function() {
   }).select('name phone businessName pendingAmount creditLimit');
 };
 
-/**
- * Find users with overdue payments
- * @param {number} days - Number of days overdue
- * @returns {Promise<Array>} - Users with overdue payments
- */
 userSchema.statics.findOverdueUsers = function(days = 30) {
   const overdueDate = new Date();
   overdueDate.setDate(overdueDate.getDate() - days);
@@ -544,10 +425,6 @@ userSchema.statics.findOverdueUsers = function(days = 30) {
   }).select('name phone businessName pendingAmount lastPaymentDate paymentTerms');
 };
 
-/**
- * Get credit statistics
- * @returns {Promise<Object>} - Aggregated credit stats
- */
 userSchema.statics.getCreditStats = async function() {
   const stats = await this.aggregate([
     {
@@ -579,9 +456,5 @@ userSchema.statics.getCreditStats = async function() {
     blockedUsers: 0
   };
 };
-
-// ============================================================
-// EXPORT MODEL
-// ============================================================
 
 module.exports = mongoose.model("User", userSchema);

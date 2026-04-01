@@ -123,7 +123,7 @@ export default function AddUserPage() {
   };
 
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-screen ">
       {/* ─── Sticky Header ─── */}
       <div className="sticky top-0 z-30 -mx-6 px-6 bg-white/80 backdrop-blur-xl border-b border-gray-200/80">
         <div className="flex items-center justify-between py-4 max-w-[1600px] mx-auto">
@@ -148,7 +148,7 @@ export default function AddUserPage() {
               </svg>
             </Link>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0">
                 <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">
                   Add Customer
                 </h1>
@@ -306,9 +306,9 @@ export default function AddUserPage() {
       <form onSubmit={handleSubmit} className="mt-6 pb-6 max-w-[1600px] mx-auto">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
           {/* ═══════════════════════════ LEFT COLUMN ═══════════════════════════ */}
-          <div className="xl:col-span-7 space-y-6">
+          <div className="xl:col-span-7 space-y-6 ">
             {/* ── Profile Photo Card ── */}
-            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border mb-2 border-gray-200/80 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
@@ -411,7 +411,7 @@ export default function AddUserPage() {
             </div>
 
             {/* ── Basic Information Card ── */}
-            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -527,7 +527,7 @@ export default function AddUserPage() {
             </div>
 
             {/* ── Business Information Card ── */}
-            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
@@ -618,7 +618,7 @@ export default function AddUserPage() {
           <div className="xl:col-span-5 space-y-6">
             <div className="xl:sticky xl:top-24 space-y-6">
               {/* ── Credit Settings Card ── */}
-              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+              <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -696,7 +696,7 @@ export default function AddUserPage() {
               </div>
 
               {/* ── Admin Notes Card ── */}
-              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+              <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
