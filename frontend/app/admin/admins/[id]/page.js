@@ -345,7 +345,7 @@ export default function EditAdminPage() {
                 <div className="p-6">
                   <label className={`flex items-center justify-between py-4 px-5 rounded-xl cursor-pointer transition-all duration-200 border ${
                     formData.isActive ? "bg-emerald-50/50 border-emerald-200/60 hover:bg-emerald-50" : "bg-red-50/50 border-red-200/60 hover:bg-red-50"
-                  } ${formData._id === currentAdmin?._id ? "opacity-60 cursor-not-allowed" : ""}`}>
+                  } ${formData.id === currentAdmin?.id ? "opacity-60 cursor-not-allowed" : ""}`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-3 h-3 rounded-full ring-4 transition-all duration-200 ${formData.isActive ? "bg-emerald-500 ring-emerald-100" : "bg-red-500 ring-red-100"}`} />
                       <div>
@@ -354,11 +354,11 @@ export default function EditAdminPage() {
                       </div>
                     </div>
                     <div className="relative flex-shrink-0">
-                      <input type="checkbox" name="isActive" checked={formData.isActive} onChange={handleChange} disabled={formData._id === currentAdmin?._id} className="sr-only peer" />
+                      <input type="checkbox" name="isActive" checked={formData.isActive} onChange={handleChange} disabled={formData.id === currentAdmin?.id} className="sr-only peer" />
                       <div className="w-12 h-6 bg-gray-200 peer-checked:bg-emerald-500 rounded-full transition-colors duration-300 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:shadow-sm after:transition-transform after:duration-300 peer-checked:after:translate-x-6 peer-disabled:opacity-50" />
                     </div>
                   </label>
-                  {formData._id === currentAdmin?._id && (
+                  {formData.id === currentAdmin?.id && (
                     <div className="mt-3 flex items-center gap-2 text-amber-600 text-xs font-medium">
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                       You cannot deactivate your own account
@@ -383,7 +383,7 @@ export default function EditAdminPage() {
                   </div>
                 </div>
                 <div className="p-6">
-                  <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${formData._id === currentAdmin?._id ? "opacity-60 pointer-events-none" : ""}`}>
+                  <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${formData.id === currentAdmin?.id ? "opacity-60 pointer-events-none" : ""}`}>
                     {[
                       { value: "admin", label: "Admin", desc: "Standard access", bgColor: "bg-blue-50", borderColor: "border-blue-400", textColor: "text-blue-700" },
                       { value: "manager", label: "Manager", desc: "Extended access", bgColor: "bg-indigo-50", borderColor: "border-indigo-400", textColor: "text-indigo-700" },
@@ -392,7 +392,7 @@ export default function EditAdminPage() {
                       <label key={role.value} className={`relative flex flex-col p-4 border-2 cursor-pointer transition-all duration-200 rounded-xl ${
                         formData.role === role.value ? `${role.borderColor} ${role.bgColor}` : "border-gray-200 hover:border-gray-300 bg-white"
                       }`}>
-                        <input type="radio" name="role" value={role.value} checked={formData.role === role.value} onChange={handleChange} disabled={formData._id === currentAdmin?._id} className="sr-only" />
+                        <input type="radio" name="role" value={role.value} checked={formData.role === role.value} onChange={handleChange} disabled={formData.id === currentAdmin?.id} className="sr-only" />
                         <div className="flex items-center justify-between mb-2">
                           <span className={`text-sm font-semibold ${formData.role === role.value ? role.textColor : "text-gray-900"}`}>{role.label}</span>
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
@@ -407,7 +407,7 @@ export default function EditAdminPage() {
                       </label>
                     ))}
                   </div>
-                  {formData._id === currentAdmin?._id && (
+                  {formData.id === currentAdmin?.id && (
                     <div className="mt-3 flex items-center gap-2 text-amber-600 text-xs font-medium">
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                       You cannot change your own role
@@ -513,7 +513,7 @@ export default function EditAdminPage() {
                 </div>
 
                 {/* ── Current User Notice ── */}
-                {formData._id === currentAdmin?._id && (
+                {formData.id === currentAdmin?.id && (
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200/60 p-5">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">

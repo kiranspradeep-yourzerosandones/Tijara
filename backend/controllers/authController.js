@@ -1,12 +1,12 @@
-// Dbackend\controllers\authController.js
+// backend/controllers/authController.js
 const User = require("../models/User");
 const PendingRegistration = require("../models/PendingRegistration");
 const { generateToken } = require("../utils/jwtUtils");
 const { checkSmsOtpLimit, logOtpSent } = require("../utils/otpLimiter");
-const { 
-  getMCAuthToken, 
-  mcSendOtp, 
-  mcValidateOtp 
+const {
+  getMCAuthToken,
+  mcSendOtp,
+  mcValidateOtp
 } = require("../services/messageCentral");
 const emailService = require("../services/emailService");
 
@@ -25,7 +25,6 @@ exports.requestPasswordResetEmail = async (req, res) => {
       });
     }
 
-    // Validate email format
     const emailRegex = /^\S+@\S+\.\S+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -34,34 +33,32 @@ exports.requestPasswordResetEmail = async (req, res) => {
       });
     }
 
-    // Find user by email
     const user = await User.findOne({ email: email.toLowerCase() });
 
-    // Always return success to prevent email enumeration
     if (!user) {
       console.log(`Password reset requested for non-existent email: ${email}`);
       return res.status(200).json({
         success: true,
-        message: "If an account exists with this email, you will receive a password reset link."
+        message:
+          "If an account exists with this email, you will receive a password reset link."
       });
     }
 
-    // Check if user is active
     if (!user.isActive) {
       return res.status(200).json({
         success: true,
-        message: "If an account exists with this email, you will receive a password reset link."
+        message:
+          "If an account exists with this email, you will receive a password reset link."
       });
     }
 
-    // Generate reset token
     const resetToken = user.generatePasswordResetToken();
     await user.save({ validateBeforeSave: false });
 
-    // Create reset URL
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
+    const resetUrl = `${
+      process.env.FRONTEND_URL || "http://localhost:3000"
+    }/reset-password/${resetToken}`;
 
-    // Send email
     const emailResult = await emailService.sendPasswordResetEmail({
       to: user.email,
       name: user.name,
@@ -70,12 +67,14 @@ exports.requestPasswordResetEmail = async (req, res) => {
     });
 
     if (!emailResult.success && !emailResult.devMode) {
-      // Clear reset token if email failed
       user.passwordResetToken = undefined;
       user.passwordResetExpires = undefined;
       await user.save({ validateBeforeSave: false });
 
-      console.error("Failed to send password reset email:", emailResult.message);
+      console.error(
+        "Failed to send password reset email:",
+        emailResult.message
+      );
       return res.status(500).json({
         success: false,
         message: "Failed to send reset email. Please try again later."
@@ -84,10 +83,10 @@ exports.requestPasswordResetEmail = async (req, res) => {
 
     console.log(`📧 Password reset email sent to: ${user.email}`);
 
-    // In development, include token in response for testing
     const responseData = {
       success: true,
-      message: "If an account exists with this email, you will receive a password reset link."
+      message:
+        "If an account exists with this email, you will receive a password reset link."
     };
 
     if (process.env.NODE_ENV === "development") {
@@ -98,13 +97,13 @@ exports.requestPasswordResetEmail = async (req, res) => {
     }
 
     res.status(200).json(responseData);
-
   } catch (error) {
     console.error("Request Password Reset Email Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to process request",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -125,7 +124,6 @@ exports.verifyResetToken = async (req, res) => {
       });
     }
 
-    // Verify token
     const user = await User.verifyPasswordResetToken(token);
 
     if (!user) {
@@ -139,16 +137,16 @@ exports.verifyResetToken = async (req, res) => {
       success: true,
       message: "Token is valid",
       data: {
-        email: user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3") // Mask email
+        email: user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")
       }
     });
-
   } catch (error) {
     console.error("Verify Reset Token Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to verify token",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -162,7 +160,6 @@ exports.resetPasswordWithToken = async (req, res) => {
   try {
     const { token, newPassword, confirmPassword } = req.body;
 
-    // Validate inputs
     if (!token || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -184,7 +181,6 @@ exports.resetPasswordWithToken = async (req, res) => {
       });
     }
 
-    // Verify token and get user
     const user = await User.verifyPasswordResetToken(token);
 
     if (!user) {
@@ -194,12 +190,10 @@ exports.resetPasswordWithToken = async (req, res) => {
       });
     }
 
-    // Update password
     user.password = newPassword;
     user.clearPasswordReset();
     await user.save();
 
-    // Send confirmation email
     if (user.email) {
       await emailService.sendPasswordChangedEmail({
         to: user.email,
@@ -207,8 +201,7 @@ exports.resetPasswordWithToken = async (req, res) => {
       });
     }
 
-    // Generate new token for auto-login
-   const authToken = generateToken(user._id, "customer");
+    const authToken = generateToken(user._id, "customer");
 
     console.log(`🔑 Password reset successful for user: ${user.phone}`);
 
@@ -220,13 +213,13 @@ exports.resetPasswordWithToken = async (req, res) => {
         token: authToken
       }
     });
-
   } catch (error) {
     console.error("Reset Password With Token Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to reset password",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -240,7 +233,6 @@ exports.sendRegistrationOtp = async (req, res) => {
   try {
     const { phone } = req.body;
 
-    // Validate phone
     if (!phone) {
       return res.status(400).json({
         success: false,
@@ -248,7 +240,6 @@ exports.sendRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Validate phone format (10 digit Indian number)
     const phoneRegex = /^[6-9]\d{9}$/;
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({
@@ -257,7 +248,6 @@ exports.sendRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
       return res.status(400).json({
@@ -268,16 +258,16 @@ exports.sendRegistrationOtp = async (req, res) => {
 
     const now = new Date();
 
-    // Check for existing pending registration
     let pending = await PendingRegistration.findOne({ phone });
 
     if (pending && pending.otpExpires && pending.verificationId) {
       const expiresAt = new Date(pending.otpExpires);
 
       if (expiresAt > now) {
-        // OTP still valid - check cooldown (30 seconds)
-        const otpValiditySeconds = 300; // 5 minutes
-        const otpSentAt = new Date(expiresAt.getTime() - otpValiditySeconds * 1000);
+        const otpValiditySeconds = 300;
+        const otpSentAt = new Date(
+          expiresAt.getTime() - otpValiditySeconds * 1000
+        );
         const secondsSinceSent = Math.floor((now - otpSentAt) / 1000);
 
         if (secondsSinceSent < 30) {
@@ -292,7 +282,6 @@ exports.sendRegistrationOtp = async (req, res) => {
       }
     }
 
-    // Check daily SMS limit
     const limitCheck = await checkSmsOtpLimit(phone);
     if (!limitCheck.allowed) {
       return res.status(429).json({
@@ -302,13 +291,11 @@ exports.sendRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Get MC auth token
     const authToken = await getMCAuthToken(
       process.env.MC_CUSTOMER,
       process.env.MC_PASSWORD
     );
 
-    // Send OTP via Message Central
     try {
       const data = await mcSendOtp({
         authToken,
@@ -318,14 +305,13 @@ exports.sendRegistrationOtp = async (req, res) => {
         countryCode: process.env.MC_COUNTRY || "91"
       });
 
-      const verificationId = 
-        data?.verificationId || 
-        data?.verificationID || 
+      const verificationId =
+        data?.verificationId ||
+        data?.verificationID ||
         data?.verification_id;
-      
+
       const timeout = Number(data?.timeout || data?.time || 300);
 
-      // Save/update pending registration
       if (pending) {
         pending.verificationId = verificationId;
         pending.otpExpires = new Date(Date.now() + timeout * 1000);
@@ -340,7 +326,6 @@ exports.sendRegistrationOtp = async (req, res) => {
         });
       }
 
-      // Log OTP sent
       await logOtpSent(phone, "registration", verificationId);
 
       return res.status(200).json({
@@ -352,14 +337,12 @@ exports.sendRegistrationOtp = async (req, res) => {
           expiresIn: `${Math.floor(timeout / 60)} minutes`
         }
       });
-
     } catch (providerError) {
       console.error("Message Central Error:", providerError);
 
       const responseCode = providerError?.response?.data?.responseCode;
       const message = providerError?.response?.data?.message;
 
-      // Handle REQUEST_ALREADY_EXISTS
       if (responseCode === 506 || message === "REQUEST_ALREADY_EXISTS") {
         return res.status(429).json({
           success: false,
@@ -371,13 +354,13 @@ exports.sendRegistrationOtp = async (req, res) => {
 
       throw providerError;
     }
-
   } catch (error) {
     console.error("Send Registration OTP Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send OTP",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -391,7 +374,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
   try {
     const { phone, otp } = req.body;
 
-    // Validate inputs
     if (!phone || !otp) {
       return res.status(400).json({
         success: false,
@@ -399,7 +381,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Find pending registration
     const pending = await PendingRegistration.findOne({ phone });
 
     if (!pending) {
@@ -418,7 +399,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Check if OTP expired
     if (new Date() > new Date(pending.otpExpires)) {
       return res.status(400).json({
         success: false,
@@ -427,7 +407,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Check attempts
     if (pending.otpAttempts >= 3) {
       return res.status(400).json({
         success: false,
@@ -436,13 +415,11 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Get MC auth token
     const authToken = await getMCAuthToken(
       process.env.MC_CUSTOMER,
       process.env.MC_PASSWORD
     );
 
-    // Validate OTP via Message Central
     const result = await mcValidateOtp({
       authToken,
       verificationId: pending.verificationId,
@@ -460,9 +437,7 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Check verification status
     if (result.verificationStatus === "VERIFICATION_COMPLETED") {
-      // Mark as verified
       pending.isVerified = true;
       pending.verifiedAt = new Date();
       pending.otpAttempts = 0;
@@ -478,10 +453,8 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    // Handle failed verification
     const respCode = Number(result.responseCode || result.response_code || 0);
-    
-    // Increment attempts
+
     pending.otpAttempts += 1;
     await pending.save();
 
@@ -508,13 +481,13 @@ exports.verifyRegistrationOtp = async (req, res) => {
       message: "OTP verification failed. Please try again.",
       attemptsRemaining: 3 - pending.otpAttempts
     });
-
   } catch (error) {
     console.error("Verify Registration OTP Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to verify OTP",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -526,14 +499,14 @@ exports.verifyRegistrationOtp = async (req, res) => {
  */
 exports.completeRegistration = async (req, res) => {
   try {
-    const { 
-      phone, 
-      name, 
+    const {
+      phone,
+      name,
       password,
       businessName,
       businessType,
       gstNumber,
-      email 
+      email
     } = req.body;
 
     if (!phone || !name || !password) {
@@ -550,9 +523,9 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    const pending = await PendingRegistration.findOne({ 
-      phone, 
-      isVerified: true 
+    const pending = await PendingRegistration.findOne({
+      phone,
+      isVerified: true
     });
 
     if (!pending) {
@@ -580,7 +553,6 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    // ✅ CREATE USER - AUTO-APPROVED (isActive: true by default)
     const user = await User.create({
       name,
       phone,
@@ -590,10 +562,10 @@ exports.completeRegistration = async (req, res) => {
       gstNumber,
       email,
       isPhoneVerified: true,
-      isActive: true // ✅ AUTO-APPROVED - No admin approval needed
+      isActive: true
     });
 
-    const token = generateToken(user._id, "customer"); // ✅ Changed to "customer"
+    const token = generateToken(user._id, "customer");
 
     await PendingRegistration.deleteOne({ phone });
 
@@ -607,10 +579,9 @@ exports.completeRegistration = async (req, res) => {
         token
       }
     });
-
   } catch (error) {
     console.error("Complete Registration Error:", error);
-    
+
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -621,7 +592,8 @@ exports.completeRegistration = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Registration failed",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -646,7 +618,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Find user with password
     const user = await User.findOne({ phone }).select("+password");
 
     if (!user) {
@@ -663,7 +634,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Check if locked out
     if (user.otpLockedUntil && new Date(user.otpLockedUntil) > new Date()) {
       const minutesRemaining = Math.ceil(
         (new Date(user.otpLockedUntil) - new Date()) / 60000
@@ -675,7 +645,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Check password
     const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
@@ -685,30 +654,40 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Update last login
-    user.lastLoginAt = new Date();
-    user.otpCycleFailures = 0;
-    user.otpLockedUntil = null;
-    await user.save();
+    // ✅ FIXED: Use updateOne instead of user.save()
+    // user.save() triggers full document validation which fails
+    // if pendingAmount has corrupted negative value in DB
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          lastLoginAt: new Date(),
+          otpCycleFailures: 0,
+          otpLockedUntil: null
+        }
+      }
+    );
 
-    // Generate token
-    const token = generateToken(user._id, "customer"); // ✅ Changed to "customer"
+    const token = generateToken(user._id, "customer");
+
+    // Re-fetch clean user for public profile
+    const updatedUser = await User.findById(user._id);
 
     res.status(200).json({
       success: true,
       message: "Login successful",
       data: {
-        user: user.getPublicProfile(),
+        user: updatedUser.getPublicProfile(),
         token
       }
     });
-
   } catch (error) {
     console.error("Login Error:", error);
     res.status(500).json({
       success: false,
       message: "Login failed",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -722,7 +701,6 @@ exports.sendLoginOtp = async (req, res) => {
   try {
     const { phone } = req.body;
 
-    // Validate phone
     if (!phone) {
       return res.status(400).json({
         success: false,
@@ -730,7 +708,6 @@ exports.sendLoginOtp = async (req, res) => {
       });
     }
 
-    // Find user
     const user = await User.findOne({ phone });
 
     if (!user) {
@@ -741,7 +718,6 @@ exports.sendLoginOtp = async (req, res) => {
       });
     }
 
-    // Check if user is active
     if (!user.isActive) {
       return res.status(401).json({
         success: false,
@@ -751,7 +727,6 @@ exports.sendLoginOtp = async (req, res) => {
 
     const now = new Date();
 
-    // Check if locked out
     if (user.otpLockedUntil && new Date(user.otpLockedUntil) > now) {
       const minutesRemaining = Math.ceil(
         (new Date(user.otpLockedUntil) - now) / 60000
@@ -763,13 +738,14 @@ exports.sendLoginOtp = async (req, res) => {
       });
     }
 
-    // Check for existing OTP (cooldown)
     if (user.loginOtpExpires && user.loginVerificationId) {
       const expiresAt = new Date(user.loginOtpExpires);
 
       if (expiresAt > now) {
         const otpValiditySeconds = 300;
-        const otpSentAt = new Date(expiresAt.getTime() - otpValiditySeconds * 1000);
+        const otpSentAt = new Date(
+          expiresAt.getTime() - otpValiditySeconds * 1000
+        );
         const secondsSinceSent = Math.floor((now - otpSentAt) / 1000);
 
         if (secondsSinceSent < 30) {
@@ -784,7 +760,6 @@ exports.sendLoginOtp = async (req, res) => {
       }
     }
 
-    // Check daily SMS limit
     const limitCheck = await checkSmsOtpLimit(phone);
     if (!limitCheck.allowed) {
       return res.status(429).json({
@@ -794,13 +769,11 @@ exports.sendLoginOtp = async (req, res) => {
       });
     }
 
-    // Get MC auth token
     const authToken = await getMCAuthToken(
       process.env.MC_CUSTOMER,
       process.env.MC_PASSWORD
     );
 
-    // Send OTP
     try {
       const data = await mcSendOtp({
         authToken,
@@ -810,20 +783,27 @@ exports.sendLoginOtp = async (req, res) => {
         countryCode: process.env.MC_COUNTRY || "91"
       });
 
-      const verificationId = 
-        data?.verificationId || 
-        data?.verificationID || 
+      const verificationId =
+        data?.verificationId ||
+        data?.verificationID ||
         data?.verification_id;
-      
+
       const timeout = Number(data?.timeout || data?.time || 300);
 
-      // Update user with OTP details
-      user.loginVerificationId = verificationId;
-      user.loginOtpExpires = new Date(Date.now() + timeout * 1000);
-      user.loginOtpAttempts = 0;
-      await user.save();
+      // ✅ FIXED: Use updateOne instead of user.save()
+      // user.save() triggers full document validation which fails
+      // if pendingAmount has corrupted negative value in DB
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            loginVerificationId: verificationId,
+            loginOtpExpires: new Date(Date.now() + timeout * 1000),
+            loginOtpAttempts: 0
+          }
+        }
+      );
 
-      // Log OTP sent
       await logOtpSent(phone, "login", verificationId);
 
       return res.status(200).json({
@@ -835,7 +815,6 @@ exports.sendLoginOtp = async (req, res) => {
           expiresIn: `${Math.floor(timeout / 60)} minutes`
         }
       });
-
     } catch (providerError) {
       console.error("Message Central Error:", providerError);
 
@@ -853,13 +832,13 @@ exports.sendLoginOtp = async (req, res) => {
 
       throw providerError;
     }
-
   } catch (error) {
     console.error("Send Login OTP Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send OTP",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -873,7 +852,6 @@ exports.verifyLoginOtp = async (req, res) => {
   try {
     const { phone, otp } = req.body;
 
-    // Validate inputs
     if (!phone || !otp) {
       return res.status(400).json({
         success: false,
@@ -881,7 +859,6 @@ exports.verifyLoginOtp = async (req, res) => {
       });
     }
 
-    // Find user
     const user = await User.findOne({ phone });
 
     if (!user) {
@@ -900,7 +877,6 @@ exports.verifyLoginOtp = async (req, res) => {
       });
     }
 
-    // Check if OTP expired
     if (new Date() > new Date(user.loginOtpExpires)) {
       return res.status(400).json({
         success: false,
@@ -909,7 +885,6 @@ exports.verifyLoginOtp = async (req, res) => {
       });
     }
 
-    // Check attempts
     if (user.loginOtpAttempts >= 3) {
       return res.status(400).json({
         success: false,
@@ -918,13 +893,11 @@ exports.verifyLoginOtp = async (req, res) => {
       });
     }
 
-    // Get MC auth token
     const authToken = await getMCAuthToken(
       process.env.MC_CUSTOMER,
       process.env.MC_PASSWORD
     );
 
-    // Validate OTP
     const result = await mcValidateOtp({
       authToken,
       verificationId: user.loginVerificationId,
@@ -942,47 +915,60 @@ exports.verifyLoginOtp = async (req, res) => {
       });
     }
 
-    // Check verification status
     if (result.verificationStatus === "VERIFICATION_COMPLETED") {
-      // Clear OTP fields and update user
-      user.clearLoginOtp();
-      user.lastLoginAt = new Date();
-      user.otpCycleFailures = 0;
-      user.otpLockedUntil = null;
-      await user.save();
+      // ✅ FIXED: Use updateOne instead of user.save()
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            loginVerificationId: undefined,
+            loginOtpExpires: undefined,
+            loginOtpAttempts: 0,
+            lastLoginAt: new Date(),
+            otpCycleFailures: 0,
+            otpLockedUntil: null
+          }
+        }
+      );
 
-      // Generate token
       const token = generateToken(user._id, "customer");
+
+      // Re-fetch clean user for public profile
+      const updatedUser = await User.findById(user._id);
 
       return res.status(200).json({
         success: true,
         message: "Login successful",
         data: {
-          user: user.getPublicProfile(),
+          user: updatedUser.getPublicProfile(),
           token
         }
       });
     }
 
-    // Handle failed verification
     const respCode = Number(result.responseCode || result.response_code || 0);
-    
-    const newAttempts = user.loginOtpAttempts + 1;
-    const newCycleFailures = newAttempts >= 3 
-      ? (user.otpCycleFailures || 0) + 1 
-      : user.otpCycleFailures || 0;
 
-    // Lock account after 5 failed OTP cycles (15 total wrong guesses)
+    const newAttempts = user.loginOtpAttempts + 1;
+    const newCycleFailures =
+      newAttempts >= 3
+        ? (user.otpCycleFailures || 0) + 1
+        : user.otpCycleFailures || 0;
+
     const shouldLock = newCycleFailures >= 5;
 
-    user.loginOtpAttempts = newAttempts;
-    user.otpCycleFailures = newCycleFailures;
-    
-    if (shouldLock) {
-      user.otpLockedUntil = new Date(Date.now() + 60 * 60 * 1000); // 1 hour lockout
-    }
-    
-    await user.save();
+    // ✅ FIXED: Use updateOne instead of user.save()
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          loginOtpAttempts: newAttempts,
+          otpCycleFailures: newCycleFailures,
+          ...(shouldLock && {
+            otpLockedUntil: new Date(Date.now() + 60 * 60 * 1000)
+          })
+        }
+      }
+    );
 
     if (shouldLock) {
       return res.status(403).json({
@@ -1015,13 +1001,13 @@ exports.verifyLoginOtp = async (req, res) => {
       message: "OTP verification failed. Please try again.",
       attemptsRemaining: 3 - newAttempts
     });
-
   } catch (error) {
     console.error("Verify Login OTP Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to verify OTP",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1046,7 +1032,6 @@ exports.sendForgotPasswordOtp = async (req, res) => {
       });
     }
 
-    // Find user
     const user = await User.findOne({ phone });
 
     if (!user) {
@@ -1058,13 +1043,14 @@ exports.sendForgotPasswordOtp = async (req, res) => {
 
     const now = new Date();
 
-    // Check cooldown
     if (user.resetOtpExpires && user.resetVerificationId) {
       const expiresAt = new Date(user.resetOtpExpires);
 
       if (expiresAt > now) {
         const otpValiditySeconds = 300;
-        const otpSentAt = new Date(expiresAt.getTime() - otpValiditySeconds * 1000);
+        const otpSentAt = new Date(
+          expiresAt.getTime() - otpValiditySeconds * 1000
+        );
         const secondsSinceSent = Math.floor((now - otpSentAt) / 1000);
 
         if (secondsSinceSent < 30) {
@@ -1079,7 +1065,6 @@ exports.sendForgotPasswordOtp = async (req, res) => {
       }
     }
 
-    // Check daily limit
     const limitCheck = await checkSmsOtpLimit(phone);
     if (!limitCheck.allowed) {
       return res.status(429).json({
@@ -1089,13 +1074,11 @@ exports.sendForgotPasswordOtp = async (req, res) => {
       });
     }
 
-    // Get MC auth token
     const authToken = await getMCAuthToken(
       process.env.MC_CUSTOMER,
       process.env.MC_PASSWORD
     );
 
-    // Send OTP
     try {
       const data = await mcSendOtp({
         authToken,
@@ -1105,20 +1088,25 @@ exports.sendForgotPasswordOtp = async (req, res) => {
         countryCode: process.env.MC_COUNTRY || "91"
       });
 
-      const verificationId = 
-        data?.verificationId || 
-        data?.verificationID || 
+      const verificationId =
+        data?.verificationId ||
+        data?.verificationID ||
         data?.verification_id;
-      
+
       const timeout = Number(data?.timeout || data?.time || 300);
 
-      // Update user
-      user.resetVerificationId = verificationId;
-      user.resetOtpExpires = new Date(Date.now() + timeout * 1000);
-      user.resetOtpAttempts = 0;
-      await user.save();
+      // ✅ FIXED: Use updateOne instead of user.save()
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            resetVerificationId: verificationId,
+            resetOtpExpires: new Date(Date.now() + timeout * 1000),
+            resetOtpAttempts: 0
+          }
+        }
+      );
 
-      // Log OTP sent
       await logOtpSent(phone, "reset_password", verificationId);
 
       return res.status(200).json({
@@ -1130,7 +1118,6 @@ exports.sendForgotPasswordOtp = async (req, res) => {
           expiresIn: `${Math.floor(timeout / 60)} minutes`
         }
       });
-
     } catch (providerError) {
       console.error("Message Central Error:", providerError);
 
@@ -1148,13 +1135,13 @@ exports.sendForgotPasswordOtp = async (req, res) => {
 
       throw providerError;
     }
-
   } catch (error) {
     console.error("Send Forgot Password OTP Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send OTP",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1168,7 +1155,6 @@ exports.resetPassword = async (req, res) => {
   try {
     const { phone, otp, newPassword } = req.body;
 
-    // Validate inputs
     if (!phone || !otp || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -1183,7 +1169,6 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Find user
     const user = await User.findOne({ phone });
 
     if (!user) {
@@ -1201,7 +1186,6 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Check if OTP expired
     if (new Date() > new Date(user.resetOtpExpires)) {
       return res.status(400).json({
         success: false,
@@ -1210,7 +1194,6 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Check attempts
     if (user.resetOtpAttempts >= 3) {
       return res.status(400).json({
         success: false,
@@ -1219,13 +1202,11 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Get MC auth token
     const authToken = await getMCAuthToken(
       process.env.MC_CUSTOMER,
       process.env.MC_PASSWORD
     );
 
-    // Validate OTP
     const result = await mcValidateOtp({
       authToken,
       verificationId: user.resetVerificationId,
@@ -1243,38 +1224,54 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Check verification status
     if (result.verificationStatus === "VERIFICATION_COMPLETED") {
-      // Update password
-      user.password = newPassword;
-      user.clearResetOtp();
-      await user.save();
+      // Password update still needs user.save() to trigger bcrypt hashing
+      // but we clear OTP fields first via updateOne to avoid validation issues
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            resetVerificationId: undefined,
+            resetOtpExpires: undefined,
+            resetOtpAttempts: 0
+          }
+        }
+      );
 
-      // Generate token
-     const token = generateToken(user._id, "customer"); 
+      // Re-fetch user then save password (triggers bcrypt pre-save hook)
+      const freshUser = await User.findById(user._id);
+      freshUser.password = newPassword;
+      await freshUser.save({ validateBeforeSave: false });
+
+      const token = generateToken(user._id, "customer");
 
       return res.status(200).json({
         success: true,
         message: "Password reset successful",
         data: {
-          user: user.getPublicProfile(),
+          user: freshUser.getPublicProfile(),
           token
         }
       });
     }
 
-    // Handle failed verification
     const respCode = Number(result.responseCode || result.response_code || 0);
-    
-    user.resetOtpAttempts += 1;
-    await user.save();
+
+    // ✅ FIXED: Use updateOne instead of user.save()
+    await User.updateOne(
+      { _id: user._id },
+      { $inc: { resetOtpAttempts: 1 } }
+    );
+
+    // Re-fetch to get updated attempts count for response
+    const updatedUser = await User.findById(user._id).select("resetOtpAttempts");
 
     if (respCode === 702) {
       return res.status(400).json({
         success: false,
         code: "INVALID_OTP",
         message: "Invalid OTP. Please try again.",
-        attemptsRemaining: 3 - user.resetOtpAttempts
+        attemptsRemaining: 3 - updatedUser.resetOtpAttempts
       });
     }
 
@@ -1290,15 +1287,15 @@ exports.resetPassword = async (req, res) => {
       success: false,
       code: "INVALID_OTP",
       message: "OTP verification failed. Please try again.",
-      attemptsRemaining: 3 - user.resetOtpAttempts
+      attemptsRemaining: 3 - updatedUser.resetOtpAttempts
     });
-
   } catch (error) {
     console.error("Reset Password Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to reset password",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1306,7 +1303,6 @@ exports.resetPassword = async (req, res) => {
 // ============================================================
 // PROFILE MANAGEMENT
 // ============================================================
-
 
 /**
  * @desc    Get current user profile WITH CREDIT SUMMARY
@@ -1324,16 +1320,13 @@ exports.getMe = async (req, res) => {
       });
     }
 
-    // Get credit summary
     const creditSummary = user.getCreditSummary();
 
-    // Merge user profile with credit data
     const profileData = {
       ...user.getPublicProfile(),
-      // Add credit fields directly to user object
       creditUtilization: creditSummary.creditUtilization,
       totalPaid: creditSummary.totalPaid,
-      creditBlockedReason: creditSummary.creditBlockedReason,
+      creditBlockedReason: creditSummary.creditBlockedReason
     };
 
     res.status(200).json({
@@ -1342,13 +1335,13 @@ exports.getMe = async (req, res) => {
         user: profileData
       }
     });
-
   } catch (error) {
     console.error("Get Profile Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get profile",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1360,13 +1353,7 @@ exports.getMe = async (req, res) => {
  */
 exports.updateProfile = async (req, res) => {
   try {
-    const { 
-      name, 
-      email, 
-      businessName, 
-      businessType, 
-      gstNumber 
-    } = req.body;
+    const { name, email, businessName, businessType, gstNumber } = req.body;
 
     const user = await User.findById(req.user._id);
 
@@ -1377,7 +1364,6 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
-    // Update fields
     if (name) user.name = name;
     if (email !== undefined) user.email = email;
     if (businessName !== undefined) user.businessName = businessName;
@@ -1393,13 +1379,13 @@ exports.updateProfile = async (req, res) => {
         user: user.getPublicProfile()
       }
     });
-
   } catch (error) {
     console.error("Update Profile Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update profile",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1427,10 +1413,8 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Get user with password
     const user = await User.findById(req.user._id).select("+password");
 
-    // Check current password
     const isMatch = await user.comparePassword(currentPassword);
 
     if (!isMatch) {
@@ -1440,25 +1424,24 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Update password
     user.password = newPassword;
     await user.save();
 
-    // Generate new token
+    // ✅ FIXED: was referencing undefined `token` variable
     const authToken = generateToken(user._id, "customer");
 
     res.status(200).json({
       success: true,
       message: "Password changed successfully",
-      data: { token }
+      data: { token: authToken }
     });
-
   } catch (error) {
     console.error("Change Password Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to change password",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1485,13 +1468,13 @@ exports.updateFCMToken = async (req, res) => {
       success: true,
       message: "FCM token updated successfully"
     });
-
   } catch (error) {
     console.error("Update FCM Token Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update FCM token",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };

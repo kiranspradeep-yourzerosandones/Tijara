@@ -15,6 +15,15 @@ export const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+// Handle API response
+const handleResponse = async (response) => {
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || "Request failed");
+  }
+  return data;
+};
+
 // API request helper
 const apiRequest = async (endpoint, options = {}) => {
   const token = getToken();
@@ -35,13 +44,7 @@ const apiRequest = async (endpoint, options = {}) => {
   };
 
   const response = await fetch(`${API_URL}${endpoint}`, config);
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "Request failed");
-  }
-
-  return data;
+  return handleResponse(response);
 };
 
 // ==================== USER API ====================
@@ -66,9 +69,7 @@ export const userAPI = {
       },
       body: userData instanceof FormData ? userData : JSON.stringify(userData),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Request failed");
-    return data;
+    return handleResponse(response);
   },
 
   update: async (id, userData) => {
@@ -81,9 +82,7 @@ export const userAPI = {
       },
       body: userData instanceof FormData ? userData : JSON.stringify(userData),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Request failed");
-    return data;
+    return handleResponse(response);
   },
 
   delete: async (id, reason = "") => {
@@ -161,9 +160,7 @@ export const productAPI = {
       },
       body: productData, // FormData for file upload
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Failed to create product");
-    return data;
+    return handleResponse(response);
   },
 
   update: async (id, productData) => {
@@ -175,9 +172,7 @@ export const productAPI = {
       },
       body: productData, // FormData for file upload
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Failed to update product");
-    return data;
+    return handleResponse(response);
   },
 
   delete: async (id) => {
@@ -363,6 +358,41 @@ export const adminAPI = {
   },
 };
 
+// ══════════════════════════════════════════════════════════════
+// IMAGE MANAGEMENT API
+// ══════════════════════════════════════════════════════════════
+export const imageAPI = {
+  // Get storage statistics
+  getStats: async () => {
+    return apiRequest("/admin/images/stats");
+  },
+
+  // Get orphaned images
+  getOrphaned: async () => {
+    return apiRequest("/admin/images/orphaned");
+  },
+
+  // Get all images
+  getAll: async () => {
+    return apiRequest("/admin/images/all");
+  },
+
+  // Delete selected images
+  deleteSelected: async (filenames) => {
+    return apiRequest("/admin/images/delete", {
+      method: "POST",
+      body: JSON.stringify({ filenames }),
+    });
+  },
+
+  // Cleanup all orphaned images
+  cleanupAll: async () => {
+    return apiRequest("/admin/images/cleanup", {
+      method: "DELETE",
+    });
+  },
+};
+
 export default {
   userAPI,
   productAPI,
@@ -370,5 +400,6 @@ export default {
   orderAPI,
   paymentAPI,
   adminAPI,
+  imageAPI,
   getAuthHeaders,
 };

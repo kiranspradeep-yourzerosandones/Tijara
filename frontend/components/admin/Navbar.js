@@ -15,7 +15,6 @@ export default function Navbar() {
   const profileRef = useRef(null);
   const notifRef = useRef(null);
 
-  // Get page title from pathname
   const getPageTitle = () => {
     const routes = {
       "/admin": "Dashboard",
@@ -32,7 +31,6 @@ export default function Navbar() {
       "/admin/settings": "Settings"
     };
 
-    // Check for dynamic routes
     if (pathname.startsWith("/admin/products/edit/")) return "Edit Product";
     if (pathname.startsWith("/admin/products/view/")) return "Product Details";
     if (pathname.startsWith("/admin/orders/")) return "Order Details";
@@ -41,7 +39,6 @@ export default function Navbar() {
     return routes[pathname] || "Admin";
   };
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
@@ -62,18 +59,16 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 pt-2 bg-white/80 backdrop-blur-xl border-b border-gray-200/80">
+    // ✅ FIX 1: Increase z-index to z-50 so it's above everything
+    <header className="sticky top-0 z-50 pt-2 bg-white/80 backdrop-blur-xl border-b border-gray-200/80 relative">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6">
         {/* Left side - Page title & breadcrumb */}
         <div className="flex items-center gap-4">
-          {/* Mobile menu spacer */}
           <div className="w-10 sm:hidden" />
-          
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900">
               {getPageTitle()}
             </h1>
-            {/* Breadcrumb for nested pages */}
             {pathname !== "/admin" && (
               <nav className="hidden sm:flex items-center gap-1 text-xs text-gray-400 mt-0.5">
                 <Link href="/admin" className="hover:text-gray-600 transition-colors">
@@ -90,7 +85,6 @@ export default function Navbar() {
 
         {/* Right side - Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-
           {/* Quick actions */}
           <div className="hidden sm:flex items-center gap-1">
             <Link
@@ -108,21 +102,23 @@ export default function Navbar() {
           {/* Notifications */}
           <div ref={notifRef} className="relative">
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setShowProfile(false); // ✅ FIX 2: Close other dropdown
+              }}
               className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 
                        rounded-xl transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              {/* Notification badge */}
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
             </button>
 
-            {/* Notifications dropdown */}
+            {/* ✅ FIX 3: Use z-[9999] and add shadow for visual hierarchy */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl 
-                            border border-gray-200 overflow-hidden z-50 animate-in 
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl 
+                            border border-gray-200 overflow-hidden z-[9999] animate-in 
                             fade-in slide-in-from-top-2 duration-200">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                   <h3 className="font-semibold text-gray-900">Notifications</h3>
@@ -131,7 +127,6 @@ export default function Navbar() {
                   </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {/* Empty state */}
                   <div className="px-4 py-8 text-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,7 +143,10 @@ export default function Navbar() {
           {/* Profile */}
           <div ref={profileRef} className="relative">
             <button
-              onClick={() => setShowProfile(!showProfile)}
+              onClick={() => {
+                setShowProfile(!showProfile);
+                setShowNotifications(false); // ✅ FIX 2: Close other dropdown
+              }}
               className="flex items-center gap-2 p-1.5 pr-3 hover:bg-gray-100 
                        rounded-xl transition-colors"
             >
@@ -175,10 +173,10 @@ export default function Navbar() {
               </svg>
             </button>
 
-            {/* Profile dropdown */}
+            {/* ✅ FIX 3: Use z-[9999] */}
             {showProfile && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl 
-                            border border-gray-200 overflow-hidden z-50 animate-in 
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl 
+                            border border-gray-200 overflow-hidden z-[9999] animate-in 
                             fade-in slide-in-from-top-2 duration-200">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900">{admin?.name || "Admin"}</p>

@@ -1,3 +1,4 @@
+// backend/controllers/paymentController.js
 const Payment = require("../models/Payment");
 const Order = require("../models/Order");
 const User = require("../models/User");
@@ -25,19 +26,16 @@ exports.getMyPayments = async (req, res) => {
 
     const query = { user: req.user._id };
 
-    // Filter by order
     if (orderId) {
       if (mongoose.Types.ObjectId.isValid(orderId)) {
         query.order = orderId;
       }
     }
 
-    // Filter by status
     if (status) {
       query.status = status;
     }
 
-    // Filter by date range
     if (startDate || endDate) {
       query.paymentDate = {};
       if (startDate) query.paymentDate.$gte = new Date(startDate);
@@ -45,8 +43,8 @@ exports.getMyPayments = async (req, res) => {
     }
 
     const payments = await Payment.find(query)
-      .populate('order', 'orderNumber totalAmount status')
-      .select('-internalNotes')
+      .populate("order", "orderNumber totalAmount status")
+      .select("-internalNotes")
       .sort({ paymentDate: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -64,13 +62,13 @@ exports.getMyPayments = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error("Get Payments Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch payments",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -95,8 +93,8 @@ exports.getPayment = async (req, res) => {
       _id: id,
       user: req.user._id
     })
-    .populate('order', 'orderNumber totalAmount status deliveryAddress')
-    .select('-internalNotes');
+      .populate("order", "orderNumber totalAmount status deliveryAddress")
+      .select("-internalNotes");
 
     if (!payment) {
       return res.status(404).json({
@@ -109,13 +107,13 @@ exports.getPayment = async (req, res) => {
       success: true,
       data: { payment }
     });
-
   } catch (error) {
     console.error("Get Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch payment",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -129,17 +127,14 @@ exports.getMyCreditSummary = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
-    // Get payment summary
     const paymentSummary = await Payment.getUserPaymentSummary(req.user._id);
 
-    // Get pending orders count
     const pendingOrdersCount = await Order.countDocuments({
       user: req.user._id,
       status: { $nin: ["delivered", "cancelled"] },
       paymentStatus: { $ne: "paid" }
     });
 
-    // Get overdue orders (past payment terms)
     const overdueDate = new Date();
     overdueDate.setDate(overdueDate.getDate() - (user.paymentTerms || 30));
 
@@ -148,9 +143,12 @@ exports.getMyCreditSummary = async (req, res) => {
       status: { $ne: "cancelled" },
       paymentStatus: { $ne: "paid" },
       createdAt: { $lt: overdueDate }
-    }).select('orderNumber totalAmount createdAt');
+    }).select("orderNumber totalAmount createdAt");
 
-    const overdueAmount = overdueOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const overdueAmount = overdueOrders.reduce(
+      (sum, order) => sum + order.totalAmount,
+      0
+    );
 
     res.status(200).json({
       success: true,
@@ -166,13 +164,13 @@ exports.getMyCreditSummary = async (req, res) => {
         overdueAmount
       }
     });
-
   } catch (error) {
     console.error("Get Credit Summary Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch credit summary",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -193,7 +191,6 @@ exports.getOrderPayments = async (req, res) => {
       });
     }
 
-    // Verify order belongs to user
     const order = await Order.findOne({
       _id: orderId,
       user: req.user._id
@@ -222,13 +219,13 @@ exports.getOrderPayments = async (req, res) => {
         outstanding: order.totalAmount - totalPaid
       }
     });
-
   } catch (error) {
     console.error("Get Order Payments Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch order payments",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -240,25 +237,25 @@ exports.getOrderPayments = async (req, res) => {
  */
 exports.getOutstandingPayments = async (req, res) => {
   try {
-    // Get all orders with pending payments
     const orders = await Order.find({
       user: req.user._id,
       status: { $ne: "cancelled" },
       paymentStatus: { $ne: "paid" }
     })
-    .select('orderNumber totalAmount paymentStatus payment createdAt deliveryAddress.shopName')
-    .sort({ createdAt: 1 }); // Oldest first
+      .select(
+        "orderNumber totalAmount paymentStatus payment createdAt deliveryAddress.shopName"
+      )
+      .sort({ createdAt: 1 });
 
-    // Calculate due dates based on payment terms
     const user = await User.findById(req.user._id);
     const paymentTerms = user.paymentTerms || 30;
 
-    const outstandingOrders = orders.map(order => {
+    const outstandingOrders = orders.map((order) => {
       const dueDate = new Date(order.createdAt);
       dueDate.setDate(dueDate.getDate() + paymentTerms);
-      
+
       const isOverdue = new Date() > dueDate;
-      const daysOverdue = isOverdue 
+      const daysOverdue = isOverdue
         ? Math.floor((new Date() - dueDate) / (1000 * 60 * 60 * 24))
         : 0;
 
@@ -276,10 +273,12 @@ exports.getOutstandingPayments = async (req, res) => {
       };
     });
 
-    // Calculate totals
-    const totalOutstanding = outstandingOrders.reduce((sum, o) => sum + o.outstanding, 0);
+    const totalOutstanding = outstandingOrders.reduce(
+      (sum, o) => sum + o.outstanding,
+      0
+    );
     const totalOverdue = outstandingOrders
-      .filter(o => o.isOverdue)
+      .filter((o) => o.isOverdue)
       .reduce((sum, o) => sum + o.outstanding, 0);
 
     res.status(200).json({
@@ -289,18 +288,18 @@ exports.getOutstandingPayments = async (req, res) => {
         summary: {
           totalOrders: outstandingOrders.length,
           totalOutstanding,
-          overdueOrders: outstandingOrders.filter(o => o.isOverdue).length,
+          overdueOrders: outstandingOrders.filter((o) => o.isOverdue).length,
           totalOverdue
         }
       }
     });
-
   } catch (error) {
     console.error("Get Outstanding Payments Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch outstanding payments",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -308,8 +307,6 @@ exports.getOutstandingPayments = async (req, res) => {
 // ============================================================
 // ADMIN PAYMENT OPERATIONS
 // ============================================================
-
-// backend/controllers/paymentController.js - UPDATED adminRecordPayment
 
 /**
  * @desc    Record a payment (Admin) - WITHOUT TRANSACTIONS
@@ -329,7 +326,6 @@ exports.adminRecordPayment = async (req, res) => {
       receiptNumber
     } = req.body;
 
-    // Validate required fields
     if (!orderId) {
       return res.status(400).json({
         success: false,
@@ -351,7 +347,6 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    // Validate order ID
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res.status(400).json({
         success: false,
@@ -359,7 +354,6 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    // Find order
     const order = await Order.findById(orderId);
 
     if (!order) {
@@ -369,7 +363,6 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    // Cannot record payment for cancelled orders
     if (order.status === "cancelled") {
       return res.status(400).json({
         success: false,
@@ -377,7 +370,6 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    // Calculate outstanding
     const currentPaid = order.payment?.amountPaid || 0;
     const outstanding = order.totalAmount - currentPaid;
 
@@ -388,10 +380,8 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    // Generate payment number
     const paymentNumber = await Payment.generatePaymentNumber();
 
-    // Create payment record
     const payment = new Payment({
       order: order._id,
       user: order.user,
@@ -414,34 +404,46 @@ exports.adminRecordPayment = async (req, res) => {
     const newAmountPaid = currentPaid + amount;
     order.payment.amountPaid = newAmountPaid;
     order.payment.method = method;
-    
+
     if (newAmountPaid >= order.totalAmount) {
       order.paymentStatus = "paid";
       order.payment.paidAt = new Date();
     } else {
       order.paymentStatus = "partial";
     }
-    
+
     order.payment.markedPaidBy = req.user._id;
     order.payment.notes = notes;
 
     await order.save();
 
-    // Update user credit info
-    const user = await User.findById(order.user);
+    // ✅ FIXED: Use updateOne to avoid full document validation
+    // This prevents ValidationError if pendingAmount has a corrupted value
+    const user = await User.findById(order.user).select("pendingAmount totalPaid");
     if (user) {
-      user.pendingAmount = Math.max(0, user.pendingAmount - amount);
-      user.totalPaid += amount;
-      user.lastPaymentDate = payment.paymentDate;
-      await user.save();
+      const newPendingAmount = Math.max(
+        0,
+        (user.pendingAmount || 0) - amount
+      );
+      await User.updateOne(
+        { _id: order.user },
+        {
+          $set: {
+            pendingAmount: newPendingAmount,
+            lastPaymentDate: payment.paymentDate
+          },
+          $inc: { totalPaid: amount }
+        }
+      );
     }
 
-    console.log(`💰 Payment recorded: ${paymentNumber} - ₹${amount} for order ${order.orderNumber}`);
+    console.log(
+      `💰 Payment recorded: ${paymentNumber} - ₹${amount} for order ${order.orderNumber}`
+    );
 
-    // Populate for response
-    await payment.populate('order', 'orderNumber totalAmount paymentStatus');
-    await payment.populate('user', 'name phone businessName');
-    await payment.populate('recordedBy', 'name');
+    await payment.populate("order", "orderNumber totalAmount paymentStatus");
+    await payment.populate("user", "name phone businessName");
+    await payment.populate("recordedBy", "name");
 
     res.status(201).json({
       success: true,
@@ -452,13 +454,13 @@ exports.adminRecordPayment = async (req, res) => {
         orderOutstanding: order.totalAmount - newAmountPaid
       }
     });
-
   } catch (error) {
     console.error("Record Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to record payment",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -503,9 +505,8 @@ exports.adminCancelPayment = async (req, res) => {
       });
     }
 
-    // Update payment status
     payment.status = "cancelled";
-    payment.internalNotes = payment.internalNotes 
+    payment.internalNotes = payment.internalNotes
       ? `${payment.internalNotes}\n[CANCELLED] ${new Date().toISOString()}: ${reason}`
       : `[CANCELLED] ${new Date().toISOString()}: ${reason}`;
 
@@ -514,8 +515,11 @@ exports.adminCancelPayment = async (req, res) => {
     // Reverse order payment
     const order = await Order.findById(payment.order);
     if (order) {
-      order.payment.amountPaid = Math.max(0, (order.payment.amountPaid || 0) - payment.amount);
-      
+      order.payment.amountPaid = Math.max(
+        0,
+        (order.payment.amountPaid || 0) - payment.amount
+      );
+
       if (order.payment.amountPaid === 0) {
         order.paymentStatus = "pending";
       } else if (order.payment.amountPaid < order.totalAmount) {
@@ -525,12 +529,25 @@ exports.adminCancelPayment = async (req, res) => {
       await order.save();
     }
 
-    // Reverse user credit
-    const user = await User.findById(payment.user);
+    // ✅ FIXED: Use updateOne to avoid full document validation
+    // pendingAmount goes UP when reversing a payment (customer owes again)
+    // No Math.max needed here since adding to pendingAmount
+    // but we use updateOne to bypass the schema min:0 validator
+    const user = await User.findById(payment.user).select(
+      "pendingAmount totalPaid"
+    );
     if (user) {
-      user.pendingAmount += payment.amount;
-      user.totalPaid = Math.max(0, user.totalPaid - payment.amount);
-      await user.save();
+      const newPendingAmount = (user.pendingAmount || 0) + payment.amount;
+      const newTotalPaid = Math.max(0, (user.totalPaid || 0) - payment.amount);
+      await User.updateOne(
+        { _id: payment.user },
+        {
+          $set: {
+            pendingAmount: newPendingAmount,
+            totalPaid: newTotalPaid
+          }
+        }
+      );
     }
 
     console.log(`💰 Payment cancelled: ${payment.paymentNumber}`);
@@ -546,13 +563,13 @@ exports.adminCancelPayment = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error("Cancel Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to cancel payment",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -580,34 +597,28 @@ exports.adminGetAllPayments = async (req, res) => {
 
     const query = {};
 
-    // Filter by user
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
       query.user = userId;
     }
 
-    // Filter by order
     if (orderId && mongoose.Types.ObjectId.isValid(orderId)) {
       query.order = orderId;
     }
 
-    // Filter by method
     if (method) {
       query.method = method;
     }
 
-    // Filter by status
     if (status) {
       query.status = status;
     }
 
-    // Filter by date range
     if (startDate || endDate) {
       query.paymentDate = {};
       if (startDate) query.paymentDate.$gte = new Date(startDate);
       if (endDate) query.paymentDate.$lte = new Date(endDate);
     }
 
-    // Search by payment number or order number
     if (search) {
       query.$or = [
         { paymentNumber: { $regex: search, $options: "i" } },
@@ -619,16 +630,15 @@ exports.adminGetAllPayments = async (req, res) => {
     sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
 
     const payments = await Payment.find(query)
-      .populate('user', 'name phone businessName')
-      .populate('order', 'orderNumber totalAmount status')
-      .populate('recordedBy', 'name')
+      .populate("user", "name phone businessName")
+      .populate("order", "orderNumber totalAmount status")
+      .populate("recordedBy", "name")
       .sort(sortOptions)
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
     const total = await Payment.countDocuments(query);
 
-    // Calculate totals for filtered results
     const totalAmount = await Payment.aggregate([
       { $match: { ...query, status: "completed" } },
       { $group: { _id: null, total: { $sum: "$amount" } } }
@@ -646,13 +656,13 @@ exports.adminGetAllPayments = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error("Admin Get Payments Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch payments",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -674,10 +684,13 @@ exports.adminGetPayment = async (req, res) => {
     }
 
     const payment = await Payment.findById(id)
-      .populate('user', 'name phone businessName email')
-      .populate('order', 'orderNumber totalAmount status paymentStatus deliveryAddress')
-      .populate('recordedBy', 'name')
-      .populate('verifiedBy', 'name');
+      .populate("user", "name phone businessName email")
+      .populate(
+        "order",
+        "orderNumber totalAmount status paymentStatus deliveryAddress"
+      )
+      .populate("recordedBy", "name")
+      .populate("verifiedBy", "name");
 
     if (!payment) {
       return res.status(404).json({
@@ -690,13 +703,13 @@ exports.adminGetPayment = async (req, res) => {
       success: true,
       data: { payment }
     });
-
   } catch (error) {
     console.error("Admin Get Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch payment",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -735,7 +748,6 @@ exports.adminUpdatePayment = async (req, res) => {
       });
     }
 
-    // Cannot update cancelled/refunded payments
     if (["cancelled", "refunded"].includes(payment.status)) {
       return res.status(400).json({
         success: false,
@@ -743,15 +755,14 @@ exports.adminUpdatePayment = async (req, res) => {
       });
     }
 
-    // Update fields
     if (method) payment.method = method;
-    if (methodDetails) payment.methodDetails = { ...payment.methodDetails, ...methodDetails };
+    if (methodDetails)
+      payment.methodDetails = { ...payment.methodDetails, ...methodDetails };
     if (paymentDate) payment.paymentDate = new Date(paymentDate);
     if (notes !== undefined) payment.notes = notes;
     if (internalNotes !== undefined) payment.internalNotes = internalNotes;
     if (receiptNumber !== undefined) payment.receiptNumber = receiptNumber;
 
-    // Handle verification
     if (isVerified !== undefined) {
       payment.isVerified = isVerified;
       if (isVerified) {
@@ -762,32 +773,32 @@ exports.adminUpdatePayment = async (req, res) => {
 
     await payment.save();
 
-    await payment.populate('user', 'name phone businessName');
-    await payment.populate('order', 'orderNumber totalAmount');
-    await payment.populate('recordedBy', 'name');
+    await payment.populate("user", "name phone businessName");
+    await payment.populate("order", "orderNumber totalAmount");
+    await payment.populate("recordedBy", "name");
 
     res.status(200).json({
       success: true,
       message: "Payment updated successfully",
       data: { payment }
     });
-
   } catch (error) {
     console.error("Admin Update Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update payment",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
 
 /**
- * @desc    Cancel/Reverse payment (Admin)
+ * @desc    Cancel/Reverse payment (Admin) - WITH TRANSACTIONS
  * @route   PUT /api/admin/payments/:id/cancel
  * @access  Private/Admin
  */
-exports.adminCancelPayment = async (req, res) => {
+exports.adminCancelPaymentWithTransaction = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -796,6 +807,7 @@ exports.adminCancelPayment = async (req, res) => {
     const { reason } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Invalid payment ID"
@@ -803,6 +815,7 @@ exports.adminCancelPayment = async (req, res) => {
     }
 
     if (!reason) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Cancellation reason is required"
@@ -827,9 +840,8 @@ exports.adminCancelPayment = async (req, res) => {
       });
     }
 
-    // Update payment status
     payment.status = "cancelled";
-    payment.internalNotes = payment.internalNotes 
+    payment.internalNotes = payment.internalNotes
       ? `${payment.internalNotes}\n[CANCELLED] ${new Date().toISOString()}: ${reason}`
       : `[CANCELLED] ${new Date().toISOString()}: ${reason}`;
 
@@ -838,8 +850,11 @@ exports.adminCancelPayment = async (req, res) => {
     // Reverse order payment
     const order = await Order.findById(payment.order).session(session);
     if (order) {
-      order.payment.amountPaid = Math.max(0, (order.payment.amountPaid || 0) - payment.amount);
-      
+      order.payment.amountPaid = Math.max(
+        0,
+        (order.payment.amountPaid || 0) - payment.amount
+      );
+
       if (order.payment.amountPaid === 0) {
         order.paymentStatus = "pending";
       } else if (order.payment.amountPaid < order.totalAmount) {
@@ -849,12 +864,25 @@ exports.adminCancelPayment = async (req, res) => {
       await order.save({ session });
     }
 
-    // Reverse user credit
-    const user = await User.findById(payment.user).session(session);
+    // ✅ FIXED: Use updateOne with session to avoid full document validation
+    const user = await User.findById(payment.user)
+      .select("pendingAmount totalPaid")
+      .session(session);
+
     if (user) {
-      user.pendingAmount += payment.amount;
-      user.totalPaid = Math.max(0, user.totalPaid - payment.amount);
-      await user.save({ session });
+      const newPendingAmount = (user.pendingAmount || 0) + payment.amount;
+      const newTotalPaid = Math.max(0, (user.totalPaid || 0) - payment.amount);
+
+      await User.updateOne(
+        { _id: payment.user },
+        {
+          $set: {
+            pendingAmount: newPendingAmount,
+            totalPaid: newTotalPaid
+          }
+        },
+        { session }
+      );
     }
 
     await session.commitTransaction();
@@ -872,14 +900,14 @@ exports.adminCancelPayment = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     await session.abortTransaction();
     console.error("Cancel Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to cancel payment",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   } finally {
     session.endSession();
@@ -896,14 +924,13 @@ exports.adminGetPaymentStats = async (req, res) => {
     const { startDate, endDate } = req.query;
 
     const matchQuery = { status: "completed" };
-    
+
     if (startDate || endDate) {
       matchQuery.paymentDate = {};
       if (startDate) matchQuery.paymentDate.$gte = new Date(startDate);
       if (endDate) matchQuery.paymentDate.$lte = new Date(endDate);
     }
 
-    // Overall stats
     const stats = await Payment.aggregate([
       { $match: matchQuery },
       {
@@ -916,7 +943,6 @@ exports.adminGetPaymentStats = async (req, res) => {
       }
     ]);
 
-    // By method
     const byMethod = await Payment.aggregate([
       { $match: matchQuery },
       {
@@ -929,7 +955,6 @@ exports.adminGetPaymentStats = async (req, res) => {
       { $sort: { totalAmount: -1 } }
     ]);
 
-    // Daily trend (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -952,7 +977,6 @@ exports.adminGetPaymentStats = async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Top customers by payment
     const topCustomers = await Payment.aggregate([
       { $match: matchQuery },
       {
@@ -985,30 +1009,33 @@ exports.adminGetPaymentStats = async (req, res) => {
       }
     ]);
 
-    // Recent payments
     const recentPayments = await Payment.find({ status: "completed" })
-      .populate('user', 'name businessName')
-      .select('paymentNumber amount method paymentDate')
+      .populate("user", "name businessName")
+      .select("paymentNumber amount method paymentDate")
       .sort({ paymentDate: -1 })
       .limit(5);
 
     res.status(200).json({
       success: true,
       data: {
-        stats: stats[0] || { totalPayments: 0, totalAmount: 0, avgPaymentAmount: 0 },
+        stats: stats[0] || {
+          totalPayments: 0,
+          totalAmount: 0,
+          avgPaymentAmount: 0
+        },
         byMethod,
         dailyTrend,
         topCustomers,
         recentPayments
       }
     });
-
   } catch (error) {
     console.error("Admin Get Payment Stats Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch payment statistics",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1031,8 +1058,8 @@ exports.adminGetUserPayments = async (req, res) => {
     }
 
     const payments = await Payment.find({ user: userId })
-      .populate('order', 'orderNumber totalAmount')
-      .populate('recordedBy', 'name')
+      .populate("order", "orderNumber totalAmount")
+      .populate("recordedBy", "name")
       .sort({ paymentDate: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -1040,21 +1067,24 @@ exports.adminGetUserPayments = async (req, res) => {
     const total = await Payment.countDocuments({ user: userId });
     const summary = await Payment.getUserPaymentSummary(userId);
 
-    // Get user credit info
-    const user = await User.findById(userId).select('name phone businessName creditLimit pendingAmount totalPaid');
+    const user = await User.findById(userId).select(
+      "name phone businessName creditLimit pendingAmount totalPaid"
+    );
 
     res.status(200).json({
       success: true,
       data: {
-        user: user ? {
-          _id: user._id,
-          name: user.name,
-          phone: user.phone,
-          businessName: user.businessName,
-          creditLimit: user.creditLimit,
-          pendingAmount: user.pendingAmount,
-          totalPaid: user.totalPaid
-        } : null,
+        user: user
+          ? {
+              _id: user._id,
+              name: user.name,
+              phone: user.phone,
+              businessName: user.businessName,
+              creditLimit: user.creditLimit,
+              pendingAmount: Math.max(0, user.pendingAmount || 0),
+              totalPaid: user.totalPaid
+            }
+          : null,
         payments,
         summary,
         pagination: {
@@ -1064,13 +1094,13 @@ exports.adminGetUserPayments = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error("Admin Get User Payments Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch user payments",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1121,9 +1151,13 @@ exports.adminUpdateCreditLimit = async (req, res) => {
       user.paymentTerms = paymentTerms;
     }
 
-    await user.save();
+    // ✅ Use validateBeforeSave: false to avoid pendingAmount
+    // validation error when updating unrelated credit limit fields
+    await user.save({ validateBeforeSave: false });
 
-    console.log(`💳 Credit limit updated for user ${user.phone}: ₹${user.creditLimit}`);
+    console.log(
+      `💳 Credit limit updated for user ${user.phone}: ₹${user.creditLimit}`
+    );
 
     res.status(200).json({
       success: true,
@@ -1135,18 +1169,18 @@ exports.adminUpdateCreditLimit = async (req, res) => {
           phone: user.phone,
           creditLimit: user.creditLimit,
           paymentTerms: user.paymentTerms,
-          pendingAmount: user.pendingAmount,
+          pendingAmount: Math.max(0, user.pendingAmount || 0),
           availableCredit: user.availableCredit
         }
       }
     });
-
   } catch (error) {
     console.error("Update Credit Limit Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update credit limit",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1195,13 +1229,17 @@ exports.adminToggleCreditBlock = async (req, res) => {
       user.creditBlockedBy = null;
     }
 
-    await user.save();
+    // ✅ Use validateBeforeSave: false to avoid pendingAmount
+    // validation error when updating unrelated credit block fields
+    await user.save({ validateBeforeSave: false });
 
-    console.log(`💳 Credit ${block ? 'blocked' : 'unblocked'} for user ${user.phone}`);
+    console.log(
+      `💳 Credit ${block ? "blocked" : "unblocked"} for user ${user.phone}`
+    );
 
     res.status(200).json({
       success: true,
-      message: `Credit ${block ? 'blocked' : 'unblocked'} successfully`,
+      message: `Credit ${block ? "blocked" : "unblocked"} successfully`,
       data: {
         user: {
           _id: user._id,
@@ -1212,13 +1250,13 @@ exports.adminToggleCreditBlock = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error("Toggle Credit Block Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update credit block status",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1232,28 +1270,32 @@ exports.adminGetOverdueReport = async (req, res) => {
   try {
     const { daysOverdue = 0 } = req.query;
 
-    // Get all users with their payment terms
-    const users = await User.find({ role: "customer" })
-      .select('_id name phone businessName paymentTerms pendingAmount');
+    const users = await User.find({ role: "customer" }).select(
+      "_id name phone businessName paymentTerms pendingAmount"
+    );
 
     const overdueOrders = [];
 
     for (const user of users) {
       const paymentTerms = user.paymentTerms || 30;
       const overdueDate = new Date();
-      overdueDate.setDate(overdueDate.getDate() - paymentTerms - parseInt(daysOverdue));
+      overdueDate.setDate(
+        overdueDate.getDate() - paymentTerms - parseInt(daysOverdue)
+      );
 
       const orders = await Order.find({
         user: user._id,
         status: { $ne: "cancelled" },
         paymentStatus: { $ne: "paid" },
         createdAt: { $lt: overdueDate }
-      }).select('orderNumber totalAmount payment createdAt');
+      }).select("orderNumber totalAmount payment createdAt");
 
       for (const order of orders) {
         const dueDate = new Date(order.createdAt);
         dueDate.setDate(dueDate.getDate() + paymentTerms);
-        const daysOverdueCalc = Math.floor((new Date() - dueDate) / (1000 * 60 * 60 * 24));
+        const daysOverdueCalc = Math.floor(
+          (new Date() - dueDate) / (1000 * 60 * 60 * 24)
+        );
 
         overdueOrders.push({
           user: {
@@ -1267,7 +1309,8 @@ exports.adminGetOverdueReport = async (req, res) => {
             orderNumber: order.orderNumber,
             totalAmount: order.totalAmount,
             amountPaid: order.payment?.amountPaid || 0,
-            outstanding: order.totalAmount - (order.payment?.amountPaid || 0)
+            outstanding:
+              order.totalAmount - (order.payment?.amountPaid || 0)
           },
           orderDate: order.createdAt,
           dueDate,
@@ -1276,12 +1319,15 @@ exports.adminGetOverdueReport = async (req, res) => {
       }
     }
 
-    // Sort by days overdue (most overdue first)
     overdueOrders.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
-    // Calculate summary
-    const totalOverdueAmount = overdueOrders.reduce((sum, o) => sum + o.order.outstanding, 0);
-    const uniqueCustomers = [...new Set(overdueOrders.map(o => o.user._id.toString()))].length;
+    const totalOverdueAmount = overdueOrders.reduce(
+      (sum, o) => sum + o.order.outstanding,
+      0
+    );
+    const uniqueCustomers = [
+      ...new Set(overdueOrders.map((o) => o.user._id.toString()))
+    ].length;
 
     res.status(200).json({
       success: true,
@@ -1291,19 +1337,23 @@ exports.adminGetOverdueReport = async (req, res) => {
           totalOrders: overdueOrders.length,
           totalOverdueAmount,
           uniqueCustomers,
-          avgDaysOverdue: overdueOrders.length > 0 
-            ? Math.round(overdueOrders.reduce((sum, o) => sum + o.daysOverdue, 0) / overdueOrders.length)
-            : 0
+          avgDaysOverdue:
+            overdueOrders.length > 0
+              ? Math.round(
+                  overdueOrders.reduce((sum, o) => sum + o.daysOverdue, 0) /
+                    overdueOrders.length
+                )
+              : 0
         }
       }
     });
-
   } catch (error) {
     console.error("Get Overdue Report Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch overdue report",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };

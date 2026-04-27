@@ -2,6 +2,7 @@
 const Product = require("../models/Product");
 const fs = require("fs");
 const path = require("path");
+const { deleteImage, deleteImages } = require("../utils/imageCleanup");
 
 function generateSlug(title) {
   return title
@@ -268,20 +269,48 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
-    let images = [];
-
+    // ═══════════════════════════════════════════════════════════
+    // IMAGE CLEANUP LOGIC - Delete removed images from disk
+    // ═══════════════════════════════════════════════════════════
+    
+    // Get current images in database
+    const oldImages = product.images || [];
+    
+    // Parse existing images from request (images user wants to keep)
+    let keptImages = [];
     if (existingImages) {
       try {
-        images = JSON.parse(existingImages);
+        keptImages = JSON.parse(existingImages);
       } catch (e) {
-        images = [];
+        keptImages = [];
       }
     }
 
+    // Find images that were removed (in old but not in kept)
+    const removedImages = oldImages.filter(img => !keptImages.includes(img));
+    
+    // Delete removed images from disk
+    if (removedImages.length > 0) {
+      console.log("🗑️ Removing old images:", removedImages);
+      const cleanupResult = deleteImages(removedImages);
+      console.log(`✅ Cleaned up ${cleanupResult.deleted} images, ${cleanupResult.failed} failed`);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Build new images array
+    // ═══════════════════════════════════════════════════════════
+    
+    let images = [...keptImages];
+
+    // Add newly uploaded images
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map(file => `/uploads/${file.filename}`);
       images = [...images, ...newImages];
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // Update product fields
+    // ═══════════════════════════════════════════════════════════
 
     const applicationsArray = applications
       ? applications.split(',').map(app => app.trim()).filter(app => app)
@@ -312,11 +341,9 @@ exports.updateProduct = async (req, res) => {
     if (product.trackQuantity) {
       if (stockQuantity !== undefined) {
         product.stockQuantity = parseInt(stockQuantity);
-        // Auto-update inStock based on stockQuantity
         product.inStock = product.stockQuantity > 0;
       }
     } else {
-      // If not tracking quantity, use manual inStock toggle
       if (inStock !== undefined) {
         product.inStock = inStock === "true" || inStock === true;
       }
@@ -329,7 +356,7 @@ exports.updateProduct = async (req, res) => {
 
     await product.save();
 
-    console.log("Product Updated:", product);
+    console.log("Product Updated:", product.title);
 
     res.json({
       success: true,
@@ -346,6 +373,7 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
+
 // DELETE PRODUCT
 exports.deleteProduct = async (req, res) => {
   try {
@@ -358,20 +386,18 @@ exports.deleteProduct = async (req, res) => {
       });
     }
 
+    // Delete all product images from disk
     if (product.images && product.images.length > 0) {
-      product.images.forEach(img => {
-        const imagePath = path.join(__dirname, "..", img);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
-      });
+      console.log("🗑️ Deleting product images:", product.images);
+      const cleanupResult = deleteImages(product.images);
+      console.log(`✅ Deleted ${cleanupResult.deleted} images, ${cleanupResult.failed} failed`);
     }
 
     await Product.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
-      message: "Product deleted"
+      message: "Product and images deleted successfully"
     });
 
   } catch (error) {

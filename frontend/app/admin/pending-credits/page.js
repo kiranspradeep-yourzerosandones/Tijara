@@ -227,61 +227,61 @@ export default function PendingCredits() {
 
         {/* Search & Filters - Compact */}
         <div className="bg-white rounded-xl border border-gray-200 p-3 mb-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search customer, order, phone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
-              />
-            </div>
+  <div className="flex flex-col sm:flex-row gap-3">
+    {/* Search */}
+    <div className="flex-1 relative">
+      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input
+        type="text"
+        placeholder="Search customer, order, phone..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="w-full pl-9 pr-3 py-2 text-sm text-black border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 placeholder:text-black/50"
+      />
+    </div>
 
-            {/* Filter Tabs */}
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {[
-                { id: "all", label: "All" },
-                { id: "overdue", label: "Overdue" },
-                { id: "thisWeek", label: "This Week" }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setFilter(tab.id)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    filter === tab.id
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+    {/* Filter Tabs */}
+    <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+      {[
+        { id: "all", label: "All" },
+        { id: "overdue", label: "Overdue" },
+        { id: "thisWeek", label: "This Week" }
+      ].map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => setFilter(tab.id)}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            filter === tab.id
+              ? "bg-white text-black shadow-sm"
+              : "text-black hover:bg-white/50"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
 
-            {/* Sort */}
-            <select
-              value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [field, order] = e.target.value.split("-");
-                setSortBy(field);
-                setSortOrder(order);
-              }}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-400/30"
-            >
-              <option value="createdAt-desc">Newest First</option>
-              <option value="createdAt-asc">Oldest First</option>
-              <option value="amount-desc">Highest Amount</option>
-              <option value="amount-asc">Lowest Amount</option>
-              <option value="customerName-asc">Name A-Z</option>
-              <option value="customerName-desc">Name Z-A</option>
-            </select>
-          </div>
-        </div>
+    {/* Sort */}
+    <select
+      value={`${sortBy}-${sortOrder}`}
+      onChange={(e) => {
+        const [field, order] = e.target.value.split("-");
+        setSortBy(field);
+        setSortOrder(order);
+      }}
+      className="px-3 py-2 text-sm text-black border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-400/30"
+    >
+      <option value="createdAt-desc">Newest First</option>
+      <option value="createdAt-asc">Oldest First</option>
+      <option value="amount-desc">Highest Amount</option>
+      <option value="amount-asc">Lowest Amount</option>
+      <option value="customerName-asc">Name A-Z</option>
+      <option value="customerName-desc">Name Z-A</option>
+    </select>
+  </div>
+</div>
 
         {/* Orders Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
