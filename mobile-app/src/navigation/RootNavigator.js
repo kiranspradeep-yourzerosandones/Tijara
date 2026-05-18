@@ -1,5 +1,5 @@
-// D:\yzo_ongoing\Tijara\mobile-app\src\navigation\RootNavigator.js
-import React, { useEffect, useState } from 'react';
+// src/navigation/RootNavigator.js
+import React, { useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { View, StyleSheet } from 'react-native';
 
@@ -8,35 +8,50 @@ import AppNavigator from './AppNavigator';
 import { Loading } from '../components/common';
 import { useAuthStore } from '../store';
 import { COLORS } from '../theme';
+import analyticsService from '../services/analyticsService';
 
-const RootNavigator = () => {
-  const { isAuthenticated, restoreSession } = useAuthStore();
-  const [isLoading, setIsLoading] = useState(true);
+const RootNavigator = ({ navigationRef }) => {
+  // ✅ Read state only — NO restoreSession here
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const routeNameRef = useRef(null);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      await restoreSession();
-    } catch (error) {
-      console.error('Auth check error:', error);
-    } finally {
-      setIsLoading(false);
+  const onNavigationReady = () => {
+    if (navigationRef?.current) {
+      routeNameRef.current =
+        navigationRef.current.getCurrentRoute()?.name;
     }
   };
 
+  const onStateChange = async () => {
+    if (!navigationRef?.current) return;
+
+    const previousRouteName = routeNameRef.current;
+    const currentRouteName =
+      navigationRef.current.getCurrentRoute()?.name;
+
+    if (previousRouteName !== currentRouteName) {
+      analyticsService.trackScreen(currentRouteName);
+    }
+
+    routeNameRef.current = currentRouteName;
+  };
+
+  // ✅ Show loading while session is being restored
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <Loading fullScreen message="Loading..." />
+        <Loading fullScreen />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={onNavigationReady}
+      onStateChange={onStateChange}
+    >
       {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );

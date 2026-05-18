@@ -1,48 +1,87 @@
 // src/utils/tokenManager.js
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
-class TokenManager {
-  constructor() {
-    this.onUnauthorizedCallback = null;
-  }
+const TOKEN_KEY = 'tijara_auth_token';
+const REFRESH_TOKEN_KEY = 'tijara_refresh_token';
 
-  async getToken() {
+let unauthorizedCallback = null;
+
+const tokenManager = {
+  // Store token securely
+  setToken: async (token) => {
     try {
-      return await AsyncStorage.getItem('authToken');
+      await SecureStore.setItemAsync(TOKEN_KEY, token);
     } catch (error) {
-      console.error('Error getting token:', error);
+      console.error('❌ SecureStore setToken error:', error);
+      throw error;
+    }
+  },
+
+  // Get token
+  getToken: async () => {
+    try {
+      return await SecureStore.getItemAsync(TOKEN_KEY);
+    } catch (error) {
+      console.error('❌ SecureStore getToken error:', error);
       return null;
     }
-  }
+  },
 
-  async setToken(token) {
+  // Clear token
+  clearToken: async () => {
     try {
-      if (token) {
-        await AsyncStorage.setItem('authToken', token);
-      }
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
     } catch (error) {
-      console.error('Error setting token:', error);
+      console.error('❌ SecureStore clearToken error:', error);
     }
-  }
+  },
 
-  async clearToken() {
+  // Refresh token support (for later)
+  setRefreshToken: async (token) => {
     try {
-      await AsyncStorage.removeItem('authToken');
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
     } catch (error) {
-      console.error('Error clearing token:', error);
+      console.error('❌ SecureStore setRefreshToken error:', error);
     }
-  }
+  },
 
-  setUnauthorizedCallback(callback) {
-    this.onUnauthorizedCallback = callback;
-  }
-
-  handleUnauthorized() {
-    if (this.onUnauthorizedCallback) {
-      this.onUnauthorizedCallback();
+  getRefreshToken: async () => {
+    try {
+      return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('❌ SecureStore getRefreshToken error:', error);
+      return null;
     }
-  }
-}
+  },
 
-const tokenManager = new TokenManager();
+  clearRefreshToken: async () => {
+    try {
+      await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('❌ SecureStore clearRefreshToken error:', error);
+    }
+  },
+
+  // Clear everything
+  clearAll: async () => {
+    try {
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('❌ SecureStore clearAll error:', error);
+    }
+  },
+
+  // Unauthorized handler
+  setUnauthorizedCallback: (callback) => {
+    unauthorizedCallback = callback;
+  },
+
+  handleUnauthorized: () => {
+    if (unauthorizedCallback) {
+      unauthorizedCallback();
+    }
+  },
+};
+
 export default tokenManager;

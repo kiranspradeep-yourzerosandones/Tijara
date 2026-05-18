@@ -105,8 +105,8 @@ export const changePassword = async (currentPassword, newPassword) => {
 // FCM TOKEN
 // ============================================================
 
-export const updateFCMToken = async (fcmToken) => {
-  const response = await apiClient.put('/auth/fcm-token', { fcmToken });
+export const updatePushToken = async (pushToken) => {
+  const response = await apiClient.put('/auth/push-token', { pushToken });
   return handleApiResponse(response);
 };
 // // src/api/auth.js

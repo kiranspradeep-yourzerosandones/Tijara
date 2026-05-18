@@ -60,17 +60,13 @@ const CartItem = ({ item, onPress }) => {
     >
       {/* Image */}
       <View style={styles.imageContainer}>
-        {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.placeholderImage}>
-            <Ionicons name="image-outline" size={24} color={COLORS.gray} />
-          </View>
-        )}
+        // In CartItem.js - replace image block with:
+<OptimizedImage
+  uri={imageUrl}
+  style={styles.image}
+  fallbackIcon="image-outline"
+  fallbackIconSize={24}
+/>
       </View>
 
       {/* Content */}

@@ -24,6 +24,11 @@ import { useAuthStore, useCartStore, useNotificationStore } from '../../store';
 import { useSearch } from '../../hooks';
 import { getImageUrl, formatCurrency, calculateDiscount } from '../../utils/helpers';
 
+import {
+  fetchWithCache,
+  invalidateCacheByPrefix,
+} from '../../utils/apiCache';
+
 const { width } = Dimensions.get('window');
 
 // 🎯 SIMPLE BANNER DIMENSIONS
@@ -35,6 +40,12 @@ const BANNER_HEIGHT = 160;
 const CATEGORY_HEIGHT = 114;
 const PRODUCT_GAP = 10;
 const PRODUCT_CARD_WIDTH = (width - (SPACING.screenPadding * 2) - (PRODUCT_GAP * 2)) / 3;
+
+// ============================================================
+// CACHE TTL
+// ============================================================
+const PRODUCTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CATEGORIES_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 // 🎯 LOCAL CATEGORY IMAGES
 const CATEGORY_IMAGES = {
@@ -182,28 +193,48 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const loadProducts = async () => {
-    try {
-      const response = await productsAPI.getProducts({ limit: 50 });
-      setProducts(response.data?.products || []);
-    } catch (error) {
-      console.error('Load products error:', error);
-    }
-  };
+  try {
+    const response = await fetchWithCache(
+      'products:all',
+      () => productsAPI.getProducts({ limit: 50 }),
+      PRODUCTS_CACHE_TTL
+    );
 
-  const loadCategories = async () => {
-    try {
-      const response = await productsAPI.getCategories();
-      setCategories(response.categories || []);
-    } catch (error) {
-      console.error('Load categories error:', error);
-    }
-  };
+    setProducts(response.data?.products || []);
+  } catch (error) {
+    console.error('Load products error:', error);
+  }
+};
+
+ const loadCategories = async () => {
+  try {
+    const response = await fetchWithCache(
+      'categories:all',
+      () => productsAPI.getCategories(),
+      CATEGORIES_CACHE_TTL
+    );
+
+    setCategories(response.categories || []);
+  } catch (error) {
+    console.error('Load categories error:', error);
+  }
+};
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
+  setIsRefreshing(true);
+
+  try {
+    // ✅ Clear cache before refresh
+    invalidateCacheByPrefix('products:');
+    invalidateCacheByPrefix('categories:');
+
     await loadInitialData();
+  } catch (error) {
+    console.error('Refresh error:', error);
+  } finally {
     setIsRefreshing(false);
-  };
+  }
+};
 
   // ============================================================
   // NAVIGATION HANDLERS

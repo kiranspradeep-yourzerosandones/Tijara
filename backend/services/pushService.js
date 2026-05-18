@@ -1,87 +1,91 @@
+// backend/services/pushService.js
 const axios = require("axios");
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 class PushService {
   constructor() {
-    this.isConfigured = false;
-    this.fcmUrl = "https://fcm.googleapis.com/fcm/send";
-    this.init();
-  }
-
-  init() {
-    if (process.env.FCM_SERVER_KEY) {
-      this.isConfigured = true;
-      console.log("🔔 Push notification service initialized");
-    } else {
-      console.log("🔔 Push service not configured (FCM_SERVER_KEY missing)");
-    }
+    this.isConfigured = true; // Expo push needs no extra config
+    console.log("🔔 Push notification service initialized (Expo Push API)");
   }
 
   /**
-   * Send push notification to single device
-   * @param {Object} options
-   * @param {string} options.token - FCM device token
-   * @param {string} options.title - Notification title
-   * @param {string} options.body - Notification body
-   * @param {Object} options.data - Additional data payload
-   * @param {string} options.imageUrl - Image URL (optional)
+   * Check if token is valid Expo push token
    */
-  async sendToDevice({ token, title, body, data = {}, imageUrl }) {
+  isValidExpoToken(token) {
+    return token && 
+      typeof token === "string" && 
+      token.startsWith("ExponentPushToken[");
+  }
+
+  /**
+   * Send to single device
+   */
+  async sendToDevice({ token, title, body, data = {}, sound = "default" }) {
     try {
       if (!token) {
-        return { success: false, message: "No FCM token provided" };
+        return { success: false, message: "No push token provided" };
       }
 
-      // Development mode
-      if (process.env.NODE_ENV === "development" && !this.isConfigured) {
+      // Development mode log
+      if (process.env.NODE_ENV === "development") {
         console.log("========================================");
-        console.log("🔔 PUSH NOTIFICATION (Dev Mode)");
-        console.log(`Token: ${token.substring(0, 20)}...`);
+        console.log("🔔 PUSH NOTIFICATION");
+        console.log(`Token: ${token.substring(0, 30)}...`);
         console.log(`Title: ${title}`);
         console.log(`Body: ${body}`);
         console.log("========================================");
-        return { success: true, message: "Push logged (dev mode)" };
       }
 
-      if (!this.isConfigured) {
-        return { success: false, message: "Push service not configured" };
+      if (!this.isValidExpoToken(token)) {
+        console.warn(`⚠️ Invalid Expo push token format: ${token?.substring(0, 20)}`);
+        return { success: false, message: "Invalid push token format" };
       }
 
-      const payload = {
+      const message = {
         to: token,
-        notification: {
-          title,
-          body,
-          sound: "default",
-          badge: 1
-        },
-        data: {
-          ...data,
-          click_action: "FLUTTER_NOTIFICATION_CLICK"
-        }
+        title,
+        body,
+        data,
+        sound,
+        priority: "high",
+        channelId: data?.channelId || "default",
       };
 
-      if (imageUrl) {
-        payload.notification.image = imageUrl;
+      const response = await axios.post(
+        EXPO_PUSH_URL,
+        message,
+        {
+          headers: {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      const result = response.data?.data;
+
+      if (result?.status === "error") {
+        console.error("🔔 Expo push error:", result.message);
+        return { 
+          success: false, 
+          message: result.message,
+          details: result.details
+        };
       }
 
-      const response = await axios.post(this.fcmUrl, payload, {
-        headers: {
-          "Authorization": `key=${process.env.FCM_SERVER_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 10000
-      });
-
-      console.log(`🔔 Push sent to token: ${token.substring(0, 20)}...`);
+      console.log(`🔔 Push sent successfully to ${token.substring(0, 20)}...`);
 
       return {
-        success: response.data.success === 1,
-        messageId: response.data.results?.[0]?.message_id,
-        message: "Push notification sent"
+        success: true,
+        message: "Push notification sent",
+        ticketId: result?.id
       };
 
     } catch (error) {
-      console.error("🔔 Push send error:", error.message);
+      console.error("🔔 Push send error:", error.response?.data || error.message);
       return {
         success: false,
         message: error.response?.data?.error || error.message
@@ -90,77 +94,115 @@ class PushService {
   }
 
   /**
-   * Send push notification to multiple devices
-   * @param {Array} tokens - Array of FCM tokens
-   * @param {Object} notification - Notification content
+   * Send to multiple devices (batch)
    */
-  async sendToMultiple({ tokens, title, body, data = {}, imageUrl }) {
+  async sendToMultiple({ tokens, title, body, data = {} }) {
     try {
       if (!tokens || tokens.length === 0) {
         return { success: false, message: "No tokens provided" };
       }
 
-      // Development mode
-      if (process.env.NODE_ENV === "development" && !this.isConfigured) {
-        console.log("========================================");
-        console.log("🔔 BULK PUSH NOTIFICATION (Dev Mode)");
-        console.log(`Tokens: ${tokens.length}`);
-        console.log(`Title: ${title}`);
-        console.log(`Body: ${body}`);
-        console.log("========================================");
-        return { 
-          success: true, 
-          message: "Push logged (dev mode)",
-          sent: tokens.length,
-          failed: 0
-        };
+      // Filter valid tokens only
+      const validTokens = tokens.filter(t => this.isValidExpoToken(t));
+
+      if (validTokens.length === 0) {
+        return { success: false, message: "No valid Expo push tokens" };
       }
 
-      if (!this.isConfigured) {
-        return { success: false, message: "Push service not configured" };
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🔔 Sending bulk push to ${validTokens.length} devices`);
       }
 
-      const payload = {
-        registration_ids: tokens,
-        notification: {
-          title,
-          body,
-          sound: "default"
-        },
-        data: {
-          ...data,
-          click_action: "FLUTTER_NOTIFICATION_CLICK"
-        }
-      };
+      // Expo push API accepts array of messages
+      const messages = validTokens.map(token => ({
+        to: token,
+        title,
+        body,
+        data,
+        sound: "default",
+        priority: "high",
+      }));
 
-      if (imageUrl) {
-        payload.notification.image = imageUrl;
+      // Send in chunks of 100 (Expo limit)
+      const CHUNK_SIZE = 100;
+      const results = { sent: 0, failed: 0, details: [] };
+
+      for (let i = 0; i < messages.length; i += CHUNK_SIZE) {
+        const chunk = messages.slice(i, i + CHUNK_SIZE);
+
+        const response = await axios.post(
+          EXPO_PUSH_URL,
+          chunk,
+          {
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json",
+            },
+            timeout: 30000,
+          }
+        );
+
+        const ticketData = response.data?.data || [];
+
+        ticketData.forEach((ticket, index) => {
+          if (ticket.status === "ok") {
+            results.sent++;
+          } else {
+            results.failed++;
+            results.details.push({
+              token: chunk[index].to,
+              error: ticket.message
+            });
+          }
+        });
       }
 
-      const response = await axios.post(this.fcmUrl, payload, {
-        headers: {
-          "Authorization": `key=${process.env.FCM_SERVER_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 30000
-      });
-
-      console.log(`🔔 Bulk push sent: ${response.data.success} success, ${response.data.failure} failed`);
+      console.log(`🔔 Bulk push: ${results.sent} sent, ${results.failed} failed`);
 
       return {
         success: true,
-        sent: response.data.success,
-        failed: response.data.failure,
-        results: response.data.results
+        sent: results.sent,
+        failed: results.failed,
+        details: results.details
       };
 
     } catch (error) {
       console.error("🔔 Bulk push error:", error.message);
       return {
         success: false,
-        message: error.response?.data?.error || error.message
+        message: error.message
       };
     }
+  }
+
+  /**
+   * Check push receipts (verify delivery)
+   */
+  async checkReceipts(ticketIds) {
+    try {
+      if (!ticketIds || ticketIds.length === 0) return null;
+
+      const response = await axios.post(
+        "https://exp.host/--/api/v2/push/getReceipts",
+        { ids: ticketIds },
+        {
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      return response.data?.data;
+    } catch (error) {
+      console.error("🔔 Receipt check error:", error.message);
+      return null;
+    }
+  }
+
+  isReady() {
+    return this.isConfigured;
   }
 }
 

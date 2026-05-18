@@ -166,7 +166,12 @@ const userSchema = new mongoose.Schema({
     }
   },
 
-  fcmToken: String,
+  pushToken: {
+  type: String,
+  select: false  // Don't expose in normal queries
+  },
+
+  pushTokenUpdatedAt: Date,
 
   lastLoginAt: Date,
 

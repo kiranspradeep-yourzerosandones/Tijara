@@ -1,4 +1,4 @@
-// backend\routes\authRoutes.js
+// backend/routes/authRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -22,7 +22,8 @@ const {
   getMe,
   updateProfile,
   changePassword,
-  updateFCMToken
+  // ✅ Renamed
+  updatePushToken,
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/auth");
@@ -50,6 +51,7 @@ router.post("/reset-password/email", resetPasswordWithToken);
 router.get("/me", protect, getMe);
 router.put("/profile", protect, updateProfile);
 router.put("/change-password", protect, changePassword);
-router.put("/fcm-token", protect, updateFCMToken);
+// ✅ Renamed from /fcm-token
+router.put("/push-token", protect, updatePushToken);
 
 module.exports = router;

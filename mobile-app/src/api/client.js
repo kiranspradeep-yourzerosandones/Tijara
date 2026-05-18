@@ -5,21 +5,24 @@ import ENV from '../config/env';
 
 const BASE_URL = ENV.API_URL;
 
-console.log('📡 API Configuration:', {
-  baseURL: BASE_URL,
-  isDev: __DEV__,
-});
+if (ENV.DEBUG) {
+  console.log('📡 API Configuration:', {
+    baseURL: BASE_URL,
+    environment: ENV.ENVIRONMENT,
+    timeout: ENV.API_TIMEOUT,
+  });
+}
 
 // Create axios instance
 const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: ENV.API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor - Add auth token
+// ✅ Request interceptor - Add auth token
 apiClient.interceptors.request.use(
   async (config) => {
     try {
@@ -30,12 +33,14 @@ apiClient.interceptors.request.use(
     } catch (error) {
       console.error('Error getting auth token:', error);
     }
-    
-    if (__DEV__) {
+
+    if (ENV.DEBUG) {
       console.log(`🚀 ${config.method?.toUpperCase()} ${config.url}`);
-      console.log('📦 Data:', config.data);
+      if (config.data) {
+        console.log('📦 Data:', config.data);
+      }
     }
-    
+
     return config;
   },
   (error) => {
@@ -44,55 +49,78 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor - Handle errors
+// ✅ Response interceptor - Handle errors + retry
 apiClient.interceptors.response.use(
   (response) => {
-    if (__DEV__) {
-      console.log(`✅ Response from ${response.config.url}:`, response.data);
+    if (ENV.DEBUG) {
+      console.log(`✅ Response ${response.status} from ${response.config.url}`);
     }
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
-    
-    if (__DEV__) {
-      console.error('❌ API Error Details:', {
+
+    if (ENV.DEBUG) {
+      console.error('❌ API Error:', {
         message: error.message,
         url: originalRequest?.url,
-        method: originalRequest?.method,
-        data: originalRequest?.data,
-        response: error.response?.data,
         status: error.response?.status,
+        data: error.response?.data,
       });
     }
-    
-    // Handle 401 Unauthorized
+
+    // ✅ Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       await tokenManager.clearToken();
       tokenManager.handleUnauthorized();
       return Promise.reject(error);
     }
-    
-    // Handle network errors
+
+    // ✅ Retry logic for network errors and 5xx
+    const shouldRetry =
+      !originalRequest._retryCount &&
+      (!error.response || error.response.status >= 500);
+
+    if (shouldRetry) {
+      originalRequest._retryCount = 0;
+    }
+
+    if (
+      originalRequest._retryCount !== undefined &&
+      originalRequest._retryCount < ENV.API_RETRY_COUNT &&
+      (!error.response || error.response.status >= 500)
+    ) {
+      originalRequest._retryCount += 1;
+
+      const delay = ENV.API_RETRY_DELAY * originalRequest._retryCount;
+
+      if (ENV.DEBUG) {
+        console.log(
+          `🔄 Retrying request (${originalRequest._retryCount}/${ENV.API_RETRY_COUNT}) after ${delay}ms`
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return apiClient(originalRequest);
+    }
+
+    // ✅ Network error - friendly message
     if (!error.response) {
       const networkError = new Error(
-        `Cannot connect to server at ${BASE_URL}\n\n` +
-        `Troubleshooting:\n` +
-        `1. ✅ Backend running? Check terminal\n` +
-        `2. ✅ Same Wi-Fi? Phone & PC must be on same network\n` +
-        `3. ✅ Correct IP? Current: ${BASE_URL.split('//')[1]?.split(':')[0]}\n` +
-        `4. ✅ Firewall? Allow Node.js through firewall`
+        'No internet connection. Please check your network and try again.'
       );
+      networkError.isNetworkError = true;
       return Promise.reject(networkError);
     }
-    
+
     return Promise.reject(error);
   }
 );
 
 export default apiClient;
 
+// ✅ Standardized response handler
 export const handleApiResponse = (response) => {
   if (response.data?.success) {
     return response.data;
@@ -101,6 +129,9 @@ export const handleApiResponse = (response) => {
 };
 
 export const handleApiError = (error) => {
+  if (error.isNetworkError) {
+    return 'No internet connection. Please check your network.';
+  }
   if (error.response?.data?.message) {
     return error.response.data.message;
   }

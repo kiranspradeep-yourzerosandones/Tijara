@@ -1451,30 +1451,32 @@ exports.changePassword = async (req, res) => {
  * @route   PUT /api/auth/fcm-token
  * @access  Private
  */
-exports.updateFCMToken = async (req, res) => {
+exports.updatePushToken = async (req, res) => {
   try {
-    const { fcmToken } = req.body;
+    const { pushToken } = req.body;
 
-    if (!fcmToken) {
+    if (!pushToken) {
       return res.status(400).json({
         success: false,
-        message: "FCM token is required"
+        message: "Push token is required"
       });
     }
 
-    await User.findByIdAndUpdate(req.user._id, { fcmToken });
+    await User.findByIdAndUpdate(req.user._id, { 
+      pushToken,
+      pushTokenUpdatedAt: new Date()
+    });
 
     res.status(200).json({
       success: true,
-      message: "FCM token updated successfully"
+      message: "Push token updated successfully"
     });
   } catch (error) {
-    console.error("Update FCM Token Error:", error);
+    console.error("Update Push Token Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to update FCM token",
-      error:
-        process.env.NODE_ENV === "development" ? error.message : undefined
+      message: "Failed to update push token",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };

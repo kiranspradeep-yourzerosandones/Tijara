@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
 import { formatCurrency, calculateDiscount, getImageUrl } from '../../utils/helpers';
 import { useCartStore } from '../../store';
+import { OptimizedImage } from '../common';
 
 const ProductCard = ({ product, onPress, style }) => {
   const { addToCart, getItemQuantity, isLoading } = useCartStore();
@@ -37,17 +38,12 @@ const ProductCard = ({ product, onPress, style }) => {
     >
       {/* Image Container */}
       <View style={styles.imageContainer}>
-        {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.placeholderImage}>
-            <Ionicons name="image-outline" size={40} color={COLORS.gray} />
-          </View>
-        )}
+        <OptimizedImage
+  uri={imageUrl}
+  style={styles.image}
+  fallbackIcon="cube-outline"
+  fallbackIconSize={40}
+/>
 
         {/* Sale Badge - Enhanced */}
         {discount > 0 && (

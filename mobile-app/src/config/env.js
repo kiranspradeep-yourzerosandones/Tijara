@@ -1,27 +1,30 @@
-// Replace 192.168.1.XXX with YOUR actual IP from Step 1
-const ENV = {
-  development: {
-    API_URL: 'http://192.168.29.69:5000/api', // ← Change XXX to your IP
-    IMAGE_BASE_URL: 'http://192.168.29.69:5000',
-    DEBUG: true,
-  },
-  staging: {
-    API_URL: 'https://staging-api.tijara.com/api',
-    IMAGE_BASE_URL: 'https://staging-api.tijara.com',
-    DEBUG: true,
-  },
-  production: {
-    API_URL: 'https://api.tijara.com/api',
-    IMAGE_BASE_URL: 'https://api.tijara.com',
-    DEBUG: false,
-  },
-};
+// src/config/env.js
+import DEV_ENV from './env.development';
+import STAGING_ENV from './env.staging';
+import PROD_ENV from './env.production';
 
-const getEnvVars = () => {
+const getEnv = () => {
   if (__DEV__) {
-    return ENV.development;
+    return DEV_ENV;
   }
-  return ENV.production;
+
+  // When building for production with EAS:
+  // Set EXPO_PUBLIC_ENV=staging or production
+  const buildEnv = process.env.EXPO_PUBLIC_ENV;
+
+  if (buildEnv === 'staging') {
+    return STAGING_ENV;
+  }
+
+  return PROD_ENV;
 };
 
-export default getEnvVars();
+const ENV = getEnv();
+
+// ✅ Log environment on startup (dev only)
+if (ENV.DEBUG) {
+  console.log('🌍 Environment:', ENV.ENVIRONMENT);
+  console.log('📡 API URL:', ENV.API_URL);
+}
+
+export default ENV;
