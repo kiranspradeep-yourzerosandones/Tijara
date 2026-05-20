@@ -1,5 +1,7 @@
 // src/screens/categories/CategoriesScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
+import { ProductGridSkeleton, CategorySkeleton } from '../../components/common/Skeleton';
+import { useRef } from 'react';
 import {
   View,
   Text,
@@ -28,6 +30,7 @@ const PRODUCT_GAP = 8;
 const PRODUCTS_AREA_WIDTH = width - SIDEBAR_WIDTH;
 const PRODUCT_CARD_WIDTH = (PRODUCTS_AREA_WIDTH - (PRODUCT_GAP * 3)) / 2;
 
+
 // 🎯 SAME IMAGES AS HOME PAGE
 const CATEGORY_IMAGES = {
   wax: require('../../../assets/wax.jpg'),
@@ -50,6 +53,8 @@ const CategoriesScreen = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [sortOrder, setSortOrder] = useState(null);
+
+  const addingRef = useRef({});
 
   const { addToCart, getItemQuantity, totalItems } = useCartStore();
 
@@ -154,12 +159,16 @@ const CategoriesScreen = ({ navigation }) => {
   }, [hideSuggestions, navigation]);
 
   const handleAddToCart = useCallback(async (product) => {
-    try {
-      await addToCart(product._id, 1);
-    } catch (error) {
-      console.error('Add to cart error:', error);
-    }
-  }, [addToCart]);
+  if (addingRef.current[product._id]) return;
+  addingRef.current[product._id] = true;
+  try {
+    await addToCart(product._id, 1);
+  } catch (error) {
+    console.error('Add to cart error:', error);
+  } finally {
+    addingRef.current[product._id] = false;
+  }
+}, [addToCart]);
 
   const handleSortPress = useCallback(() => {
     if (sortOrder === null) setSortOrder('low');
@@ -469,12 +478,41 @@ const CategoriesScreen = ({ navigation }) => {
   // LOADING STATE
   // ============================================================
   if (isLoading) {
-    return (
-      <Screen backgroundColor={COLORS.white}>
-        <Loading fullScreen message="Loading categories..." />
-      </Screen>
-    );
-  }
+  return (
+    <Screen backgroundColor={COLORS.white}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Categories</Text>
+        <View style={styles.headerRight} />
+      </View>
+
+      <View style={styles.content}>
+        {/* Sidebar skeleton */}
+        <View style={styles.sidebar}>
+          <View style={{ paddingTop: 12, gap: 16 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <CategorySkeleton key={i} />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.sidebarDivider} />
+
+        {/* Products skeleton */}
+        <View style={[styles.productsContainer, { paddingTop: 12 }]}>
+          <ProductGridSkeleton count={6} />
+        </View>
+      </View>
+    </Screen>
+  );
+}
+
 
   // ============================================================
   // MAIN RENDER

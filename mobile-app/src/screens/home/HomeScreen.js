@@ -15,45 +15,38 @@ import {
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
-import { Loading, Screen } from '../../components/common';
+import { Screen } from '../../components/common';
+import { HomeScreenSkeleton } from '../../components/common/Skeleton';
+import Toast from '../../components/common/Toast';
+import useToast from '../../hooks/useToast';
 import SearchSuggestions from '../../components/search/SearchSuggestions';
 import TijaraLogo from '../../components/common/TijaraLogo';
 import { productsAPI } from '../../api';
 import { useAuthStore, useCartStore, useNotificationStore } from '../../store';
 import { useSearch } from '../../hooks';
 import { getImageUrl, formatCurrency, calculateDiscount } from '../../utils/helpers';
-
-import {
-  fetchWithCache,
-  invalidateCacheByPrefix,
-} from '../../utils/apiCache';
+import { fetchWithCache, invalidateCacheByPrefix } from '../../utils/apiCache';
 
 const { width } = Dimensions.get('window');
 
-// 🎯 SIMPLE BANNER DIMENSIONS
 const BANNER_HORIZONTAL_PADDING = 20;
-const BANNER_WIDTH = width - (BANNER_HORIZONTAL_PADDING * 2);
+const BANNER_WIDTH = width - BANNER_HORIZONTAL_PADDING * 2;
 const BANNER_HEIGHT = 160;
-
-// Category & Product dimensions
 const CATEGORY_HEIGHT = 114;
 const PRODUCT_GAP = 10;
-const PRODUCT_CARD_WIDTH = (width - (SPACING.screenPadding * 2) - (PRODUCT_GAP * 2)) / 3;
+const PRODUCT_CARD_WIDTH =
+  (width - SPACING.screenPadding * 2 - PRODUCT_GAP * 2) / 3;
 
-// ============================================================
-// CACHE TTL
-// ============================================================
-const PRODUCTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const CATEGORIES_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const PRODUCTS_CACHE_TTL = 5 * 60 * 1000;
+const CATEGORIES_CACHE_TTL = 30 * 60 * 1000;
 
-// 🎯 LOCAL CATEGORY IMAGES
 const CATEGORY_IMAGES = {
   wax: require('../../../assets/wax.jpg'),
   chemicals: require('../../../assets/chemicals.jpg'),
 };
 
-// 🎯 Banner data
 const BANNER_DATA = [
   {
     id: '1',
@@ -81,10 +74,13 @@ const BANNER_DATA = [
   },
 ];
 
-// Default categories
 const DEFAULT_CATEGORIES = [
   { _id: 'wax', name: 'Wax Products', localImage: CATEGORY_IMAGES.wax },
-  { _id: 'chemicals', name: 'Chemical Products', localImage: CATEGORY_IMAGES.chemicals },
+  {
+    _id: 'chemicals',
+    name: 'Chemical Products',
+    localImage: CATEGORY_IMAGES.chemicals,
+  },
 ];
 
 const HomeScreen = ({ navigation }) => {
@@ -92,20 +88,28 @@ const HomeScreen = ({ navigation }) => {
   const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // Banner state
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+
+  // ✅ FIX 1 — floatingCartScale declared here
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  
-  // Floating cart animation
   const floatingCartScale = useRef(new Animated.Value(0)).current;
 
-  // Store hooks
-  const { user } = useAuthStore();
-  const { addToCart, getItemQuantity, fetchCart, totalItems } = useCartStore();
+  // ✅ Spam guard for add to cart
+  const addingRef = useRef({});
+
+  // Toast
+  const { toast, showToast } = useToast();
+
+  // ✅ FIX 3 — Granular store selectors (prevent full re-renders)
+  const user = useAuthStore((state) => state.user);
+  const addToCart = useCartStore((state) => state.addToCart);
+  const getItemQuantity = useCartStore((state) => state.getItemQuantity);
+  const fetchCart = useCartStore((state) => state.fetchCart);
+  const totalItems = useCartStore((state) => state.totalItems);
+  const cartItems = useCartStore((state) => state.items);
   const { fetchUnreadCount } = useNotificationStore();
 
-  // 🔍 Search hook - WITH ALL REQUIRED PROPERTIES
+  // Search hook
   const {
     query: searchQuery,
     suggestions,
@@ -114,18 +118,16 @@ const HomeScreen = ({ navigation }) => {
     isLoadingSuggestions,
     showSuggestions,
     recentSearches,
-    trendingSearches,          // ✅ Added
-    error: searchError,
+    trendingSearches,
     setQuery: setSearchQuery,
-    fillSearch,                // ✅ Added
+    fillSearch,
     clearSearch,
     hideSuggestions,
     openSuggestions,
     selectSuggestion,
     addToRecentSearches,
-    removeRecentSearch,        // ✅ Added
+    removeRecentSearch,
     clearRecentSearches,
-    fetchSuggestions,
   } = useSearch({
     debounceMs: 300,
     minQueryLength: 2,
@@ -145,29 +147,31 @@ const HomeScreen = ({ navigation }) => {
       friction: 6,
       tension: 40,
     }).start();
-  }, [totalItems, floatingCartScale]);
+  }, [totalItems]);
 
   // ============================================================
-  // BANNER AUTO-CHANGE
+  // ✅ FIX 5 — Banner auto-change stops when screen unfocused
   // ============================================================
-  useEffect(() => {
-    const interval = setInterval(() => {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        setCurrentBannerIndex((prev) => (prev + 1) % BANNER_DATA.length);
+  useFocusEffect(
+    useCallback(() => {
+      const interval = setInterval(() => {
         Animated.timing(fadeAnim, {
-          toValue: 1,
+          toValue: 0,
           duration: 300,
           useNativeDriver: true,
-        }).start();
-      });
-    }, 5000);
+        }).start(() => {
+          setCurrentBannerIndex((prev) => (prev + 1) % BANNER_DATA.length);
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
+        });
+      }, 5000);
 
-    return () => clearInterval(interval);
-  }, [fadeAnim]);
+      return () => clearInterval(interval);
+    }, [fadeAnim])
+  );
 
   // ============================================================
   // DATA LOADING
@@ -182,7 +186,8 @@ const HomeScreen = ({ navigation }) => {
       await Promise.all([
         loadProducts(),
         loadCategories(),
-        fetchCart(),
+        // ✅ FIX 2 — Only fetch cart if empty
+        cartItems.length === 0 ? fetchCart() : Promise.resolve(),
         fetchUnreadCount(),
       ]);
     } catch (error) {
@@ -193,48 +198,43 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const loadProducts = async () => {
-  try {
-    const response = await fetchWithCache(
-      'products:all',
-      () => productsAPI.getProducts({ limit: 50 }),
-      PRODUCTS_CACHE_TTL
-    );
+    try {
+      const response = await fetchWithCache(
+        'products:all',
+        () => productsAPI.getProducts({ limit: 50 }),
+        PRODUCTS_CACHE_TTL
+      );
+      setProducts(response.data?.products || []);
+    } catch (error) {
+      console.error('Load products error:', error);
+    }
+  };
 
-    setProducts(response.data?.products || []);
-  } catch (error) {
-    console.error('Load products error:', error);
-  }
-};
-
- const loadCategories = async () => {
-  try {
-    const response = await fetchWithCache(
-      'categories:all',
-      () => productsAPI.getCategories(),
-      CATEGORIES_CACHE_TTL
-    );
-
-    setCategories(response.categories || []);
-  } catch (error) {
-    console.error('Load categories error:', error);
-  }
-};
+  const loadCategories = async () => {
+    try {
+      const response = await fetchWithCache(
+        'categories:all',
+        () => productsAPI.getCategories(),
+        CATEGORIES_CACHE_TTL
+      );
+      setCategories(response.categories || []);
+    } catch (error) {
+      console.error('Load categories error:', error);
+    }
+  };
 
   const handleRefresh = async () => {
-  setIsRefreshing(true);
-
-  try {
-    // ✅ Clear cache before refresh
-    invalidateCacheByPrefix('products:');
-    invalidateCacheByPrefix('categories:');
-
-    await loadInitialData();
-  } catch (error) {
-    console.error('Refresh error:', error);
-  } finally {
-    setIsRefreshing(false);
-  }
-};
+    setIsRefreshing(true);
+    try {
+      invalidateCacheByPrefix('products:');
+      invalidateCacheByPrefix('categories:');
+      await loadInitialData();
+    } catch (error) {
+      console.error('Refresh error:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // ============================================================
   // NAVIGATION HANDLERS
@@ -251,11 +251,14 @@ const HomeScreen = ({ navigation }) => {
     }
   }, [searchQuery, hideSuggestions, addToRecentSearches, navigation]);
 
-  const handleProductPress = useCallback((product) => {
-    hideSuggestions();
-    Keyboard.dismiss();
-    navigation.navigate('ProductDetail', { product });
-  }, [hideSuggestions, navigation]);
+  const handleProductPress = useCallback(
+    (product) => {
+      hideSuggestions();
+      Keyboard.dismiss();
+      navigation.navigate('ProductDetail', { product });
+    },
+    [hideSuggestions, navigation]
+  );
 
   const handleViewAllProducts = useCallback(() => {
     navigation.navigate('ProductList', { title: 'All Products' });
@@ -270,14 +273,19 @@ const HomeScreen = ({ navigation }) => {
     });
   }, [hideSuggestions, searchQuery, navigation]);
 
-  const handleCategoryPress = useCallback((category) => {
-    hideSuggestions();
-    Keyboard.dismiss();
-    navigation.navigate('ProductList', {
-      category: typeof category === 'string' ? category : category.name,
-      title: typeof category === 'string' ? category : category.name,
-    });
-  }, [hideSuggestions, navigation]);
+  const handleCategoryPress = useCallback(
+    (category) => {
+      hideSuggestions();
+      Keyboard.dismiss();
+      navigation.navigate('ProductList', {
+        category:
+          typeof category === 'string' ? category : category.name,
+        title:
+          typeof category === 'string' ? category : category.name,
+      });
+    },
+    [hideSuggestions, navigation]
+  );
 
   const handleSupportPress = useCallback(() => {
     navigation.navigate('Profile');
@@ -287,73 +295,102 @@ const HomeScreen = ({ navigation }) => {
     navigation.navigate('Cart');
   }, [navigation]);
 
-  const handleAddToCart = useCallback(async (product) => {
-    try {
-      await addToCart(product._id, 1);
-    } catch (error) {
-      console.error('Add to cart error:', error);
-    }
-  }, [addToCart]);
+  // ✅ FIX 6 — Spam guard on add to cart
+  const handleAddToCart = useCallback(
+    async (product) => {
+      if (addingRef.current[product._id]) return;
+      addingRef.current[product._id] = true;
 
-  // Handle suggestion selection
-  const handleSelectSuggestion = useCallback((suggestion) => {
-    if (typeof suggestion === 'string') {
-      setSearchQuery(suggestion);
-      addToRecentSearches(suggestion);
+      try {
+        await addToCart(product._id, 1);
+        showToast(`${product.title} added to cart`, 'cart');
+      } catch (error) {
+        showToast(error.message || 'Failed to add to cart', 'error');
+      } finally {
+        addingRef.current[product._id] = false;
+      }
+    },
+    [addToCart, showToast]
+  );
+
+  const handleSelectSuggestion = useCallback(
+    (suggestion) => {
+      if (typeof suggestion === 'string') {
+        setSearchQuery(suggestion);
+        addToRecentSearches(suggestion);
+        hideSuggestions();
+        Keyboard.dismiss();
+        navigation.navigate('ProductList', {
+          searchQuery: suggestion,
+          title: `Search: ${suggestion}`,
+        });
+      } else {
+        selectSuggestion(suggestion);
+      }
+    },
+    [
+      setSearchQuery,
+      addToRecentSearches,
+      hideSuggestions,
+      selectSuggestion,
+      navigation,
+    ]
+  );
+
+  const handleSelectProductSuggestion = useCallback(
+    (product) => {
       hideSuggestions();
       Keyboard.dismiss();
-      navigation.navigate('ProductList', {
-        searchQuery: suggestion,
-        title: `Search: ${suggestion}`,
-      });
-    } else {
-      selectSuggestion(suggestion);
-    }
-  }, [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion, navigation]);
+      handleProductPress(product);
+    },
+    [hideSuggestions, handleProductPress]
+  );
 
-  // Handle product selection from suggestions
-  const handleSelectProductSuggestion = useCallback((product) => {
-    hideSuggestions();
-    Keyboard.dismiss();
-    handleProductPress(product);
-  }, [hideSuggestions, handleProductPress]);
+  const handleSelectCategorySuggestion = useCallback(
+    (categoryName) => {
+      hideSuggestions();
+      Keyboard.dismiss();
+      handleCategoryPress(categoryName);
+    },
+    [hideSuggestions, handleCategoryPress]
+  );
 
-  // Handle category selection from suggestions
-  const handleSelectCategorySuggestion = useCallback((categoryName) => {
-    hideSuggestions();
-    Keyboard.dismiss();
-    handleCategoryPress(categoryName);
-  }, [hideSuggestions, handleCategoryPress]);
+  const handleFillSearch = useCallback(
+    (text) => {
+      fillSearch(text);
+    },
+    [fillSearch]
+  );
 
-  // Handle fill search (arrow button in suggestions)
-  const handleFillSearch = useCallback((text) => {
-    fillSearch(text);
-  }, [fillSearch]);
+  const handleRemoveRecentSearch = useCallback(
+    (searchTerm) => {
+      removeRecentSearch(searchTerm);
+    },
+    [removeRecentSearch]
+  );
 
-  // Handle remove recent search item
-  const handleRemoveRecentSearch = useCallback((searchTerm) => {
-    removeRecentSearch(searchTerm);
-  }, [removeRecentSearch]);
-
-  // Handle dot press for banner
-  const handleDotPress = useCallback((index) => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setCurrentBannerIndex(index);
+  const handleDotPress = useCallback(
+    (index) => {
       Animated.timing(fadeAnim, {
-        toValue: 1,
+        toValue: 0,
         duration: 200,
         useNativeDriver: true,
-      }).start();
-    });
-  }, [fadeAnim]);
+      }).start(() => {
+        setCurrentBannerIndex(index);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      });
+    },
+    [fadeAnim]
+  );
 
   // ============================================================
-  // RENDER: HEADER
+  // RENDERS
   // ============================================================
+
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -365,20 +402,21 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
         </View>
       </View>
-
       <TouchableOpacity
         style={styles.supportButton}
         onPress={handleSupportPress}
       >
-        <Ionicons name="headset-outline" size={20} color={COLORS.textPrimary} />
+        <Ionicons
+          name="headset-outline"
+          size={20}
+          color={COLORS.textPrimary}
+        />
       </TouchableOpacity>
     </View>
   );
 
-  // ============================================================
-  // RENDER: SEARCH BAR WITH SUGGESTIONS
-  // ============================================================
   const renderSearchBar = () => (
+    // ✅ FIX 4 — Added elevation for Android zIndex
     <View style={styles.searchWrapper}>
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={18} color={COLORS.gray} />
@@ -401,7 +439,6 @@ const HomeScreen = ({ navigation }) => {
         )}
       </View>
 
-      {/* Search Suggestions Dropdown */}
       <SearchSuggestions
         suggestions={suggestions}
         query={searchQuery}
@@ -419,18 +456,15 @@ const HomeScreen = ({ navigation }) => {
     </View>
   );
 
-  // ============================================================
-  // RENDER: SEARCH RESULTS HEADER
-  // ============================================================
   const renderSearchHeader = () => {
     if (!isSearching || showSuggestions) return null;
-
     return (
       <View style={styles.searchResultsHeader}>
         <View style={styles.searchResultsInfo}>
           <Ionicons name="search" size={16} color={COLORS.textSecondary} />
           <Text style={styles.searchResultsText}>
-            {filteredProducts.length} result{filteredProducts.length !== 1 ? 's' : ''} for "{searchQuery}"
+            {filteredProducts.length} result
+            {filteredProducts.length !== 1 ? 's' : ''} for "{searchQuery}"
           </Text>
         </View>
         <TouchableOpacity onPress={clearSearch}>
@@ -440,12 +474,8 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ============================================================
-  // RENDER: BANNER
-  // ============================================================
   const renderBanner = () => {
     if (isSearching) return null;
-
     const currentBanner = BANNER_DATA[currentBannerIndex];
 
     return (
@@ -458,7 +488,7 @@ const HomeScreen = ({ navigation }) => {
           <Animated.View
             style={[
               styles.bannerCard,
-              { 
+              {
                 backgroundColor: currentBanner.backgroundColor,
                 opacity: fadeAnim,
               },
@@ -468,7 +498,6 @@ const HomeScreen = ({ navigation }) => {
               <View style={[styles.patternCircle, styles.patternCircle1]} />
               <View style={[styles.patternCircle, styles.patternCircle2]} />
             </View>
-
             <View style={styles.bannerContent}>
               <View style={styles.bannerTextSection}>
                 <Text style={styles.bannerTitle} numberOfLines={1}>
@@ -479,13 +508,20 @@ const HomeScreen = ({ navigation }) => {
                 </Text>
                 <View style={styles.shopNowButton}>
                   <Text style={styles.shopNowText}>Shop Now</Text>
-                  <Ionicons name="arrow-forward" size={14} color={COLORS.black} />
+                  <Ionicons
+                    name="arrow-forward"
+                    size={14}
+                    color={COLORS.black}
+                  />
                 </View>
               </View>
-              
               <View style={styles.bannerImageSection}>
                 <View style={styles.bannerIconContainer}>
-                  <Ionicons name="cube" size={40} color="rgba(255,255,255,0.3)" />
+                  <Ionicons
+                    name="cube"
+                    size={40}
+                    color="rgba(255,255,255,0.3)"
+                  />
                 </View>
               </View>
             </View>
@@ -512,40 +548,38 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ============================================================
-  // RENDER: CATEGORIES
-  // ============================================================
   const renderCategories = () => {
     if (isSearching) return null;
 
     const getCategoryWithImage = (category, index) => {
-      const categoryNameLower = category.name?.toLowerCase() || '';
-      
-      if (categoryNameLower.includes('wax')) {
+      const lower = category.name?.toLowerCase() || '';
+      if (lower.includes('wax'))
         return { ...category, localImage: CATEGORY_IMAGES.wax };
-      } else if (categoryNameLower.includes('chemical')) {
+      if (lower.includes('chemical'))
         return { ...category, localImage: CATEGORY_IMAGES.chemicals };
-      }
-      
       if (index === 0) return { ...category, localImage: CATEGORY_IMAGES.wax };
-      if (index === 1) return { ...category, localImage: CATEGORY_IMAGES.chemicals };
-      
+      if (index === 1)
+        return { ...category, localImage: CATEGORY_IMAGES.chemicals };
       return category;
     };
 
-    const displayCategories = categories.length > 0 
-      ? categories.slice(0, 2).map((cat, idx) => getCategoryWithImage(cat, idx))
-      : DEFAULT_CATEGORIES;
+    const displayCategories =
+      categories.length > 0
+        ? categories
+            .slice(0, 2)
+            .map((cat, idx) => getCategoryWithImage(cat, idx))
+        : DEFAULT_CATEGORIES;
 
     return (
       <View style={styles.categoriesSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Categories</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Categories')}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Categories')}
+          >
             <Text style={styles.seeAllText}>See all →</Text>
           </TouchableOpacity>
         </View>
-
         <View style={styles.categoryGrid}>
           {displayCategories.map((category) => (
             <TouchableOpacity
@@ -570,13 +604,12 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ============================================================
-  // RENDER: COMPACT PRODUCT CARD
-  // ============================================================
   const renderCompactProductCard = (product, index) => {
     const quantity = getItemQuantity(product._id);
     const discount = calculateDiscount(product.compareAtPrice, product.price);
-    const imageUrl = product.images?.[0] ? getImageUrl(product.images[0]) : null;
+    const imageUrl = product.images?.[0]
+      ? getImageUrl(product.images[0])
+      : null;
 
     return (
       <TouchableOpacity
@@ -618,7 +651,6 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.compactTitle} numberOfLines={2}>
             {product.title}
           </Text>
-
           <View style={styles.compactPriceRow}>
             <Text style={styles.compactPrice}>
               {formatCurrency(product.price)}
@@ -644,14 +676,11 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ============================================================
-  // RENDER: PRODUCTS GRID
-  // ============================================================
   const renderProducts = () => {
     const displayProducts = isSearching ? filteredProducts : products;
     const maxProducts = isSearching ? 12 : 9;
     const sectionTitle = isSearching ? 'Search Results' : 'Our Products';
-    
+
     return (
       <View style={styles.productsSection}>
         <View style={styles.sectionHeader}>
@@ -668,7 +697,6 @@ const HomeScreen = ({ navigation }) => {
           )}
         </View>
 
-        {/* No results message */}
         {isSearching && filteredProducts.length === 0 && (
           <View style={styles.noResultsContainer}>
             <Ionicons name="search-outline" size={48} color={COLORS.gray} />
@@ -676,7 +704,7 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.noResultsText}>
               Try searching with different keywords
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.clearSearchButton}
               onPress={clearSearch}
             >
@@ -685,23 +713,27 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Products grid */}
         {displayProducts.length > 0 && (
           <View style={styles.productsGrid}>
-            {displayProducts.slice(0, maxProducts).map((product, index) => 
-              renderCompactProductCard(product, index)
-            )}
+            {displayProducts
+              .slice(0, maxProducts)
+              .map((product, index) =>
+                renderCompactProductCard(product, index)
+              )}
           </View>
         )}
 
-        {/* View more button */}
         {!isSearching && products.length > 9 && (
           <TouchableOpacity
             style={styles.viewMoreButton}
             onPress={handleViewAllProducts}
           >
             <Text style={styles.viewMoreText}>View More Products</Text>
-            <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+            <Ionicons
+              name="arrow-forward"
+              size={16}
+              color={COLORS.primary}
+            />
           </TouchableOpacity>
         )}
 
@@ -713,16 +745,17 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.viewMoreText}>
               View All {filteredProducts.length} Results
             </Text>
-            <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+            <Ionicons
+              name="arrow-forward"
+              size={16}
+              color={COLORS.primary}
+            />
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
-  // ============================================================
-  // RENDER: FLOATING CART
-  // ============================================================
   const renderFloatingCart = () => {
     if (totalItems === 0) return null;
 
@@ -758,7 +791,10 @@ const HomeScreen = ({ navigation }) => {
   if (isLoading) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
-        <Loading fullScreen message="Loading..." />
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {renderHeader()}
+          <HomeScreenSkeleton />
+        </ScrollView>
       </Screen>
     );
   }
@@ -792,6 +828,12 @@ const HomeScreen = ({ navigation }) => {
       </ScrollView>
 
       {renderFloatingCart()}
+
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+      />
     </Screen>
   );
 };
@@ -853,11 +895,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Search
+  // ✅ FIX 4 — elevation added for Android
   searchWrapper: {
     marginHorizontal: SPACING.screenPadding,
     marginBottom: SPACING.md,
     zIndex: 1000,
+    elevation: 1000,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -877,7 +920,6 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  // Search Results Header
   searchResultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -904,7 +946,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // No Results
   noResultsContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1121,7 +1162,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Product Card
+  // Compact Product Card
   compactProductCard: {
     width: PRODUCT_CARD_WIDTH,
     backgroundColor: COLORS.white,
@@ -1254,7 +1295,6 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
 
-  // Bottom Spacing
   bottomSpacing: {
     height: SPACING.tabBarHeight + SPACING.lg,
   },

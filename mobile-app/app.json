@@ -16,7 +16,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.tijaramobile"
+      "bundleIdentifier": "com.yourcompany.tijaramobile",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,13 +31,34 @@
         "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.yourcompany.tijaramobile"
+      "package": "com.yourcompany.tijaramobile",
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/tijarawhite.png",
+          "color": "#FFFFFF",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Tijara"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "23ec5334-87ac-4f1c-9646-2ea568dc23cf"
+      }
+    },
+    "owner": "kiranspradeep"
   }
 }

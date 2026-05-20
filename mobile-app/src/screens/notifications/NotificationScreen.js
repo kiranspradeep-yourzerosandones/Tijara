@@ -10,28 +10,29 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
-import { Loading, EmptyState, Screen } from '../../components/common';
+import { EmptyState, Screen } from '../../components/common';
+import { NotificationSkeleton } from '../../components/common/Skeleton';
 import { useNotificationStore } from '../../store';
 import { getRelativeTime } from '../../utils/helpers';
 
 const NOTIFICATION_ICONS = {
-  order: 'receipt-outline',
-  payment: 'card-outline',
-  delivery: 'car-outline',
-  promo: 'pricetag-outline',
+  order_update: 'receipt-outline',
+  payment_reminder: 'card-outline',
+  payment_received: 'checkmark-circle-outline',
+  promotional: 'pricetag-outline',
+  announcement: 'megaphone-outline',
   system: 'information-circle-outline',
+  custom: 'notifications-outline',
   default: 'notifications-outline',
 };
 
 const NotificationScreen = ({ navigation }) => {
-  const {
-    notifications,
-    isLoading,
-    hasMore,
-    fetchNotifications,
-    markAsRead,
-    markAllAsRead,
-  } = useNotificationStore();
+  const notifications = useNotificationStore((s) => s.notifications);
+  const isLoading = useNotificationStore((s) => s.isLoading);
+  const hasMore = useNotificationStore((s) => s.hasMore);
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
+  const markAsRead = useNotificationStore((s) => s.markAsRead);
+  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -55,14 +56,45 @@ const NotificationScreen = ({ navigation }) => {
     if (!notification.isRead) {
       markAsRead(notification._id);
     }
-
     if (notification.data?.orderId) {
-      navigation.navigate('OrderDetail', { orderId: notification.data.orderId });
+      navigation.navigate('OrderDetail', {
+        orderId: notification.data.orderId,
+      });
     }
   };
 
+  const hasUnread = notifications.some((n) => !n.isRead);
+
+  // ✅ Skeleton while initial load
+  if (isLoading && notifications.length === 0) {
+    return (
+      <Screen backgroundColor={COLORS.backgroundLight}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={COLORS.textPrimary}
+            />
+          </TouchableOpacity>
+          <Text style={styles.title}>Notifications</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.skeletonContainer}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <NotificationSkeleton key={i} />
+          ))}
+        </View>
+      </Screen>
+    );
+  }
+
   const renderNotification = ({ item }) => {
-    const icon = NOTIFICATION_ICONS[item.type] || NOTIFICATION_ICONS.default;
+    const icon =
+      NOTIFICATION_ICONS[item.type] || NOTIFICATION_ICONS.default;
 
     return (
       <TouchableOpacity
@@ -71,26 +103,31 @@ const NotificationScreen = ({ navigation }) => {
           !item.isRead && styles.notificationItemUnread,
         ]}
         onPress={() => handleNotificationPress(item)}
+        activeOpacity={0.7}
       >
-        <View style={[
-          styles.notificationIcon,
-          !item.isRead && styles.notificationIconUnread,
-        ]}>
-          <Ionicons 
-            name={icon} 
-            size={22} 
-            color={!item.isRead ? COLORS.primary : COLORS.gray} 
+        <View
+          style={[
+            styles.notificationIcon,
+            !item.isRead && styles.notificationIconUnread,
+          ]}
+        >
+          <Ionicons
+            name={icon}
+            size={22}
+            color={!item.isRead ? COLORS.primary : COLORS.gray}
           />
         </View>
         <View style={styles.notificationContent}>
-          <Text style={[
-            styles.notificationTitle,
-            !item.isRead && styles.notificationTitleUnread,
-          ]}>
+          <Text
+            style={[
+              styles.notificationTitle,
+              !item.isRead && styles.notificationTitleUnread,
+            ]}
+          >
             {item.title}
           </Text>
           <Text style={styles.notificationBody} numberOfLines={2}>
-            {item.body}
+            {item.message || item.body}
           </Text>
           <Text style={styles.notificationTime}>
             {getRelativeTime(item.createdAt)}
@@ -111,10 +148,13 @@ const NotificationScreen = ({ navigation }) => {
 
   const renderFooter = () => {
     if (!isLoading || notifications.length === 0) return null;
-    return <Loading size="small" />;
+    return (
+      <View style={styles.footerLoader}>
+        <NotificationSkeleton />
+        <NotificationSkeleton />
+      </View>
+    );
   };
-
-  const hasUnread = notifications.some(n => !n.isRead);
 
   return (
     <Screen backgroundColor={COLORS.backgroundLight}>
@@ -181,13 +221,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-  },
-  headerRight: {
-    width: 80,
-  },
+  title: { ...FONTS.h4, color: COLORS.textPrimary },
+  headerRight: { width: 80 },
   markAllButton: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
@@ -197,10 +232,11 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '500',
   },
-  listContent: {
-    paddingBottom: SPACING.xxxl,
-    flexGrow: 1,
+  skeletonContainer: {
+    paddingTop: 8,
+    backgroundColor: COLORS.white,
   },
+  listContent: { paddingBottom: SPACING.xxxl, flexGrow: 1 },
   notificationItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -222,27 +258,20 @@ const styles = StyleSheet.create({
   notificationIconUnread: {
     backgroundColor: COLORS.primaryLight + '30',
   },
-  notificationContent: {
-    flex: 1,
-  },
+  notificationContent: { flex: 1 },
   notificationTitle: {
     ...FONTS.body,
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
   },
-  notificationTitleUnread: {
-    fontWeight: '600',
-  },
+  notificationTitleUnread: { fontWeight: '600' },
   notificationBody: {
     ...FONTS.bodySmall,
     color: COLORS.textSecondary,
     lineHeight: 20,
     marginBottom: SPACING.xs,
   },
-  notificationTime: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-  },
+  notificationTime: { ...FONTS.caption, color: COLORS.gray },
   unreadDot: {
     width: 10,
     height: 10,
@@ -251,10 +280,8 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.sm,
     marginTop: SPACING.xs,
   },
-  separator: {
-    height: 1,
-    backgroundColor: COLORS.borderLight,
-  },
+  separator: { height: 1, backgroundColor: COLORS.borderLight },
+  footerLoader: { paddingVertical: SPACING.md },
 });
 
 export default NotificationScreen;

@@ -1,12 +1,12 @@
-// App.js
 import React, { useEffect, useState, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, AppState } from 'react-native';
 
 import { RootNavigator } from './src/navigation';
 import { useAuthStore } from './src/store/authStore';
+import { useNotificationStore } from './src/store/notificationStore';
 import SplashScreen from './src/screens/splash/SplashScreen';
 import { NetworkBanner, ErrorBoundary } from './src/components/common';
 import networkUtils from './src/utils/networkUtils';
@@ -18,17 +18,19 @@ export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const navigationRef = useRef(null);
+  const appStateRef = useRef(AppState.currentState);
 
-  // ✅ Only select what we need — no re-renders from unrelated state
+  // ✅ Granular selectors
   const restoreSession = useAuthStore((state) => state.restoreSession);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
 
+  // ── App initialization ────────────────────────────────────
   useEffect(() => {
     networkUtils.startMonitoring();
 
     const init = async () => {
       try {
-        // ✅ Called ONCE — guard inside store prevents double run
         await restoreSession();
       } catch (error) {
         console.error('Init error:', error);
@@ -43,52 +45,99 @@ export default function App() {
       networkUtils.stopMonitoring();
       notificationService.stopListening();
     };
-  }, []); // ✅ Empty deps — runs once only
+  }, []);
 
-  // ✅ Push notifications — only after authenticated
+  // ── App state change — clear badge when app opens ─────────
   useEffect(() => {
-    if (isAuthenticated && ENV.FEATURES.PUSH_NOTIFICATIONS) {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextState === 'active'
+      ) {
+        // App came to foreground
+        console.log('📱 App resumed from background');
+
+        // Clear badge
+        notificationService.clearBadge();
+
+        // Refresh unread count if authenticated
+        if (isAuthenticated) {
+          fetchUnreadCount().catch(() => {});
+        }
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => subscription.remove();
+  }, [isAuthenticated]);
+
+  // ── Push notifications setup (only when authenticated) ────
+  useEffect(() => {
+    if (isAuthenticated) {
       setupPushNotifications();
     }
   }, [isAuthenticated]);
 
   const setupPushNotifications = async () => {
+    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) {
+      console.log('🔔 Push notifications disabled');
+      return;
+    }
+
     try {
+      // Set navigation ref for deep linking
       if (navigationRef.current) {
         notificationService.setNavigationRef(navigationRef.current);
       }
 
+      // Register and get token
       const token = await notificationService.registerForPushNotifications();
 
       if (token) {
-        await updatePushToken(token).catch((err) =>
-          console.warn('Push token update failed:', err)
-        );
+        // Send token to backend
+        try {
+          await updatePushToken(token);
+          console.log('✅ Push token sent to backend');
+        } catch (err) {
+          console.warn('⚠️ Push token update failed:', err.message);
+          // Non-fatal — app still works without it
+        }
       }
 
+      // Start listening to notifications
       notificationService.startListening(
+        // Foreground notification received
         (notification) => {
           if (ENV.DEBUG) {
             console.log(
-              '🔔 Foreground notification:',
+              '🔔 Foreground:',
               notification.request.content.title
             );
           }
+          // Refresh unread count when notification arrives
+          fetchUnreadCount().catch(() => {});
         },
+        // User tapped notification
         (response) => {
           if (ENV.DEBUG) {
-            console.log('🔔 Notification tapped');
+            console.log('🔔 Tapped notification');
           }
         }
       );
 
-      const lastResponse =
-        await notificationService.getLastNotificationResponse();
+      // Handle notification that opened the app
+      const lastResponse = await notificationService.getLastNotificationResponse();
       if (lastResponse) {
-        notificationService.handleNotificationResponse(lastResponse);
+        console.log('🔔 App opened from notification');
+        // Small delay to let navigation mount
+        setTimeout(() => {
+          notificationService.handleNotificationResponse(lastResponse);
+        }, 1000);
       }
+
     } catch (error) {
-      console.warn('Push notification setup failed:', error);
+      console.warn('⚠️ Push notification setup failed:', error.message);
+      // Non-fatal — app still works
     }
   };
 

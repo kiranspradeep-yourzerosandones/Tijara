@@ -1,3 +1,4 @@
+//backend\controllers\customerController.js
 const User = require("../models/User");
 const Order = require("../models/Order");
 const Payment = require("../models/Payment");

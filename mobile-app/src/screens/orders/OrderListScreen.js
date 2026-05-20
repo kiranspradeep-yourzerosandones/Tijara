@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
 import { Loading, EmptyState, Screen } from '../../components/common';
+import { OrderListSkeleton } from '../../components/common/Skeleton';
 import { ordersAPI } from '../../api';
 import { formatDate, getImageUrl } from '../../utils/helpers'; // ✅ Import getImageUrl
 
@@ -199,12 +200,15 @@ const OrderListScreen = ({ navigation }) => {
   };
 
   if (isLoading && orders.length === 0) {
-    return (
-      <Screen backgroundColor={COLORS.backgroundLight}>
-        <Loading fullScreen message="Loading orders..." />
-      </Screen>
-    );
-  }
+  return (
+    <Screen backgroundColor={COLORS.backgroundLight}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Your Orders</Text>
+      </View>
+      <OrderListSkeleton count={5} />
+    </Screen>
+  );
+}
 
   return (
     <Screen backgroundColor={COLORS.backgroundLight}>

@@ -1,3 +1,4 @@
+//backend\controllers\locationController.js
 const Location = require("../models/Location");
 const mongoose = require("mongoose");
 

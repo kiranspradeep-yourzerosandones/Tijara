@@ -1,4 +1,3 @@
-// src/config/env.development.js
 const DEV_ENV = {
   API_URL: 'http://192.168.29.69:5000/api',
   IMAGE_BASE_URL: 'http://192.168.29.69:5000',
@@ -9,7 +8,7 @@ const DEV_ENV = {
 
   // Feature flags
   FEATURES: {
-    PUSH_NOTIFICATIONS: false,
+    PUSH_NOTIFICATIONS: true,  // ✅ Enable for physical device testing
     SOCKET_ENABLED: false,
     ANALYTICS: false,
     CRASH_REPORTING: false,

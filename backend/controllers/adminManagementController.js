@@ -1,3 +1,4 @@
+//backend\controllers\adminManagementController.js
 const Admin = require("../models/Admin");
 const mongoose = require("mongoose");
 

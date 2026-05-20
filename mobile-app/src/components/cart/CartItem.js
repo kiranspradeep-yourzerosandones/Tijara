@@ -1,27 +1,27 @@
-// Tijara\mobile-app\src\components\cart\CartItem.js
+// src/components/cart/CartItem.js
 import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
+import { OptimizedImage } from '../common';  // ✅ correct import
 import { formatCurrency, getImageUrl } from '../../utils/helpers';
 import { useCartStore } from '../../store';
 
 const CartItem = ({ item, onPress }) => {
   const { updateQuantity, removeFromCart, isLoading } = useCartStore();
-  
+
   const product = item.product;
   const productId = product?._id || item.product;
-  const imageUrl = item.productImage 
-    ? getImageUrl(item.productImage) 
-    : product?.images?.[0] 
-      ? getImageUrl(product.images[0]) 
-      : null;
+  const imageUrl = item.productImage
+    ? getImageUrl(item.productImage)
+    : product?.images?.[0]
+    ? getImageUrl(product.images[0])
+    : null;
 
   const handleIncrement = async () => {
     try {
@@ -52,21 +52,20 @@ const CartItem = ({ item, onPress }) => {
   };
 
   return (
-    <TouchableOpacity 
-      style={styles.container} 
+    <TouchableOpacity
+      style={styles.container}
       onPress={onPress}
       activeOpacity={0.8}
       disabled={!onPress}
     >
       {/* Image */}
       <View style={styles.imageContainer}>
-        // In CartItem.js - replace image block with:
-<OptimizedImage
-  uri={imageUrl}
-  style={styles.image}
-  fallbackIcon="image-outline"
-  fallbackIconSize={24}
-/>
+        <OptimizedImage
+          uri={imageUrl}
+          style={styles.image}
+          fallbackIcon="image-outline"
+          fallbackIconSize={24}
+        />
       </View>
 
       {/* Content */}
@@ -92,10 +91,12 @@ const CartItem = ({ item, onPress }) => {
               onPress={handleDecrement}
               disabled={isLoading}
             >
-              <Ionicons 
-                name={item.quantity === 1 ? "trash-outline" : "remove"} 
-                size={18} 
-                color={item.quantity === 1 ? COLORS.error : COLORS.textPrimary} 
+              <Ionicons
+                name={item.quantity === 1 ? 'trash-outline' : 'remove'}
+                size={18}
+                color={
+                  item.quantity === 1 ? COLORS.error : COLORS.textPrimary
+                }
               />
             </TouchableOpacity>
 
@@ -111,7 +112,9 @@ const CartItem = ({ item, onPress }) => {
           </View>
 
           <Text style={styles.subtotal}>
-            {formatCurrency(item.quantity * (item.priceAtAdd || product?.price))}
+            {formatCurrency(
+              item.quantity * (item.priceAtAdd || product?.price)
+            )}
           </Text>
         </View>
       </View>
@@ -147,13 +150,6 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-  },
-  placeholderImage: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.lightGray,
   },
   content: {
     flex: 1,

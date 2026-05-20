@@ -23,7 +23,7 @@ export const useCartStore = create(
       setError: (error) => set({ error }),
       clearError: () => set({ error: null }),
 
-      // Fetch cart from server (sync)
+      // ─── Fetch cart ───────────────────────────────────────
       fetchCart: async () => {
         set({ isLoading: true, error: null });
         try {
@@ -43,19 +43,67 @@ export const useCartStore = create(
 
           return response;
         } catch (error) {
-          // ✅ On network error - keep local cart data
           set({ isLoading: false, error: error.message });
           throw error;
         }
       },
 
-      // Add to cart
+      // ─── Add to cart (OPTIMISTIC) ─────────────────────────
       addToCart: async (productId, quantity = 1) => {
-        set({ isLoading: true, error: null });
+        // Save snapshot for rollback
+        const snapshot = {
+          items: get().items,
+          totalItems: get().totalItems,
+          subtotal: get().subtotal,
+          total: get().total,
+        };
+
+        // Optimistic update
+        const existingItem = get().items.find(
+          (i) =>
+            i.product?._id === productId || i.product === productId
+        );
+
+        if (existingItem) {
+          const updatedItems = get().items.map((i) => {
+            const id = i.product?._id || i.product;
+            if (id === productId) {
+              return {
+                ...i,
+                quantity: i.quantity + quantity,
+              };
+            }
+            return i;
+          });
+
+          const newTotalItems = updatedItems.reduce(
+            (sum, i) => sum + i.quantity,
+            0
+          );
+          const newSubtotal = updatedItems.reduce(
+            (sum, i) => sum + i.quantity * (i.priceAtAdd || 0),
+            0
+          );
+
+          set({
+            items: updatedItems,
+            totalItems: newTotalItems,
+            subtotal: newSubtotal,
+            total: newSubtotal,
+          });
+        } else {
+          // Item not in cart yet — just increment totalItems optimistically
+          set((state) => ({
+            totalItems: state.totalItems + quantity,
+          }));
+        }
+
+        // API call
         try {
           const response = await cartAPI.addToCart(productId, quantity);
           const { cart } = response.data;
 
+          // Sync with server response
           set({
             cart,
             items: cart.items || [],
@@ -68,14 +116,55 @@ export const useCartStore = create(
 
           return response;
         } catch (error) {
-          set({ isLoading: false, error: error.message });
+          // Rollback on failure
+          console.warn('Add to cart failed — rolling back');
+          set(snapshot);
           throw error;
         }
       },
 
-      // Update item quantity
+      // ─── Update quantity (OPTIMISTIC) ─────────────────────
       updateQuantity: async (productId, quantity) => {
-        set({ isLoading: true, error: null });
+        const snapshot = {
+          items: get().items,
+          totalItems: get().totalItems,
+          subtotal: get().subtotal,
+          total: get().total,
+        };
+
+        // Optimistic update
+        let updatedItems;
+        if (quantity === 0) {
+          updatedItems = get().items.filter((i) => {
+            const id = i.product?._id || i.product;
+            return id !== productId;
+          });
+        } else {
+          updatedItems = get().items.map((i) => {
+            const id = i.product?._id || i.product;
+            if (id === productId) {
+              return { ...i, quantity };
+            }
+            return i;
+          });
+        }
+
+        const newTotalItems = updatedItems.reduce(
+          (sum, i) => sum + i.quantity,
+          0
+        );
+        const newSubtotal = updatedItems.reduce(
+          (sum, i) => sum + i.quantity * (i.priceAtAdd || 0),
+          0
+        );
+
+        set({
+          items: updatedItems,
+          totalItems: newTotalItems,
+          subtotal: newSubtotal,
+          total: newSubtotal,
+        });
+
         try {
           const response = await cartAPI.updateCartItem(productId, quantity);
           const { cart } = response.data;
@@ -86,20 +175,48 @@ export const useCartStore = create(
             totalItems: cart.totalItems || 0,
             subtotal: cart.subtotal || 0,
             total: cart.total || 0,
-            isLoading: false,
             lastSyncedAt: new Date().toISOString(),
           });
 
           return response;
         } catch (error) {
-          set({ isLoading: false, error: error.message });
+          console.warn('Update quantity failed — rolling back');
+          set(snapshot);
           throw error;
         }
       },
 
-      // Remove from cart
+      // ─── Remove from cart (OPTIMISTIC) ────────────────────
       removeFromCart: async (productId) => {
-        set({ isLoading: true, error: null });
+        const snapshot = {
+          items: get().items,
+          totalItems: get().totalItems,
+          subtotal: get().subtotal,
+          total: get().total,
+        };
+
+        // Optimistic remove
+        const updatedItems = get().items.filter((i) => {
+          const id = i.product?._id || i.product;
+          return id !== productId;
+        });
+
+        const newTotalItems = updatedItems.reduce(
+          (sum, i) => sum + i.quantity,
+          0
+        );
+        const newSubtotal = updatedItems.reduce(
+          (sum, i) => sum + i.quantity * (i.priceAtAdd || 0),
+          0
+        );
+
+        set({
+          items: updatedItems,
+          totalItems: newTotalItems,
+          subtotal: newSubtotal,
+          total: newSubtotal,
+        });
+
         try {
           const response = await cartAPI.removeFromCart(productId);
           const { cart } = response.data;
@@ -110,18 +227,18 @@ export const useCartStore = create(
             totalItems: cart.totalItems || 0,
             subtotal: cart.subtotal || 0,
             total: cart.total || 0,
-            isLoading: false,
             lastSyncedAt: new Date().toISOString(),
           });
 
           return response;
         } catch (error) {
-          set({ isLoading: false, error: error.message });
+          console.warn('Remove from cart failed — rolling back');
+          set(snapshot);
           throw error;
         }
       },
 
-      // Clear cart
+      // ─── Clear cart ───────────────────────────────────────
       clearCart: async () => {
         set({ isLoading: true, error: null });
         try {
@@ -144,7 +261,7 @@ export const useCartStore = create(
         }
       },
 
-      // Validate cart
+      // ─── Validate cart ────────────────────────────────────
       validateCart: async () => {
         try {
           const response = await cartAPI.validateCart();
@@ -154,24 +271,24 @@ export const useCartStore = create(
         }
       },
 
-      // Get item quantity for a product
+      // ─── Helpers ──────────────────────────────────────────
       getItemQuantity: (productId) => {
         const { items } = get();
         const item = items.find(
-          (i) => i.product?._id === productId || i.product === productId
+          (i) =>
+            i.product?._id === productId || i.product === productId
         );
         return item?.quantity || 0;
       },
 
-      // Check if product is in cart
       isInCart: (productId) => {
         const { items } = get();
         return items.some(
-          (i) => i.product?._id === productId || i.product === productId
+          (i) =>
+            i.product?._id === productId || i.product === productId
         );
       },
 
-      // Reset cart state
       resetCart: () => {
         set({
           cart: null,
@@ -188,7 +305,6 @@ export const useCartStore = create(
     {
       name: 'cart-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // ✅ Only persist what matters
       partialize: (state) => ({
         items: state.items,
         totalItems: state.totalItems,

@@ -1,9 +1,9 @@
-// src/services/notificationService.js
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import ENV from '../config/env';
 import { logError } from '../utils/errorHandler';
+import Constants from 'expo-constants';
 
 // ============================================================
 // CONFIGURE NOTIFICATION BEHAVIOR
@@ -44,7 +44,7 @@ class NotificationService {
     }
 
     try {
-      // Check existing permissions
+      // ── Check existing permissions ──────────────────────────
       const { status: existingStatus } =
         await Notifications.getPermissionsAsync();
 
@@ -61,45 +61,95 @@ class NotificationService {
         return null;
       }
 
-      // Android channel setup
+      // ── Android notification channels ───────────────────────
       if (Platform.OS === 'android') {
+        // Default channel
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'Tijara Notifications',
-          importance: Notifications.AndroidImportance.MAX,
+          name: 'General',
+          importance: Notifications.AndroidImportance.DEFAULT,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#F5C518',
           sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
         });
 
+        // Orders channel
         await Notifications.setNotificationChannelAsync('orders', {
           name: 'Order Updates',
+          description: 'Notifications about your orders',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#F5C518',
           sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
         });
 
+        // Payments channel
         await Notifications.setNotificationChannelAsync('payments', {
           name: 'Payment Reminders',
+          description: 'Payment due and reminder notifications',
           importance: Notifications.AndroidImportance.DEFAULT,
           sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
         });
+
+        // Promotions channel
+        await Notifications.setNotificationChannelAsync('promotions', {
+          name: 'Offers & Promotions',
+          description: 'Special offers and promotions',
+          importance: Notifications.AndroidImportance.LOW,
+          sound: null,
+          enableVibrate: false,
+          showBadge: false,
+        });
+
+        console.log('✅ Android notification channels created');
       }
 
-      // Get Expo push token
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
-      });
+      // ── Get Expo push token ─────────────────────────────────
+      // Get projectId safely
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ||
+        Constants.easConfig?.projectId ||
+        null;
+
+      if (!projectId) {
+        console.warn(
+          '⚠️ No EAS projectId found in app.json. ' +
+          'Push token will NOT work in production builds. ' +
+          'Run: npx eas init to link your project.'
+        );
+        // In Expo Go, we can still get a token without projectId
+        // but it won't work in standalone builds
+      }
+
+      const tokenOptions = projectId ? { projectId } : {};
+      const tokenData = await Notifications.getExpoPushTokenAsync(tokenOptions);
 
       this.expoPushToken = tokenData.data;
 
-      if (ENV.DEBUG) {
-        console.log('🔔 Expo Push Token:', this.expoPushToken);
-      }
+      console.log('🔔 Expo Push Token obtained:', this.expoPushToken);
+      console.log(
+        '📋 Copy this token to test: https://expo.dev/notifications'
+      );
 
       return this.expoPushToken;
+
     } catch (error) {
-      logError('NotificationService.register', error);
+      // ── Graceful error handling ─────────────────────────────
+      if (error.message?.includes('projectId')) {
+        console.warn(
+          '⚠️ Push token failed — projectId missing. ' +
+          'To fix: run `npx eas init` and add projectId to app.json extra.eas.projectId'
+        );
+      } else if (error.message?.includes('simulat')) {
+        console.log('🔔 Running on simulator — push not available');
+      } else {
+        logError('NotificationService.register', error);
+      }
       return null;
     }
   }
@@ -108,39 +158,100 @@ class NotificationService {
   // START LISTENING TO NOTIFICATIONS
   // ============================================================
   startListening(onNotification, onResponse) {
-    // Notification received while app is in foreground
+    // ── Foreground: notification received ─────────────────────
     this.notificationListener =
       Notifications.addNotificationReceivedListener((notification) => {
         if (ENV.DEBUG) {
-          console.log('🔔 Notification received:', notification);
+          console.log('🔔 Foreground notification received:');
+          console.log('   Title:', notification.request.content.title);
+          console.log('   Body:', notification.request.content.body);
+          console.log('   Data:', notification.request.content.data);
         }
+
+        // Update badge count
+        this.updateBadgeCount();
+
         onNotification?.(notification);
       });
 
-    // User tapped on notification
+    // ── Background/killed: user tapped notification ───────────
     this.responseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
         if (ENV.DEBUG) {
-          console.log('🔔 Notification tapped:', response);
+          console.log('🔔 Notification tapped by user');
+          console.log('   Data:', response.notification.request.content.data);
         }
+
         this.handleNotificationResponse(response);
         onResponse?.(response);
       });
+
+    console.log('🔔 Notification listeners started');
   }
 
   // ============================================================
-  // HANDLE NOTIFICATION TAP (DEEP LINKING)
+  // HANDLE NOTIFICATION TAP — DEEP LINKING
   // ============================================================
   handleNotificationResponse(response) {
-    const data = response.notification.request.content.data;
+    const data = response?.notification?.request?.content?.data;
 
-    if (!this.navigationRef?.isReady()) return;
+    if (!data) return;
 
-    // Navigate based on notification type
-    if (data?.orderId) {
-      this.navigationRef.navigate('OrderDetail', { orderId: data.orderId });
-    } else if (data?.screen) {
-      this.navigationRef.navigate(data.screen, data.params || {});
+    // Wait for navigation to be ready
+    const navigate = () => {
+      if (!this.navigationRef?.isReady()) {
+        // Retry after 500ms
+        setTimeout(navigate, 500);
+        return;
+      }
+
+      try {
+        if (data.orderId) {
+          // Deep link to order detail
+          this.navigationRef.navigate('OrderDetail', {
+            orderId: data.orderId,
+          });
+          console.log('🔔 Deep linked to OrderDetail:', data.orderId);
+
+        } else if (data.screen) {
+          // Generic screen deep link
+          this.navigationRef.navigate(data.screen, data.params || {});
+          console.log('🔔 Deep linked to screen:', data.screen);
+
+        } else if (data.type === 'payment_reminder') {
+          // Navigate to credit summary
+          this.navigationRef.navigate('CreditSummary');
+          console.log('🔔 Deep linked to CreditSummary');
+        }
+      } catch (error) {
+        console.warn('🔔 Deep link navigation failed:', error.message);
+      }
+    };
+
+    navigate();
+  }
+
+  // ============================================================
+  // UPDATE BADGE COUNT
+  // ============================================================
+  async updateBadgeCount() {
+    try {
+      const currentBadge = await Notifications.getBadgeCountAsync();
+      await Notifications.setBadgeCountAsync(currentBadge + 1);
+    } catch (error) {
+      // Badge not supported on all devices — silently fail
+    }
+  }
+
+  // ============================================================
+  // CLEAR BADGE
+  // ============================================================
+  async clearBadge() {
+    try {
+      await Notifications.setBadgeCountAsync(0);
+      console.log('🔔 Badge cleared');
+    } catch (error) {
+      // Silently fail
     }
   }
 
@@ -152,41 +263,61 @@ class NotificationService {
       Notifications.removeNotificationSubscription(
         this.notificationListener
       );
+      this.notificationListener = null;
     }
+
     if (this.responseListener) {
       Notifications.removeNotificationSubscription(this.responseListener);
+      this.responseListener = null;
     }
+
+    console.log('🔔 Notification listeners stopped');
   }
 
   // ============================================================
   // GET LAST NOTIFICATION (app opened from notification)
   // ============================================================
   async getLastNotificationResponse() {
-    return await Notifications.getLastNotificationResponseAsync();
+    try {
+      return await Notifications.getLastNotificationResponseAsync();
+    } catch (error) {
+      return null;
+    }
   }
 
   // ============================================================
   // SCHEDULE LOCAL NOTIFICATION (for testing)
   // ============================================================
-  async scheduleLocalNotification({ title, body, data = {}, seconds = 1 }) {
-    if (ENV.DEBUG) {
+  async scheduleLocalNotification({ title, body, data = {}, seconds = 2 }) {
+    try {
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
           body,
           data,
           sound: 'default',
+          badge: 1,
         },
-        trigger: { seconds },
+        trigger: seconds === 0 ? null : { seconds },
       });
+      console.log('🔔 Local notification scheduled:', title);
+    } catch (error) {
+      console.warn('🔔 Failed to schedule local notification:', error.message);
     }
   }
 
   // ============================================================
-  // CLEAR BADGE
+  // TEST PUSH (dev helper)
   // ============================================================
-  async clearBadge() {
-    await Notifications.setBadgeCountAsync(0);
+  async sendTestNotification() {
+    if (!ENV.DEBUG) return;
+
+    await this.scheduleLocalNotification({
+      title: '🎉 Tijara',
+      body: 'Push notifications are working!',
+      data: { type: 'test' },
+      seconds: 2,
+    });
   }
 
   // Get stored token

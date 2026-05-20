@@ -1,3 +1,5 @@
+
+//backend\controllers\notificationController.js
 const Notification = require("../models/Notification");
 const NotificationTemplate = require("../models/NotificationTemplate");
 const User = require("../models/User");

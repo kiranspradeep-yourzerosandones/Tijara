@@ -9,14 +9,118 @@ import {
   TextInput,
   Alert,
   Modal,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button, Loading, Card, Screen } from '../../components/common';
 import { useCartStore, useAuthStore } from '../../store';
 import { locationsAPI, ordersAPI } from '../../api';
+import { invalidateCacheByPrefix } from '../../utils/apiCache';
 import { formatCurrency } from '../../utils/helpers';
 
+// ─── Order Success Modal ──────────────────────────────────────
+const OrderSuccessModal = ({ visible, orderNumber, total, onViewOrder, onContinue }) => {
+  const scaleAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 8,
+      }).start();
+    } else {
+      scaleAnim.setValue(0);
+    }
+  }, [visible]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+    >
+      <View style={successStyles.overlay}>
+        <Animated.View
+          style={[
+            successStyles.card,
+            { transform: [{ scale: scaleAnim }] },
+          ]}
+        >
+          {/* Success Icon */}
+          <View style={successStyles.iconContainer}>
+            <View style={successStyles.iconCircle}>
+              <Ionicons name="checkmark" size={40} color={COLORS.white} />
+            </View>
+          </View>
+
+          {/* Content */}
+          <Text style={successStyles.title}>Order Placed!</Text>
+          <Text style={successStyles.subtitle}>
+            Your order has been placed successfully
+          </Text>
+
+          {/* Order Info */}
+          <View style={successStyles.infoBox}>
+            <View style={successStyles.infoRow}>
+              <Text style={successStyles.infoLabel}>Order Number</Text>
+              <Text style={successStyles.infoValue}>#{orderNumber}</Text>
+            </View>
+            <View style={successStyles.infoDivider} />
+            <View style={successStyles.infoRow}>
+              <Text style={successStyles.infoLabel}>Total Amount</Text>
+              <Text style={successStyles.infoValueHighlight}>
+                {formatCurrency(total)}
+              </Text>
+            </View>
+            <View style={successStyles.infoDivider} />
+            <View style={successStyles.infoRow}>
+              <Text style={successStyles.infoLabel}>Payment</Text>
+              <Text style={successStyles.infoValueSuccess}>Pay Later</Text>
+            </View>
+          </View>
+
+          {/* Note */}
+          <View style={successStyles.noteBox}>
+            <Ionicons
+              name="information-circle-outline"
+              size={16}
+              color={COLORS.primary}
+            />
+            <Text style={successStyles.noteText}>
+              We'll notify you when your order is confirmed
+            </Text>
+          </View>
+
+          {/* Buttons */}
+          <TouchableOpacity
+            style={successStyles.primaryButton}
+            onPress={onViewOrder}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="receipt-outline" size={20} color={COLORS.black} />
+            <Text style={successStyles.primaryButtonText}>Track Order</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={successStyles.secondaryButton}
+            onPress={onContinue}
+            activeOpacity={0.8}
+          >
+            <Text style={successStyles.secondaryButtonText}>
+              Continue Shopping
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
+
+// ─── Main Screen ──────────────────────────────────────────────
 const PlaceOrderScreen = ({ navigation }) => {
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -25,8 +129,12 @@ const PlaceOrderScreen = ({ navigation }) => {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
+  // ✅ Success modal state
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [placedOrder, setPlacedOrder] = useState(null);
+
   const { items, subtotal, total, totalItems, resetCart } = useCartStore();
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
     loadLocations();
@@ -37,8 +145,9 @@ const PlaceOrderScreen = ({ navigation }) => {
       const response = await locationsAPI.getLocations();
       const locationList = response.data?.locations || [];
       setLocations(locationList);
-      
-      const defaultLocation = locationList.find(loc => loc.isDefault) || locationList[0];
+
+      const defaultLocation =
+        locationList.find((loc) => loc.isDefault) || locationList[0];
       if (defaultLocation) {
         setSelectedLocation(defaultLocation);
       }
@@ -56,69 +165,61 @@ const PlaceOrderScreen = ({ navigation }) => {
       return;
     }
 
-    Alert.alert(
-      'Confirm Order',
-      `Place order for ${formatCurrency(total)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Place Order',
-          onPress: async () => {
-            setIsPlacingOrder(true);
-            try {
-              const response = await ordersAPI.placeOrder(
-                selectedLocation._id,
-                customerNotes.trim()
-              );
-              
-              resetCart();
-              
-              Alert.alert(
-                'Order Placed! 🎉',
-                `Your order #${response.data.order.orderNumber} has been placed successfully.`,
-                [
-                  {
-                    text: 'View Order',
-                    onPress: () => {
-                      navigation.reset({
-                        index: 1,
-                        routes: [
-                          { name: 'Home' },
-                          { 
-                            name: 'OrderDetail', 
-                            params: { orderId: response.data.order._id } 
-                          }
-                        ],
-                      });
-                    },
-                  },
-                  {
-                    text: 'Continue Shopping',
-                    onPress: () => {
-                      navigation.reset({
-                        index: 0,
-                        routes: [{ name: 'Home' }],
-                      });
-                    },
-                  },
-                ]
-              );
-            } catch (error) {
-              Alert.alert('Error', error.message);
-            } finally {
-              setIsPlacingOrder(false);
-            }
-          },
-        },
-      ]
-    );
+    setIsPlacingOrder(true);
+    try {
+      const response = await ordersAPI.placeOrder(
+        selectedLocation._id,
+        customerNotes.trim()
+      );
+
+      const order = response.data?.order;
+
+      // ✅ Invalidate product cache (stock changed)
+      invalidateCacheByPrefix('products:');
+
+      // ✅ Reset cart
+      resetCart();
+
+      // ✅ Store placed order + show success modal
+      setPlacedOrder(order);
+      setShowSuccess(true);
+    } catch (error) {
+      Alert.alert('Order Failed', error.message || 'Failed to place order');
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
+  const handleViewOrder = () => {
+  setShowSuccess(false);
+  if (placedOrder?._id) {
+    // ✅ Use the root-level OrderDetail screen
+    navigation.reset({
+      index: 1,
+      routes: [
+        { name: 'MainTabs' },
+        {
+          name: 'OrderDetail',
+          params: { orderId: placedOrder._id },
+        },
+      ],
+    });
+  }
+};
+
+  const handleContinueShopping = () => {
+  setShowSuccess(false);
+  // ✅ Just go to MainTabs (lands on Home by default)
+  navigation.reset({
+    index: 0,
+    routes: [{ name: 'MainTabs' }],
+  });
+};
   const handleAddNewLocation = () => {
     setShowLocationPicker(false);
     navigation.navigate('AddLocation', {
       onLocationAdded: (newLocation) => {
-        setLocations(prev => [...prev, newLocation]);
+        setLocations((prev) => [...prev, newLocation]);
         setSelectedLocation(newLocation);
       },
     });
@@ -145,7 +246,8 @@ const PlaceOrderScreen = ({ navigation }) => {
               key={location._id}
               style={[
                 styles.locationOption,
-                selectedLocation?._id === location._id && styles.locationOptionSelected,
+                selectedLocation?._id === location._id &&
+                  styles.locationOptionSelected,
               ]}
               onPress={() => {
                 setSelectedLocation(location);
@@ -164,12 +266,22 @@ const PlaceOrderScreen = ({ navigation }) => {
                   </View>
                 )}
                 {selectedLocation?._id === location._id && (
-                  <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={COLORS.primary}
+                  />
                 )}
               </View>
-              <Text style={styles.locationShopName}>{location.shopName}</Text>
-              <Text style={styles.locationAddress}>{location.fullAddress}</Text>
-              <Text style={styles.locationPhone}>📞 {location.contactPhone}</Text>
+              <Text style={styles.locationShopName}>
+                {location.shopName}
+              </Text>
+              <Text style={styles.locationAddress}>
+                {location.fullAddress}
+              </Text>
+              <Text style={styles.locationPhone}>
+                📞 {location.contactPhone}
+              </Text>
             </TouchableOpacity>
           ))}
 
@@ -177,7 +289,11 @@ const PlaceOrderScreen = ({ navigation }) => {
             style={styles.addNewLocationButton}
             onPress={handleAddNewLocation}
           >
-            <Ionicons name="add-circle-outline" size={24} color={COLORS.primary} />
+            <Ionicons
+              name="add-circle-outline"
+              size={24}
+              color={COLORS.primary}
+            />
             <Text style={styles.addNewLocationText}>Add New Address</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -212,10 +328,10 @@ const PlaceOrderScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Delivery Address Section */}
+        {/* Delivery Address */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Address</Text>
-          
+
           {selectedLocation ? (
             <TouchableOpacity
               style={styles.selectedLocationCard}
@@ -225,13 +341,22 @@ const PlaceOrderScreen = ({ navigation }) => {
                 <View style={styles.locationHeader}>
                   <View style={styles.locationLabelBadge}>
                     <Text style={styles.locationLabelText}>
-                      {selectedLocation.displayLabel || selectedLocation.label}
+                      {selectedLocation.displayLabel ||
+                        selectedLocation.label}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={COLORS.gray}
+                  />
                 </View>
-                <Text style={styles.shopName}>{selectedLocation.shopName}</Text>
-                <Text style={styles.address}>{selectedLocation.fullAddress}</Text>
+                <Text style={styles.shopName}>
+                  {selectedLocation.shopName}
+                </Text>
+                <Text style={styles.address}>
+                  {selectedLocation.fullAddress}
+                </Text>
                 <Text style={styles.contactPhone}>
                   📞 {selectedLocation.contactPhone}
                 </Text>
@@ -242,21 +367,32 @@ const PlaceOrderScreen = ({ navigation }) => {
               style={styles.addLocationCard}
               onPress={() => setShowLocationPicker(true)}
             >
-              <Ionicons name="location-outline" size={32} color={COLORS.gray} />
-              <Text style={styles.addLocationText}>Select Delivery Address</Text>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
+              <Ionicons
+                name="location-outline"
+                size={32}
+                color={COLORS.gray}
+              />
+              <Text style={styles.addLocationText}>
+                Select Delivery Address
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.gray}
+              />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Order Items Section */}
+        {/* Order Items */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items ({totalItems})</Text>
-          
+          <Text style={styles.sectionTitle}>
+            Order Items ({totalItems})
+          </Text>
           <Card style={styles.itemsCard}>
             {items.map((item, index) => (
-              <View 
-                key={item._id} 
+              <View
+                key={item._id}
                 style={[
                   styles.orderItem,
                   index < items.length - 1 && styles.orderItemBorder,
@@ -278,7 +414,7 @@ const PlaceOrderScreen = ({ navigation }) => {
           </Card>
         </View>
 
-        {/* Notes Section */}
+        {/* Notes */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Order Notes (Optional)</Text>
           <TextInput
@@ -293,7 +429,7 @@ const PlaceOrderScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Payment Method Section */}
+        {/* Payment Method */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Method</Text>
           <Card style={styles.paymentCard}>
@@ -307,7 +443,11 @@ const PlaceOrderScreen = ({ navigation }) => {
                   Payment due within {user?.paymentTerms || 30} days
                 </Text>
               </View>
-              <Ionicons name="card-outline" size={24} color={COLORS.primary} />
+              <Ionicons
+                name="card-outline"
+                size={24}
+                color={COLORS.primary}
+              />
             </View>
           </Card>
         </View>
@@ -315,10 +455,15 @@ const PlaceOrderScreen = ({ navigation }) => {
         {/* Credit Info */}
         {user?.creditLimit > 0 && (
           <View style={styles.creditInfoCard}>
-            <Ionicons name="information-circle-outline" size={20} color={COLORS.info} />
+            <Ionicons
+              name="information-circle-outline"
+              size={20}
+              color={COLORS.info}
+            />
             <View style={styles.creditInfoContent}>
               <Text style={styles.creditInfoText}>
-                Available Credit: {formatCurrency(user.availableCredit)}
+                Available Credit:{' '}
+                {formatCurrency(user.availableCredit || 0)}
               </Text>
               <Text style={styles.creditInfoSubtext}>
                 Credit Limit: {formatCurrency(user.creditLimit)}
@@ -330,7 +475,7 @@ const PlaceOrderScreen = ({ navigation }) => {
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Order Summary & Place Order Button */}
+      {/* Bottom Summary */}
       <View style={styles.bottomContainer}>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Subtotal</Text>
@@ -347,19 +492,156 @@ const PlaceOrderScreen = ({ navigation }) => {
         </View>
 
         <Button
-          title="Place Order"
+          title={isPlacingOrder ? 'Placing Order...' : 'Place Order'}
           onPress={handlePlaceOrder}
           loading={isPlacingOrder}
-          disabled={!selectedLocation}
+          disabled={!selectedLocation || isPlacingOrder}
           style={styles.placeOrderButton}
         />
       </View>
 
       {renderLocationPicker()}
+
+      {/* ✅ Order Success Modal */}
+      <OrderSuccessModal
+        visible={showSuccess}
+        orderNumber={placedOrder?.orderNumber}
+        total={placedOrder?.totalAmount}
+        onViewOrder={handleViewOrder}
+        onContinue={handleContinueShopping}
+      />
     </Screen>
   );
 };
 
+// ─── Success Modal Styles ─────────────────────────────────────
+const successStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    alignItems: 'center',
+    ...SHADOWS.large,
+  },
+  iconContainer: {
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.medium,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  infoBox: {
+    width: '100%',
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  infoValueHighlight: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  infoValueSuccess: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.success,
+  },
+  noteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF9E6',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 24,
+    gap: 8,
+    width: '100%',
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#92400E',
+    flex: 1,
+    lineHeight: 18,
+  },
+  primaryButton: {
+    width: '100%',
+    height: 52,
+    backgroundColor: COLORS.primary,
+    borderRadius: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+    ...SHADOWS.small,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  secondaryButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+});
+
+// ─── Main Screen Styles ───────────────────────────────────────
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -379,22 +661,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-  },
-  headerRight: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: SPACING.screenPadding,
-  },
-  section: {
-    marginBottom: SPACING.xl,
-  },
+  title: { ...FONTS.h4, color: COLORS.textPrimary },
+  headerRight: { width: 40 },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: SPACING.screenPadding },
+  section: { marginBottom: SPACING.xl },
   sectionTitle: {
     ...FONTS.h4,
     color: COLORS.textPrimary,
@@ -408,9 +679,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     ...SHADOWS.small,
   },
-  locationInfo: {
-    flex: 1,
-  },
+  locationInfo: { flex: 1 },
   locationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -440,10 +709,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
     lineHeight: 20,
   },
-  contactPhone: {
-    ...FONTS.bodySmall,
-    color: COLORS.textSecondary,
-  },
+  contactPhone: { ...FONTS.bodySmall, color: COLORS.textSecondary },
   addLocationCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -460,10 +726,7 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     flex: 1,
   },
-  itemsCard: {
-    padding: 0,
-    overflow: 'hidden',
-  },
+  itemsCard: { padding: 0, overflow: 'hidden' },
   orderItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -474,24 +737,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
-  orderItemInfo: {
-    flex: 1,
-    marginRight: SPACING.md,
-  },
+  orderItemInfo: { flex: 1, marginRight: SPACING.md },
   orderItemTitle: {
     ...FONTS.bodySmall,
     color: COLORS.textPrimary,
     fontWeight: '500',
     marginBottom: SPACING.xs,
   },
-  orderItemPrice: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-  },
-  orderItemSubtotal: {
-    ...FONTS.priceSmall,
-    color: COLORS.textPrimary,
-  },
+  orderItemPrice: { ...FONTS.caption, color: COLORS.gray },
+  orderItemSubtotal: { ...FONTS.priceSmall, color: COLORS.textPrimary },
   notesInput: {
     backgroundColor: COLORS.white,
     borderRadius: SPACING.cardRadius,
@@ -503,9 +757,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  paymentCard: {
-    padding: 0,
-  },
+  paymentCard: { padding: 0 },
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -527,19 +779,13 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: COLORS.primary,
   },
-  paymentInfo: {
-    flex: 1,
-  },
+  paymentInfo: { flex: 1 },
   paymentTitle: {
     ...FONTS.body,
     color: COLORS.textPrimary,
     fontWeight: '500',
   },
-  paymentDescription: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-    marginTop: 2,
-  },
+  paymentDescription: { ...FONTS.caption, color: COLORS.gray, marginTop: 2 },
   creditInfoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -549,22 +795,14 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     marginBottom: SPACING.xl,
   },
-  creditInfoContent: {
-    flex: 1,
-  },
+  creditInfoContent: { flex: 1 },
   creditInfoText: {
     ...FONTS.bodySmall,
     color: COLORS.info,
     fontWeight: '500',
   },
-  creditInfoSubtext: {
-    ...FONTS.caption,
-    color: COLORS.info,
-    marginTop: 2,
-  },
-  bottomSpacing: {
-    height: 20,
-  },
+  creditInfoSubtext: { ...FONTS.caption, color: COLORS.info, marginTop: 2 },
+  bottomSpacing: { height: 20 },
   bottomContainer: {
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.screenPadding,
@@ -580,14 +818,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.xs,
   },
-  summaryLabel: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-  },
-  summaryValue: {
-    ...FONTS.body,
-    color: COLORS.textPrimary,
-  },
+  summaryLabel: { ...FONTS.body, color: COLORS.textSecondary },
+  summaryValue: { ...FONTS.body, color: COLORS.textPrimary },
   summaryValueFree: {
     ...FONTS.body,
     color: COLORS.success,
@@ -598,18 +830,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     marginVertical: SPACING.sm,
   },
-  totalLabel: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-  },
-  totalValue: {
-    ...FONTS.priceLarge,
-    color: COLORS.textPrimary,
-  },
-  placeOrderButton: {
-    marginTop: SPACING.md,
-  },
-  // Modal styles
+  totalLabel: { ...FONTS.h4, color: COLORS.textPrimary },
+  totalValue: { ...FONTS.priceLarge, color: COLORS.textPrimary },
+  placeOrderButton: { marginTop: SPACING.md },
+  // Modal
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -619,14 +843,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  modalTitle: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-  },
-  modalContent: {
-    flex: 1,
-    padding: SPACING.screenPadding,
-  },
+  modalTitle: { ...FONTS.h4, color: COLORS.textPrimary },
+  modalContent: { flex: 1, padding: SPACING.screenPadding },
   locationOption: {
     backgroundColor: COLORS.card,
     borderRadius: SPACING.cardRadius,
@@ -651,10 +869,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
     borderRadius: SPACING.xs,
   },
-  defaultBadgeText: {
-    ...FONTS.labelSmall,
-    color: COLORS.success,
-  },
+  defaultBadgeText: { ...FONTS.labelSmall, color: COLORS.success },
   locationShopName: {
     ...FONTS.body,
     color: COLORS.textPrimary,
@@ -666,10 +881,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
   },
-  locationPhone: {
-    ...FONTS.caption,
-    color: COLORS.gray,
-  },
+  locationPhone: { ...FONTS.caption, color: COLORS.gray },
   addNewLocationButton: {
     flexDirection: 'row',
     alignItems: 'center',

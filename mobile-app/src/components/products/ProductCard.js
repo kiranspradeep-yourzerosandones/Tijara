@@ -13,7 +13,7 @@ import { formatCurrency, calculateDiscount, getImageUrl } from '../../utils/help
 import { useCartStore } from '../../store';
 import { OptimizedImage } from '../common';
 
-const ProductCard = ({ product, onPress, style }) => {
+const ProductCard = ({ product, onPress, style, onAddToCart }) => {
   const { addToCart, getItemQuantity, isLoading } = useCartStore();
   const quantity = getItemQuantity(product._id);
 
@@ -23,12 +23,16 @@ const ProductCard = ({ product, onPress, style }) => {
     : null;
 
   const handleAddToCart = async () => {
-    try {
-      await addToCart(product._id, 1);
-    } catch (error) {
-      console.error('Add to cart error:', error);
-    }
-  };
+  try {
+    await addToCart(product._id, 1);
+
+    // ✅ Parent handles toast
+    onAddToCart?.(product);
+
+  } catch (error) {
+    console.error('Add to cart error:', error);
+  }
+};
 
   return (
     <TouchableOpacity

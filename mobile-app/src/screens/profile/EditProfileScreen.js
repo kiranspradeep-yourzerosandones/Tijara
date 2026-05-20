@@ -6,16 +6,22 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING } from '../../theme';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button, Input, Screen } from '../../components/common';
+import { ConfirmDialog } from '../../components/common';
+import Toast from '../../components/common/Toast';
+import useToast from '../../hooks/useToast';
 import { useAuthStore } from '../../store';
 import { validateName, validateEmail } from '../../utils/validation';
 
 const EditProfileScreen = ({ navigation }) => {
-  const { user, updateProfile, isLoading } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const isLoading = useAuthStore((state) => state.isLoading);
+
+  const { toast, showToast } = useToast();
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -25,11 +31,20 @@ const EditProfileScreen = ({ navigation }) => {
     gstNumber: user?.gstNumber || '',
   });
   const [errors, setErrors] = useState({});
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+
+  // ─── Track if form has changes ────────────────────────────
+  const hasChanges =
+    formData.name !== (user?.name || '') ||
+    formData.email !== (user?.email || '') ||
+    formData.businessName !== (user?.businessName || '') ||
+    formData.businessType !== (user?.businessType || '') ||
+    formData.gstNumber !== (user?.gstNumber || '');
 
   const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => {
+      setErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[field];
         return newErrors;
@@ -37,6 +52,16 @@ const EditProfileScreen = ({ navigation }) => {
     }
   };
 
+  // ─── Handle back press ────────────────────────────────────
+  const handleBack = () => {
+    if (hasChanges) {
+      setShowDiscardDialog(true);
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  // ─── Save profile ─────────────────────────────────────────
   const handleSave = async () => {
     const nameValidation = validateName(formData.name);
     const emailValidation = validateEmail(formData.email);
@@ -52,16 +77,11 @@ const EditProfileScreen = ({ navigation }) => {
 
     try {
       await updateProfile(formData);
-      Alert.alert('Success', 'Profile updated successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showToast('Profile updated successfully', 'success');
+      setTimeout(() => navigation.goBack(), 1200);
     } catch (error) {
-      Alert.alert('Error', error.message);
+      showToast(error.message || 'Failed to update profile', 'error');
     }
-  };
-
-  const handleChangePassword = () => {
-    navigation.navigate('ChangePassword');
   };
 
   return (
@@ -70,23 +90,63 @@ const EditProfileScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={handleBack}
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Edit Profile</Text>
-        <View style={styles.headerRight} />
+        {/* ✅ Save button in header */}
+        <TouchableOpacity
+          style={[
+            styles.saveHeaderButton,
+            (!hasChanges || isLoading) && styles.saveHeaderButtonDisabled,
+          ]}
+          onPress={handleSave}
+          disabled={!hasChanges || isLoading}
+        >
+          <Text
+            style={[
+              styles.saveHeaderText,
+              (!hasChanges || isLoading) && styles.saveHeaderTextDisabled,
+            ]}
+          >
+            Save
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Personal Information */}
+        {/* ─── Avatar Section ─────────────────────────────── */}
+        <View style={styles.avatarSection}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {formData.name
+                  ? formData.name
+                      .trim()
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)
+                  : '??'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.avatarHint}>
+            {user?.phone}
+          </Text>
+        </View>
+
+        {/* ─── Personal Information ────────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Personal Information</Text>
-          
+
           <Input
             label="Full Name *"
             placeholder="Your full name"
@@ -94,6 +154,7 @@ const EditProfileScreen = ({ navigation }) => {
             onChangeText={(v) => updateField('name', v)}
             error={errors.name}
             autoCapitalize="words"
+            icon="person-outline"
           />
 
           <Input
@@ -106,69 +167,115 @@ const EditProfileScreen = ({ navigation }) => {
 
           <Input
             label="Email"
-            placeholder="Your email address"
+            placeholder="Your email address (optional)"
             value={formData.email}
             onChangeText={(v) => updateField('email', v)}
             error={errors.email}
             keyboardType="email-address"
             autoCapitalize="none"
+            icon="mail-outline"
           />
         </View>
 
-        {/* Business Information */}
+        {/* ─── Business Information ────────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business Information</Text>
-          
+
           <Input
             label="Business Name"
-            placeholder="Your business name"
+            placeholder="Your business or shop name"
             value={formData.businessName}
             onChangeText={(v) => updateField('businessName', v)}
             autoCapitalize="words"
+            icon="business-outline"
           />
 
           <Input
             label="Business Type"
-            placeholder="e.g., Retail, Wholesale"
+            placeholder="e.g., Retail, Wholesale, Manufacturing"
             value={formData.businessType}
             onChangeText={(v) => updateField('businessType', v)}
             autoCapitalize="words"
+            icon="briefcase-outline"
           />
 
           <Input
             label="GST Number"
             placeholder="GST Number (if applicable)"
             value={formData.gstNumber}
-            onChangeText={(v) => updateField('gstNumber', v)}
+            onChangeText={(v) => updateField('gstNumber', v.toUpperCase())}
             autoCapitalize="characters"
+            icon="document-text-outline"
           />
         </View>
 
-        {/* Security */}
+        {/* ─── Security ────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
-          
+
           <TouchableOpacity
-            style={styles.changePasswordButton}
-            onPress={handleChangePassword}
+            style={styles.securityButton}
+            onPress={() => navigation.navigate('ChangePassword')}
+            activeOpacity={0.7}
           >
-            <View style={styles.changePasswordLeft}>
-              <Ionicons name="lock-closed-outline" size={22} color={COLORS.textPrimary} />
-              <Text style={styles.changePasswordText}>Change Password</Text>
+            <View style={styles.securityLeft}>
+              <View style={styles.securityIcon}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={COLORS.textPrimary}
+                />
+              </View>
+              <View>
+                <Text style={styles.securityTitle}>Change Password</Text>
+                <Text style={styles.securitySubtitle}>
+                  Update your account password
+                </Text>
+              </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={COLORS.gray}
+            />
           </TouchableOpacity>
         </View>
 
+        {/* ─── Save Button ─────────────────────────────────── */}
         <Button
           title="Save Changes"
           onPress={handleSave}
           loading={isLoading}
+          disabled={!hasChanges || isLoading}
           style={styles.saveButton}
         />
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {/* ✅ Discard Changes Dialog */}
+      <ConfirmDialog
+        visible={showDiscardDialog}
+        title="Discard Changes?"
+        message="You have unsaved changes. Are you sure you want to go back?"
+        confirmText="Discard"
+        cancelText="Keep Editing"
+        confirmColor={COLORS.error}
+        icon="alert-circle-outline"
+        iconColor={COLORS.warning}
+        onConfirm={() => {
+          setShowDiscardDialog(false);
+          navigation.goBack();
+        }}
+        onCancel={() => setShowDiscardDialog(false)}
+      />
+
+      {/* ✅ Toast */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+      />
     </Screen>
   );
 };
@@ -180,6 +287,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.screenPadding,
     paddingVertical: SPACING.md,
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -195,27 +303,66 @@ const styles = StyleSheet.create({
     ...FONTS.h4,
     color: COLORS.textPrimary,
   },
-  headerRight: {
-    width: 40,
+  saveHeaderButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
   },
-  scrollView: {
-    flex: 1,
+  saveHeaderButtonDisabled: {
+    backgroundColor: COLORS.lightGray,
   },
-  scrollContent: {
-    padding: SPACING.screenPadding,
+  saveHeaderText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.black,
   },
-  section: {
-    marginBottom: SPACING.xl,
+  saveHeaderTextDisabled: {
+    color: COLORS.gray,
   },
+
+  // Avatar
+  avatarSection: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xl,
+    marginBottom: SPACING.md,
+  },
+  avatarContainer: {
+    marginBottom: SPACING.sm,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.medium,
+  },
+  avatarText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  avatarHint: {
+    ...FONTS.bodySmall,
+    color: COLORS.gray,
+    marginTop: SPACING.xs,
+  },
+
+  // Sections
+  scrollView: { flex: 1 },
+  scrollContent: { padding: SPACING.screenPadding },
+  section: { marginBottom: SPACING.xl },
   sectionTitle: {
     ...FONTS.h4,
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
   },
-  disabledInput: {
-    opacity: 0.6,
-  },
-  changePasswordButton: {
+  disabledInput: { opacity: 0.5 },
+
+  // Security
+  securityButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -223,22 +370,33 @@ const styles = StyleSheet.create({
     padding: SPACING.cardPadding,
     borderRadius: SPACING.cardRadius,
   },
-  changePasswordLeft: {
+  securityLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.md,
   },
-  changePasswordText: {
+  securityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.small,
+  },
+  securityTitle: {
     ...FONTS.body,
     color: COLORS.textPrimary,
     fontWeight: '500',
   },
-  saveButton: {
-    marginTop: SPACING.lg,
+  securitySubtitle: {
+    ...FONTS.caption,
+    color: COLORS.gray,
+    marginTop: 2,
   },
-  bottomSpacing: {
-    height: SPACING.xxxl,
-  },
+
+  saveButton: { marginTop: SPACING.lg },
+  bottomSpacing: { height: SPACING.xxxl },
 });
 
 export default EditProfileScreen;
