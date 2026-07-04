@@ -108,6 +108,7 @@ const HomeScreen = ({ navigation }) => {
   const totalItems = useCartStore((state) => state.totalItems);
   const cartItems = useCartStore((state) => state.items);
   const { fetchUnreadCount } = useNotificationStore();
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
 
   // Search hook
   const {
@@ -287,9 +288,7 @@ const HomeScreen = ({ navigation }) => {
     [hideSuggestions, navigation]
   );
 
-  const handleSupportPress = useCallback(() => {
-    navigation.navigate('Profile');
-  }, [navigation]);
+  
 
   const handleGoToCart = useCallback(() => {
     navigation.navigate('Cart');
@@ -392,28 +391,38 @@ const HomeScreen = ({ navigation }) => {
   // ============================================================
 
   const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerLeft}>
-        <View style={styles.logoContainer}>
-          <TijaraLogo width={28} height={28} />
-        </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.welcomeText}>Welcome Back,</Text>
-          <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
-        </View>
+  <View style={styles.header}>
+    <View style={styles.headerLeft}>
+      <View style={styles.logoContainer}>
+        <TijaraLogo width={28} height={28} />
       </View>
-      <TouchableOpacity
-        style={styles.supportButton}
-        onPress={handleSupportPress}
-      >
-        <Ionicons
-          name="headset-outline"
-          size={20}
-          color={COLORS.textPrimary}
-        />
-      </TouchableOpacity>
+      <View style={styles.headerTextContainer}>
+        <Text style={styles.welcomeText}>Welcome Back,</Text>
+        <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
+      </View>
     </View>
-  );
+
+    {/* ✅ Bell icon with unread badge — replaces headset */}
+    <TouchableOpacity
+      style={styles.notificationButton}
+      onPress={() => navigation.navigate('Notifications')}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name="notifications-outline"
+        size={22}
+        color={COLORS.textPrimary}
+      />
+      {unreadCount > 0 && (
+        <View style={styles.notificationBadge}>
+          <Text style={styles.notificationBadgeText}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  </View>
+);
 
   const renderSearchBar = () => (
     // ✅ FIX 4 — Added elevation for Android zIndex
@@ -886,14 +895,34 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontWeight: '600',
   },
-  supportButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  notificationButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: COLORS.card,
+  alignItems: 'center',
+  justifyContent: 'center',
+  position: 'relative',
+},
+notificationBadge: {
+  position: 'absolute',
+  top: -2,
+  right: -2,
+  minWidth: 18,
+  height: 18,
+  borderRadius: 9,
+  backgroundColor: COLORS.error,
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingHorizontal: 3,
+  borderWidth: 1.5,
+  borderColor: COLORS.white,
+},
+notificationBadgeText: {
+  fontSize: 9,
+  fontWeight: '700',
+  color: COLORS.white,
+},
 
   // ✅ FIX 4 — elevation added for Android
   searchWrapper: {

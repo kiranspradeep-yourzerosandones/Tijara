@@ -69,11 +69,31 @@ apiClient.interceptors.response.use(
       });
     }
 
-    // ✅ Handle 401 Unauthorized
+    // ✅ Handle 401 Unauthorized - BUT skip auth routes
     if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      await tokenManager.clearToken();
-      tokenManager.handleUnauthorized();
+      
+      // ✅ FIX: Don't auto-logout on auth screens
+      const AUTH_ROUTES = [
+        '/auth/login',
+        '/auth/login/send-otp',
+        '/auth/login/verify-otp',
+        '/auth/register',
+        '/auth/register/send-otp',
+        '/auth/register/verify-otp',
+        '/auth/register/complete',
+        '/auth/forgot-password',
+      ];
+      
+      const requestUrl = originalRequest?.url || '';
+      const isAuthRoute = AUTH_ROUTES.some(route => requestUrl.includes(route));
+      
+      if (!isAuthRoute) {
+        // Only logout when authenticated user gets 401 (expired token etc)
+        originalRequest._retry = true;
+        await tokenManager.clearToken();
+        tokenManager.handleUnauthorized();
+      }
+      // On auth routes: just let error propagate to the screen handler
       return Promise.reject(error);
     }
 

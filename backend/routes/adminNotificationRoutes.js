@@ -1,3 +1,4 @@
+// backend/routes/adminNotificationRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -17,30 +18,78 @@ const {
 } = require("../controllers/notificationController");
 
 const { protect } = require("../middleware/auth");
-const { adminOnly } = require("../middleware/adminAuth");
+const { adminOnly, checkPermission } = require("../middleware/adminAuth");
 
-// All routes require admin authentication
+// ── All routes require admin auth ──────────────────────────
 router.use(protect);
 router.use(adminOnly);
 
-// Statistics
-router.get("/stats", adminGetNotificationStats);
+// ── Stats (manageNotifications) ────────────────────────────
+router.get(
+  "/stats",
+  checkPermission("manageNotifications"),
+  adminGetNotificationStats
+);
 
-// Quick actions
-router.post("/quick-send", adminQuickSend);
-router.post("/payment-reminder", adminSendPaymentReminder);
+// ── Quick actions ──────────────────────────────────────────
+router.post(
+  "/quick-send",
+  checkPermission("manageNotifications"),
+  adminQuickSend
+);
+router.post(
+  "/payment-reminder",
+  checkPermission("manageNotifications"),
+  adminSendPaymentReminder
+);
 
-// Notification CRUD
-router.post("/", adminCreateNotification);
-router.get("/", adminGetAllNotifications);
-router.get("/:id", adminGetNotification);
-router.put("/:id/cancel", adminCancelNotification);
-router.post("/:id/resend", adminResendNotification);
+// ── Notification CRUD ──────────────────────────────────────
+router.post(
+  "/",
+  checkPermission("manageNotifications"),
+  adminCreateNotification
+);
+router.get(
+  "/",
+  checkPermission("manageNotifications"),
+  adminGetAllNotifications
+);
+router.get(
+  "/:id",
+  checkPermission("manageNotifications"),
+  adminGetNotification
+);
+router.put(
+  "/:id/cancel",
+  checkPermission("manageNotifications"),
+  adminCancelNotification
+);
+router.post(
+  "/:id/resend",
+  checkPermission("manageNotifications"),
+  adminResendNotification
+);
 
-// Templates
-router.post("/templates", adminCreateTemplate);
-router.get("/templates", adminGetTemplates);
-router.put("/templates/:id", adminUpdateTemplate);
-router.delete("/templates/:id", adminDeleteTemplate);
+// ── Templates ──────────────────────────────────────────────
+router.post(
+  "/templates",
+  checkPermission("manageNotifications"),
+  adminCreateTemplate
+);
+router.get(
+  "/templates",
+  checkPermission("manageNotifications"),
+  adminGetTemplates
+);
+router.put(
+  "/templates/:id",
+  checkPermission("manageNotifications"),
+  adminUpdateTemplate
+);
+router.delete(
+  "/templates/:id",
+  checkPermission("manageNotifications"),
+  adminDeleteTemplate
+);
 
 module.exports = router;

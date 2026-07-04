@@ -51,7 +51,8 @@ const adminSchema = new mongoose.Schema({
     manageCustomers: { type: Boolean, default: true },
     managePayments: { type: Boolean, default: true },
     manageAdmins: { type: Boolean, default: false },
-    viewReports: { type: Boolean, default: true }
+    viewReports: { type: Boolean, default: true },
+    manageNotifications: { type: Boolean, default: true },
   },
 
   profileImage: String,
@@ -127,7 +128,8 @@ adminSchema.methods.getPublicProfile = function() {
       manageCustomers: true,
       managePayments: true,
       manageAdmins: true,
-      viewReports: true
+      viewReports: true,
+      manageNotifications: true,
     } : this.permissions,
     profileImage: this.profileImage,
     isActive: this.isActive,

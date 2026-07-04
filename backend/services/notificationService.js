@@ -1,3 +1,4 @@
+// backend/services/notificationService.js
 const Notification = require("../models/Notification");
 const NotificationTemplate = require("../models/NotificationTemplate");
 const User = require("../models/User");
@@ -13,13 +14,11 @@ class NotificationService {
    */
   async sendSMS(phone, message) {
     try {
-      // Format phone
       let formattedPhone = phone.replace(/\D/g, "");
       if (formattedPhone.length === 10) {
         formattedPhone = "91" + formattedPhone;
       }
 
-      // Development mode
       if (process.env.NODE_ENV === "development") {
         console.log("========================================");
         console.log(`📱 SMS (Dev Mode)`);
@@ -29,22 +28,19 @@ class NotificationService {
         return { success: true, message: "SMS logged (dev mode)", devMode: true };
       }
 
-      // Check if Message Central is configured
       if (!process.env.MC_CUSTOMER || !process.env.MC_PASSWORD) {
         console.warn("📱 SMS not sent - Message Central not configured");
         return { success: false, message: "SMS service not configured" };
       }
 
-      // Get auth token
       const authToken = await getMCAuthToken(
         process.env.MC_CUSTOMER,
         process.env.MC_PASSWORD
       );
 
-      // Send SMS via Message Central
       const url = "https://cpaas.messagecentral.com/verification/v2/send";
-      
-      const response = await axios.post(url, null, {
+
+      await axios.post(url, null, {
         params: {
           customerId: process.env.MC_CUSTOMER,
           mobileNumber: formattedPhone,
@@ -57,23 +53,17 @@ class NotificationService {
       });
 
       console.log(`📱 SMS sent to ${formattedPhone}`);
-
-      return {
-        success: true,
-        message: "SMS sent successfully"
-      };
+      return { success: true, message: "SMS sent successfully" };
 
     } catch (error) {
       console.error("📱 SMS error:", error.response?.data || error.message);
-      return {
-        success: false,
-        message: error.message
-      };
+      return { success: false, message: error.message };
     }
   }
 
   /**
    * Send notification through all specified channels
+   * ✅ FIXED: user.fcmToken → user.pushToken
    */
   async sendToUser({ user, notification, channels }) {
     const results = {
@@ -83,7 +73,7 @@ class NotificationService {
       push: { sent: false, delivered: false, failed: false, failedReason: null }
     };
 
-    // SMS (Message Central)
+    // ── SMS ────────────────────────────────────────────────
     if (channels.sms && user.phone) {
       try {
         const smsResult = await this.sendSMS(
@@ -105,7 +95,7 @@ class NotificationService {
       }
     }
 
-    // Email (Nodemailer)
+    // ── Email ──────────────────────────────────────────────
     if (channels.email && user.email) {
       try {
         const emailResult = await emailService.sendNotificationEmail({
@@ -129,14 +119,13 @@ class NotificationService {
       }
     }
 
-    // WhatsApp (MSG91)
+    // ── WhatsApp ───────────────────────────────────────────
     if (channels.whatsapp && user.phone) {
       try {
         const waResult = await whatsappService.sendNotification({
           phone: user.phone,
           title: notification.title,
           message: notification.message,
-          // Use template if configured
           templateName: notification.whatsappTemplate,
           templateVariables: {
             body: [notification.title, notification.message]
@@ -157,11 +146,12 @@ class NotificationService {
       }
     }
 
-    // Push Notification (FCM)
-    if (channels.push && user.fcmToken) {
+    // ── Push Notification ──────────────────────────────────
+    // ✅ FIXED: was user.fcmToken — now user.pushToken
+    if (channels.push && user.pushToken) {
       try {
         const pushResult = await pushService.sendToDevice({
-          token: user.fcmToken,
+          token: user.pushToken,
           title: notification.title,
           body: notification.shortMessage || notification.message.substring(0, 200),
           data: {
@@ -191,11 +181,16 @@ class NotificationService {
 
   /**
    * Process and send a notification
+   * ✅ FIXED: populate pushToken instead of fcmToken
    */
   async processNotification(notificationId) {
     try {
       const notification = await Notification.findById(notificationId)
-        .populate('recipients.user', 'name phone email fcmToken');
+        .populate({
+          path: "recipients.user",
+          select: "name phone email +pushToken",
+          model: "User"
+        });
 
       if (!notification) {
         throw new Error("Notification not found");
@@ -205,7 +200,6 @@ class NotificationService {
         throw new Error("Notification already processed");
       }
 
-      // Update status to sending
       notification.status = "sending";
       notification.sentAt = new Date();
       await notification.save();
@@ -213,7 +207,6 @@ class NotificationService {
       let hasFailures = false;
       let successCount = 0;
 
-      // Process each recipient
       for (let i = 0; i < notification.recipients.length; i++) {
         const recipient = notification.recipients[i];
         const user = recipient.user;
@@ -227,10 +220,8 @@ class NotificationService {
             channels: notification.channels
           });
 
-          // Update recipient status
           notification.recipients[i].channels = results;
 
-          // Check for failures
           const channelResults = Object.values(results);
           const hasSent = channelResults.some(r => r.sent);
           const hasFailed = channelResults.some(r => r.failed);
@@ -249,9 +240,8 @@ class NotificationService {
         }
       }
 
-      // Update final status and stats
       notification.updateStats();
-      
+
       if (successCount === 0) {
         notification.status = "failed";
       } else if (hasFailures) {
@@ -259,35 +249,29 @@ class NotificationService {
       } else {
         notification.status = "sent";
       }
-      
+
       notification.completedAt = new Date();
       await notification.save();
 
       console.log(`📢 Notification ${notification._id} processed:`);
-      console.log(`   Recipients: ${notification.stats.totalRecipients}`);
       console.log(`   Status: ${notification.status}`);
-      console.log(`   SMS: ${notification.stats.smsSent} sent, ${notification.stats.smsFailed} failed`);
-      console.log(`   Email: ${notification.stats.emailSent} sent, ${notification.stats.emailFailed} failed`);
-      console.log(`   WhatsApp: ${notification.stats.whatsappSent} sent, ${notification.stats.whatsappFailed} failed`);
-      console.log(`   Push: ${notification.stats.pushSent} sent, ${notification.stats.pushFailed} failed`);
+      console.log(`   Recipients: ${notification.stats?.totalRecipients}`);
 
       return notification;
 
     } catch (error) {
       console.error("Process notification error:", error);
-      
-      // Mark as failed
       await Notification.findByIdAndUpdate(notificationId, {
         status: "failed",
         notes: error.message
       });
-
       throw error;
     }
   }
 
   /**
    * Get users based on segment filters
+   * ✅ FIXED: hasFcmToken → hasPushToken
    */
   async getUsersBySegment(filters) {
     const query = { role: "customer", isActive: true };
@@ -312,17 +296,16 @@ class NotificationService {
       query.createdAt = { ...query.createdAt, $lte: new Date(filters.registeredBefore) };
     }
 
-    // Filter users with email if email channel is required
     if (filters.hasEmail) {
-      query.email = { $exists: true, $ne: null, $ne: "" };
+      query.email = { $exists: true, $ne: null };
     }
 
-    // Filter users with FCM token if push channel is required
-    if (filters.hasFcmToken) {
-      query.fcmToken = { $exists: true, $ne: null, $ne: "" };
+    // ✅ FIXED: hasFcmToken → hasPushToken
+    if (filters.hasPushToken) {
+      query.pushToken = { $exists: true, $ne: null };
     }
 
-    const users = await User.find(query).select('_id name phone email fcmToken');
+    const users = await User.find(query).select("_id name phone email pushToken");
     return users;
   }
 
@@ -334,7 +317,7 @@ class NotificationService {
   }
 
   /**
-   * Create quick notification for order updates
+   * Create order notification
    */
   async createOrderNotification(order, status, adminId) {
     const statusMessages = {
@@ -346,45 +329,40 @@ class NotificationService {
       cancelled: "Your order {{orderNumber}} has been cancelled. Contact us for any queries."
     };
 
-    const message = this.renderTemplate(statusMessages[status] || "Order {{orderNumber}} status updated.", {
-      orderNumber: order.orderNumber
-    });
+    const message = this.renderTemplate(
+      statusMessages[status] || "Order {{orderNumber}} status updated.",
+      { orderNumber: order.orderNumber }
+    );
 
     const notification = new Notification({
-      title: `Order ${status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')}`,
+      title: `Order ${status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ")}`,
       message,
       shortMessage: message.substring(0, 160),
       type: "order_update",
       channels: { sms: true, push: true, inApp: true },
       targetType: "selected",
-      recipients: [{
-        user: order.user,
-        channels: {}
-      }],
+      recipients: [{ user: order.user, channels: {} }],
       relatedOrder: order._id,
       createdBy: adminId,
       status: "draft"
     });
 
     await notification.save();
-
-    // Process immediately
     await this.processNotification(notification._id);
-
     return notification;
   }
 
   /**
-   * Create payment reminder notification
+   * Create payment reminder
    */
   async createPaymentReminder(user, outstandingAmount, daysOverdue, adminId) {
-    const message = daysOverdue > 0 
+    const message = daysOverdue > 0
       ? `Hi {{name}}, your payment of ₹{{amount}} is overdue by {{days}} days. Please clear it to continue ordering.`
       : `Hi {{name}}, you have an outstanding payment of ₹{{amount}}. Please clear it at your earliest convenience.`;
 
     const renderedMessage = this.renderTemplate(message, {
       name: user.name,
-      amount: outstandingAmount.toLocaleString('en-IN'),
+      amount: outstandingAmount.toLocaleString("en-IN"),
       days: daysOverdue.toString()
     });
 
@@ -392,7 +370,7 @@ class NotificationService {
       sms: true,
       push: true,
       inApp: true,
-      whatsapp: daysOverdue > 7, // WhatsApp for overdue > 7 days
+      whatsapp: daysOverdue > 7,
       email: !!user.email
     };
 
@@ -404,17 +382,13 @@ class NotificationService {
       priority: daysOverdue > 7 ? "high" : "normal",
       channels,
       targetType: "selected",
-      recipients: [{
-        user: user._id,
-        channels: {}
-      }],
+      recipients: [{ user: user._id, channels: {} }],
       createdBy: adminId,
       status: "draft"
     });
 
     await notification.save();
     await this.processNotification(notification._id);
-
     return notification;
   }
 
@@ -422,7 +396,7 @@ class NotificationService {
    * Send payment received notification
    */
   async createPaymentReceivedNotification(payment, user, order, adminId) {
-    const message = `Thank you! We received your payment of ₹${payment.amount.toLocaleString('en-IN')} for order ${order.orderNumber}.`;
+    const message = `Thank you! We received your payment of ₹${payment.amount.toLocaleString("en-IN")} for order ${order.orderNumber}.`;
 
     const notification = new Notification({
       title: "Payment Received 🙏",
@@ -431,10 +405,7 @@ class NotificationService {
       type: "payment_received",
       channels: { sms: true, push: true, inApp: true, email: !!user.email },
       targetType: "selected",
-      recipients: [{
-        user: user._id,
-        channels: {}
-      }],
+      recipients: [{ user: user._id, channels: {} }],
       relatedPayment: payment._id,
       relatedOrder: order._id,
       createdBy: adminId,
@@ -444,7 +415,6 @@ class NotificationService {
     await notification.save();
     await this.processNotification(notification._id);
 
-    // Also send email receipt if email exists
     if (user.email) {
       await emailService.sendPaymentReceiptEmail({
         to: user.email,

@@ -548,7 +548,10 @@ exports.adminResendNotification = async (req, res) => {
     }
 
     const notification = await Notification.findById(id)
-      .populate('recipients.user', 'name phone email fcmToken');
+      .populate({
+  path: "recipients.user",
+  select: "name phone email +pushToken"
+});
 
     if (!notification) {
       return res.status(404).json({
