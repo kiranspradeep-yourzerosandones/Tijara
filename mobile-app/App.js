@@ -25,7 +25,7 @@ export default function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
 
-  // ── App initialization ────────────────────────────────────
+  // ── App initialization ─────────────────────────────────────
   useEffect(() => {
     networkUtils.startMonitoring();
 
@@ -47,20 +47,16 @@ export default function App() {
     };
   }, []);
 
-  // ── App state change — clear badge when app opens ─────────
+  // ── App state change — clear badge when app comes to foreground
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (
         appStateRef.current.match(/inactive|background/) &&
         nextState === 'active'
       ) {
-        // App came to foreground
         console.log('📱 App resumed from background');
-
-        // Clear badge
         notificationService.clearBadge();
 
-        // Refresh unread count if authenticated
         if (isAuthenticated) {
           fetchUnreadCount().catch(() => {});
         }
@@ -71,7 +67,7 @@ export default function App() {
     return () => subscription.remove();
   }, [isAuthenticated]);
 
-  // ── Push notifications setup (only when authenticated) ────
+  // ── Push notifications setup (only when authenticated) ─────
   useEffect(() => {
     if (isAuthenticated) {
       setupPushNotifications();
@@ -94,42 +90,43 @@ export default function App() {
       const token = await notificationService.registerForPushNotifications();
 
       if (token) {
-        // Send token to backend
         try {
           await updatePushToken(token);
           console.log('✅ Push token sent to backend');
         } catch (err) {
           console.warn('⚠️ Push token update failed:', err.message);
-          // Non-fatal — app still works without it
         }
       }
 
-      // Start listening to notifications
+      // ── Start listening ──────────────────────────────────
       notificationService.startListening(
         // Foreground notification received
         (notification) => {
+          const data = notification.request.content.data;
+
           if (ENV.DEBUG) {
-            console.log(
-              '🔔 Foreground:',
-              notification.request.content.title
-            );
+            console.log('🔔 Foreground:', notification.request.content.title);
+            console.log('🔔 Data:', data);
           }
-          // Refresh unread count when notification arrives
+
+          // ✅ Refresh unread count
           fetchUnreadCount().catch(() => {});
+
+          // Order detail screen will auto-refresh on focus — nothing extra needed
         },
-        // User tapped notification
+        // User tapped notification (background/killed state)
         (response) => {
           if (ENV.DEBUG) {
             console.log('🔔 Tapped notification');
           }
+          // handleNotificationResponse is called inside startListening already
         }
       );
 
-      // Handle notification that opened the app
+      // ── Handle notification that opened the app from killed state
       const lastResponse = await notificationService.getLastNotificationResponse();
       if (lastResponse) {
         console.log('🔔 App opened from notification');
-        // Small delay to let navigation mount
         setTimeout(() => {
           notificationService.handleNotificationResponse(lastResponse);
         }, 1000);
@@ -137,7 +134,6 @@ export default function App() {
 
     } catch (error) {
       console.warn('⚠️ Push notification setup failed:', error.message);
-      // Non-fatal — app still works
     }
   };
 

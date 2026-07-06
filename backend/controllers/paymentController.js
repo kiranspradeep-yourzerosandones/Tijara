@@ -440,6 +440,25 @@ exports.adminRecordPayment = async (req, res) => {
     console.log(
       `💰 Payment recorded: ${paymentNumber} - ₹${amount} for order ${order.orderNumber}`
     );
+     // ✅ Send payment notification (background — non-blocking)
+    setImmediate(async () => {
+      try {
+        const notificationService = require("../services/notificationService");
+        await notificationService.createPaymentNotification(
+          order,
+          amount,
+          req.user._id
+        );
+        console.log(
+          `🔔 Payment notification sent for order ${order.orderNumber}`
+        );
+      } catch (notifError) {
+        console.warn(
+          `⚠️ Payment notification failed (non-fatal):`,
+          notifError.message
+        );
+      }
+    });
 
     await payment.populate("order", "orderNumber totalAmount paymentStatus");
     await payment.populate("user", "name phone businessName");

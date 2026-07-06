@@ -193,43 +193,65 @@ class NotificationService {
   // HANDLE NOTIFICATION TAP — DEEP LINKING
   // ============================================================
   handleNotificationResponse(response) {
-    const data = response?.notification?.request?.content?.data;
+  const data = response?.notification?.request?.content?.data;
 
-    if (!data) return;
+  if (!data) return;
 
-    // Wait for navigation to be ready
-    const navigate = () => {
-      if (!this.navigationRef?.isReady()) {
-        // Retry after 500ms
-        setTimeout(navigate, 500);
+  const navigate = () => {
+    if (!this.navigationRef?.isReady()) {
+      setTimeout(navigate, 500);
+      return;
+    }
+
+    try {
+      // ── Order notification → OrderDetail ──────────────────
+      // Push payload has orderId = MongoDB _id (24 hex chars)
+      if (data.orderId) {
+        this.navigationRef.navigate('OrderDetail', {
+          orderId: data.orderId,
+        });
+        console.log('🔔 Deep linked to OrderDetail:', data.orderId);
         return;
       }
 
-      try {
-        if (data.orderId) {
-          // Deep link to order detail
-          this.navigationRef.navigate('OrderDetail', {
-            orderId: data.orderId,
-          });
-          console.log('🔔 Deep linked to OrderDetail:', data.orderId);
-
-        } else if (data.screen) {
-          // Generic screen deep link
-          this.navigationRef.navigate(data.screen, data.params || {});
-          console.log('🔔 Deep linked to screen:', data.screen);
-
-        } else if (data.type === 'payment_reminder') {
-          // Navigate to credit summary
-          this.navigationRef.navigate('CreditSummary');
-          console.log('🔔 Deep linked to CreditSummary');
-        }
-      } catch (error) {
-        console.warn('🔔 Deep link navigation failed:', error.message);
+      // ── Payment reminder → CreditSummary ──────────────────
+      if (data.type === 'payment_reminder') {
+        this.navigationRef.navigate('CreditSummary');
+        console.log('🔔 Deep linked to CreditSummary');
+        return;
       }
-    };
 
-    navigate();
-  }
+      // ── Payment received → PaymentHistory ─────────────────
+      if (data.type === 'payment_received') {
+        this.navigationRef.navigate('PaymentHistory');
+        console.log('🔔 Deep linked to PaymentHistory');
+        return;
+      }
+
+      // ── New product → ProductList ──────────────────────────
+      if (data.type === 'new_product') {
+        this.navigationRef.navigate('ProductList', {
+          title: 'New Products',
+        });
+        console.log('🔔 Deep linked to ProductList');
+        return;
+      }
+
+      // ── Generic screen deep link ───────────────────────────
+      if (data.screen) {
+        this.navigationRef.navigate(data.screen, data.params || {});
+        console.log('🔔 Deep linked to screen:', data.screen);
+        return;
+      }
+
+    } catch (error) {
+      console.warn('🔔 Deep link navigation failed:', error.message);
+    }
+  };
+
+  // ✅ Longer initial delay — ensures navigation stack is mounted
+  setTimeout(navigate, 800);
+}
 
   // ============================================================
   // UPDATE BADGE COUNT

@@ -940,7 +940,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
         isCustomerCancelled: false
       };
 
-      // Restore stock for products that track quantity
+      // Restore stock
       for (const item of order.items) {
         try {
           const product = await Product.findById(item.product);
@@ -963,6 +963,22 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     await order.save();
 
     console.log(`📦 Order status updated: ${order.orderNumber} -> ${status} by admin: ${req.user._id}`);
+
+    // ✅ Send push notification to customer (background — non-blocking)
+    setImmediate(async () => {
+      try {
+        const notificationService = require("../services/notificationService");
+        await notificationService.createOrderNotification(
+          order,
+          status,
+          req.user._id
+        );
+        console.log(`🔔 Order notification sent for ${order.orderNumber} -> ${status}`);
+      } catch (notifError) {
+        // Non-fatal — order update already succeeded
+        console.warn(`⚠️ Order notification failed (non-fatal):`, notifError.message);
+      }
+    });
 
     res.status(200).json({
       success: true,
@@ -1033,7 +1049,6 @@ exports.adminUpdatePaymentStatus = async (req, res) => {
       });
     }
 
-    // Cannot update payment for cancelled orders
     if (order.status === "cancelled") {
       return res.status(400).json({
         success: false,
@@ -1041,45 +1056,44 @@ exports.adminUpdatePaymentStatus = async (req, res) => {
       });
     }
 
-    const previousPaymentStatus = order.paymentStatus;
     const previousAmountPaid = order.payment.amountPaid || 0;
-    
-    // Calculate the new amount to be paid
+
     let newAmountPaid = amountPaid !== undefined ? amountPaid : order.totalAmount;
     if (paymentStatus === "paid") {
       newAmountPaid = order.totalAmount;
     }
-    
-    // Calculate the payment amount for this transaction
+
     const paymentAmount = newAmountPaid - previousAmountPaid;
 
     // Create a Payment record if there's a positive payment amount
     if (paymentAmount > 0) {
       const Payment = require("../models/Payment");
       const paymentNumber = await Payment.generatePaymentNumber();
-      
+
       const payment = new Payment({
-        order: order._id,
-        user: order.user,
+        order:       order._id,
+        user:        order.user,
         paymentNumber,
         orderNumber: order.orderNumber,
-        amount: paymentAmount,
-        method: method || "credit",
+        amount:      paymentAmount,
+        method:      method || "credit",
         paymentDate: new Date(),
-        notes: notes || `Payment updated via order management`,
-        recordedBy: req.user._id,
-        status: "completed"
+        notes:       notes || `Payment updated via order management`,
+        recordedBy:  req.user._id,
+        status:      "completed"
       });
 
       await payment.save();
-      console.log(`💰 Payment record created: ${paymentNumber} - ₹${paymentAmount} for order ${order.orderNumber}`);
+      console.log(
+        `💰 Payment record created: ${paymentNumber} - ₹${paymentAmount} for order ${order.orderNumber}`
+      );
     }
 
     // Update payment details
-    order.paymentStatus = paymentStatus;
-    order.payment.amountPaid = newAmountPaid;
-    order.payment.method = method || order.payment.method;
-    order.payment.notes = notes || order.payment.notes;
+    order.paymentStatus       = paymentStatus;
+    order.payment.amountPaid  = newAmountPaid;
+    order.payment.method      = method || order.payment.method;
+    order.payment.notes       = notes || order.payment.notes;
     order.payment.markedPaidBy = req.user._id;
 
     if (paymentStatus === "paid") {
@@ -1091,24 +1105,48 @@ exports.adminUpdatePaymentStatus = async (req, res) => {
     // Update user's pending and total credit amounts
     const user = await User.findById(order.user);
     if (user && paymentAmount > 0) {
-      user.pendingAmount = Math.max(0, user.pendingAmount - paymentAmount);
-      user.totalPaid = (user.totalPaid || 0) + paymentAmount;
+      user.pendingAmount  = Math.max(0, user.pendingAmount - paymentAmount);
+      user.totalPaid      = (user.totalPaid || 0) + paymentAmount;
       user.lastPaymentDate = new Date();
       await user.save();
     }
 
-    console.log(`💰 Payment updated: ${order.orderNumber} -> ${paymentStatus} by admin: ${req.user._id}`);
+    console.log(
+      `💰 Payment updated: ${order.orderNumber} -> ${paymentStatus} by admin: ${req.user._id}`
+    );
+
+    // ✅ Send payment notification (background — non-blocking)
+    if (paymentAmount > 0) {
+      setImmediate(async () => {
+        try {
+          const notificationService = require("../services/notificationService");
+          await notificationService.createPaymentNotification(
+            order,
+            paymentAmount,
+            req.user._id
+          );
+          console.log(
+            `🔔 Payment notification sent for order ${order.orderNumber}`
+          );
+        } catch (notifError) {
+          console.warn(
+            `⚠️ Payment notification failed (non-fatal):`,
+            notifError.message
+          );
+        }
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: `Payment status updated to "${paymentStatus}"`,
       data: {
         order: {
-          _id: order._id,
-          orderNumber: order.orderNumber,
-          paymentStatus: order.paymentStatus,
-          payment: order.payment,
-          totalAmount: order.totalAmount,
+          _id:               order._id,
+          orderNumber:       order.orderNumber,
+          paymentStatus:     order.paymentStatus,
+          payment:           order.payment,
+          totalAmount:       order.totalAmount,
           outstandingAmount: order.outstandingAmount
         }
       }
@@ -1678,8 +1716,31 @@ exports.adminSetExpectedDates = async (req, res) => {
 
     await order.save();
 
-    console.log(`📅 Expected dates set for order ${order.orderNumber}: Delivery by ${deliveryDate.toDateString()}`);
+    console.log(
+      `📅 Expected dates set for order ${order.orderNumber}: Delivery by ${deliveryDate.toDateString()}`
+    );
 
+       // ✅ Send delivery scheduled notification (background — non-blocking)
+    setImmediate(async () => {
+      try {
+        const notificationService = require("../services/notificationService");
+        await notificationService.createDeliveryNotification(
+          order,
+          "scheduled",
+          req.user._id
+        );
+        console.log(
+          `🔔 Delivery scheduled notification sent for ${order.orderNumber}`
+        );
+      } catch (notifError) {
+        console.warn(
+          `⚠️ Delivery scheduled notification failed (non-fatal):`,
+          notifError.message
+        );
+      }
+    });
+
+    // ✅ THIS WAS MISSING
     res.status(200).json({
       success: true,
       message: "Expected delivery dates updated",
@@ -1731,15 +1792,14 @@ exports.adminMarkDelayed = async (req, res) => {
     }
 
     order.isDelayed = isDelayed !== undefined ? isDelayed : true;
-    
+
     if (delayReason) {
       order.delayReason = delayReason;
     }
 
     if (newExpectedDeliveryDate) {
       order.expectedDeliveryDate = new Date(newExpectedDeliveryDate);
-      
-      // Update delivered expected date in timeline
+
       if (order.expectedTimeline) {
         order.expectedTimeline.delivered = {
           ...order.expectedTimeline.delivered,
@@ -1752,16 +1812,41 @@ exports.adminMarkDelayed = async (req, res) => {
     order.statusHistory.push({
       status: order.status,
       timestamp: new Date(),
-      note: `Order marked as ${isDelayed ? 'delayed' : 'on-time'}. ${delayReason || ''}`
+      note: `Order marked as ${order.isDelayed ? "delayed" : "on-time"}. ${delayReason || ""}`
     });
 
     await order.save();
 
-    console.log(`⚠️ Order ${order.orderNumber} marked as ${isDelayed ? 'delayed' : 'on-time'}`);
+    console.log(
+      `⚠️ Order ${order.orderNumber} marked as ${order.isDelayed ? "delayed" : "on-time"}`
+    );
 
+    // ✅ Send delay notification only when marking as delayed (not when un-marking)
+    if (order.isDelayed) {
+      setImmediate(async () => {
+        try {
+          const notificationService = require("../services/notificationService");
+          await notificationService.createDeliveryNotification(
+            order,
+            "delayed",
+            req.user._id
+          );
+          console.log(
+            `🔔 Delay notification sent for order ${order.orderNumber}`
+          );
+        } catch (notifError) {
+          console.warn(
+            `⚠️ Delay notification failed (non-fatal):`,
+            notifError.message
+          );
+        }
+      });
+    }
+
+    // ✅ THIS WAS MISSING — response was never sent
     res.status(200).json({
       success: true,
-      message: `Order marked as ${isDelayed ? 'delayed' : 'on-time'}`,
+      message: `Order marked as ${order.isDelayed ? "delayed" : "on-time"}`,
       data: {
         order: {
           _id: order._id,

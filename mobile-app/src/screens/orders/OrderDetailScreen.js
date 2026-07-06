@@ -33,17 +33,31 @@ const OrderDetailScreen = ({ navigation, route }) => {
   }, [orderId]);
 
   const loadOrder = async () => {
-    try {
-      const response = await ordersAPI.getOrder(orderId);
-      setOrder(response.data?.order);
-    } catch (error) {
-      console.error('Load order error:', error);
-      Alert.alert('Error', 'Failed to load order details');
-      navigation.goBack();
-    } finally {
-      setIsLoading(false);
+  try {
+    setIsLoading(true);
+    let response;
+
+    // ✅ MongoDB _id is 24 hex characters
+    // orderNumber looks like TIJ-20260518-00005
+    const isMongoId = /^[a-f\d]{24}$/i.test(orderId);
+
+    if (isMongoId) {
+      // From push notification tap — has MongoDB _id
+      response = await ordersAPI.getOrder(orderId);
+    } else {
+      // From notification list — has orderNumber string
+      response = await ordersAPI.getOrderByNumber(orderId);
     }
-  };
+
+    setOrder(response.data?.order);
+  } catch (error) {
+    console.error('Load order error:', error);
+    Alert.alert('Error', 'Failed to load order details');
+    navigation.goBack();
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // ✅ Confirm cancel
   const handleConfirmCancel = async () => {

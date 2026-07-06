@@ -148,34 +148,41 @@ class NotificationService {
 
     // ── Push Notification ──────────────────────────────────
     // ✅ FIXED: was user.fcmToken — now user.pushToken
-    if (channels.push && user.pushToken) {
-      try {
-        const pushResult = await pushService.sendToDevice({
-          token: user.pushToken,
-          title: notification.title,
-          body: notification.shortMessage || notification.message.substring(0, 200),
-          data: {
-            notificationId: notification._id?.toString(),
-            type: notification.type,
-            actionUrl: notification.actionUrl
-          },
-          imageUrl: notification.imageUrl
-        });
-        results.push.sent = pushResult.success;
-        results.push.sentAt = new Date();
-        if (pushResult.success && !pushResult.devMode) {
-          results.push.delivered = true;
-          results.push.deliveredAt = new Date();
-        } else if (!pushResult.success) {
-          results.push.failed = true;
-          results.push.failedReason = pushResult.message;
-        }
-      } catch (error) {
-        results.push.failed = true;
-        results.push.failedReason = error.message;
-      }
+    // ── Push Notification ──────────────────────────────────────
+if (channels.push && user.pushToken) {
+  try {
+    const pushResult = await pushService.sendToDevice({
+      token: user.pushToken,
+      title: notification.title,
+      body: notification.shortMessage || notification.message.substring(0, 200),
+      data: {
+        notificationId: notification._id?.toString(),
+        type: notification.type,
+        // ✅ Extract orderId from actionUrl for deep linking
+        orderId: notification.relatedOrder?.toString() || null,
+        screen: notification.type === "order_update"
+          ? "OrderDetail"
+          : notification.type === "payment_reminder"
+          ? "CreditSummary"
+          : notification.type === "payment_received"
+          ? "PaymentHistory"
+          : null,
+      },
+    });
+    results.push.sent = pushResult.success;
+    results.push.sentAt = new Date();
+    if (pushResult.success && !pushResult.devMode) {
+      results.push.delivered = true;
+      results.push.deliveredAt = new Date();
+    } else if (!pushResult.success) {
+      results.push.failed = true;
+      results.push.failedReason = pushResult.message;
     }
-
+  } catch (error) {
+    results.push.failed = true;
+    results.push.failedReason = error.message;
+  }
+}
     return results;
   }
 
@@ -320,37 +327,212 @@ class NotificationService {
    * Create order notification
    */
   async createOrderNotification(order, status, adminId) {
-    const statusMessages = {
-      confirmed: "Your order {{orderNumber}} has been confirmed! We're preparing it now.",
-      packed: "Great news! Your order {{orderNumber}} is packed and ready for shipping.",
-      shipped: "Your order {{orderNumber}} has been shipped! Track your delivery.",
-      on_the_way: "Your order {{orderNumber}} is out for delivery. It will arrive soon!",
-      delivered: "Your order {{orderNumber}} has been delivered. Thank you for shopping with us!",
-      cancelled: "Your order {{orderNumber}} has been cancelled. Contact us for any queries."
-    };
+  const statusMessages = {
+    confirmed:        "Your order #{{orderNumber}} has been confirmed! We're preparing it now.",
+    packed:           "Great news! Your order #{{orderNumber}} is packed and ready for shipping.",
+    shipped:          "Your order #{{orderNumber}} has been shipped! It's on the way.",
+    on_the_way:       "Your order #{{orderNumber}} is out for delivery. It will arrive soon!",
+    out_for_delivery: "Your order #{{orderNumber}} is out for delivery. It will arrive soon!", // ✅ ADD
+    delivered:        "Your order #{{orderNumber}} has been delivered. Thank you for shopping with us!",
+    cancelled:        "Your order #{{orderNumber}} has been cancelled. Contact us for any queries."
+  };
 
-    const message = this.renderTemplate(
-      statusMessages[status] || "Order {{orderNumber}} status updated.",
-      { orderNumber: order.orderNumber }
+  const statusTitles = {
+    confirmed:        "Order Confirmed ✅",
+    packed:           "Order Packed 📦",
+    shipped:          "Order Shipped 🚚",
+    on_the_way:       "Out for Delivery 🛵",
+    out_for_delivery: "Out for Delivery 🛵", // ✅ ADD
+    delivered:        "Order Delivered 🎉",
+    cancelled:        "Order Cancelled ❌"
+  };
+
+  if (!statusMessages[status]) {
+    console.log(`🔔 No notification template for status: ${status}`);
+    return null;
+  }
+
+  const message = this.renderTemplate(
+    statusMessages[status],
+    { orderNumber: order.orderNumber }
+  );
+
+  const title = statusTitles[status] || `Order ${status}`;
+
+  const notification = new Notification({
+    title,
+    message,
+    shortMessage: message.substring(0, 160),
+    type: "order_update",
+    channels: { push: true, inApp: true },
+    targetType: "selected",
+    recipients: [{ user: order.user, channels: {} }],
+    relatedOrder: order._id,
+    actionUrl: `order:${order._id}`,
+    createdBy: adminId,
+    status: "draft"
+  });
+
+  await notification.save();
+  await this.processNotification(notification._id);
+  return notification;
+}
+
+// Add these two functions after createOrderNotification
+
+/**
+ * Send payment received notification to customer
+ * Called from adminUpdatePaymentStatus and adminRecordPayment
+ */
+async createPaymentNotification(order, amountPaid, adminId) {
+  try {
+    // Get the customer
+    const user = await User.findById(order.user).select(
+      "name phone pushToken"
     );
 
+    if (!user) {
+      console.warn(`⚠️ Payment notification: user not found for order ${order.orderNumber}`);
+      return null;
+    }
+
+    const formattedAmount = new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(amountPaid);
+
+    const title = "Payment Received ✓";
+    const message = `We've received your payment of ${formattedAmount} for order #${order.orderNumber}. Thank you!`;
+
     const notification = new Notification({
-      title: `Order ${status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ")}`,
+      title,
       message,
       shortMessage: message.substring(0, 160),
-      type: "order_update",
-      channels: { sms: true, push: true, inApp: true },
+      type: "payment_received",
+      priority: "normal",
+      channels: {
+        push:  true,
+        inApp: true,
+        sms:   false,
+        email: false,
+      },
       targetType: "selected",
-      recipients: [{ user: order.user, channels: {} }],
-      relatedOrder: order._id,
+      recipients: [{ user: user._id, channels: {} }],
+      actionUrl: `screen:PaymentHistory`,
       createdBy: adminId,
-      status: "draft"
+      status: "draft",
     });
 
     await notification.save();
+
+    // Process immediately
     await this.processNotification(notification._id);
+
+    console.log(
+      `💰 Payment notification sent to ${user.name} for order ${order.orderNumber} — ${formattedAmount}`
+    );
+
     return notification;
+  } catch (error) {
+    console.error("createPaymentNotification error:", error);
+    throw error;
   }
+}
+
+/**
+ * Send delivery schedule or delay notification to customer
+ * type: "scheduled" | "delayed"
+ * Called from adminSetExpectedDates and adminMarkDelayed
+ */
+async createDeliveryNotification(order, type, adminId) {
+  try {
+    // Get the customer
+    const user = await User.findById(order.user).select(
+      "name phone pushToken"
+    );
+
+    if (!user) {
+      console.warn(
+        `⚠️ Delivery notification: user not found for order ${order.orderNumber}`
+      );
+      return null;
+    }
+
+    // Format expected delivery date
+    const deliveryDate = order.expectedDeliveryDate
+      ? new Date(order.expectedDeliveryDate).toLocaleDateString("en-IN", {
+          weekday: "short",
+          day:     "numeric",
+          month:   "short",
+          year:    "numeric",
+        })
+      : null;
+
+    let title;
+    let message;
+
+    if (type === "scheduled") {
+      title   = "Delivery Scheduled 📦";
+      message = deliveryDate
+        ? `Your order #${order.orderNumber} is expected to be delivered by ${deliveryDate}.`
+        : `Your order #${order.orderNumber} has been scheduled for delivery.`;
+
+    } else if (type === "delayed") {
+      title = "Delivery Delayed ⚠️";
+
+      if (order.delayReason && deliveryDate) {
+        message = `Your order #${order.orderNumber} has been delayed. ${order.delayReason}. New expected delivery: ${deliveryDate}.`;
+      } else if (order.delayReason) {
+        message = `Your order #${order.orderNumber} has been delayed. ${order.delayReason}.`;
+      } else if (deliveryDate) {
+        message = `Your order #${order.orderNumber} delivery has been delayed to ${deliveryDate}.`;
+      } else {
+        message = `Your order #${order.orderNumber} delivery has been delayed. We apologize for the inconvenience.`;
+      }
+
+    } else {
+      console.warn(`⚠️ createDeliveryNotification: unknown type "${type}"`);
+      return null;
+    }
+
+    const notification = new Notification({
+      title,
+      message,
+      shortMessage: message.substring(0, 160),
+      type:     "order_update",
+      priority: type === "delayed" ? "high" : "normal",
+      channels: {
+        push:  true,
+        inApp: true,
+        sms:   false,
+        email: false,
+      },
+      targetType: "selected",
+      recipients: [{ user: user._id, channels: {} }],
+      // Deep link → OrderDetail screen with order _id
+      actionUrl: `order:${order._id}`,
+      createdBy: adminId,
+      status:    "draft",
+    });
+
+    await notification.save();
+
+    // Process immediately
+    await this.processNotification(notification._id);
+
+    console.log(
+      `📅 Delivery ${type} notification sent to ${user.name} for order ${order.orderNumber}`
+    );
+
+    return notification;
+  } catch (error) {
+    console.error("createDeliveryNotification error:", error);
+    throw error;
+  }
+}
+
+
 
   /**
    * Create payment reminder

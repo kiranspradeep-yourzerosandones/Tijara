@@ -72,24 +72,25 @@
 
     // ── Form state ─────────────────────────────────────────
     const [form, setForm] = useState({
-      title:      "",
-      message:    "",
-      type:       "custom",
-      priority:   "normal",
-      targetType: "all",      // all | selected | segment
-      channels: {
-        push:  true,
-        inApp: true,
-        sms:   false,
-        email: false,
-      },
-      // Segment filters
-      segmentFilters: {
-        hasPendingPayment: false,
-        isCreditBlocked:   false,
-        hasPushToken:      false,
-      },
-    });
+  title:      "",
+  message:    "",
+  type:       "custom",
+  priority:   "normal",
+  targetType: "all",
+  channels: {
+    push:  true,
+    inApp: true,
+    sms:   false,
+    email: false,
+  },
+  deepLinkScreen:  "",   // ✅ NEW
+  deepLinkOrderId: "",   // ✅ NEW
+  segmentFilters: {
+    hasPendingPayment: false,
+    isCreditBlocked:   false,
+    hasPushToken:      false,
+  },
+});
 
     // ── UI state ───────────────────────────────────────────
     const [customers, setCustomers]       = useState([]);
@@ -192,17 +193,21 @@
 
       try {
         const body = {
-          title:    form.title.trim(),
-          message:  form.message.trim(),
-          type:     form.type,
-          priority: form.priority,
-          channels: form.channels,
-          targetType: form.targetType,
-          ...(form.targetType === "selected" && { userIds: selectedIds }),
-          ...(form.targetType === "segment"  && {
-            segmentFilters: form.segmentFilters,
-          }),
-        };
+  title:    form.title.trim(),
+  message:  form.message.trim(),
+  type:     form.type,
+  priority: form.priority,
+  channels: form.channels,
+  targetType: form.targetType,
+  // ✅ Deep link
+  ...(form.deepLinkScreen && {
+    actionUrl: form.deepLinkScreen === "OrderDetail" && form.deepLinkOrderId
+      ? `order:${form.deepLinkOrderId}`
+      : `screen:${form.deepLinkScreen}`,
+  }),
+  ...(form.targetType === "selected" && { userIds: selectedIds }),
+  ...(form.targetType === "segment"  && { segmentFilters: form.segmentFilters }),
+};
 
         const res = await fetch(`${API_URL}/admin/notifications`, {
           method: "POST",
@@ -395,6 +400,39 @@
                 <p className="text-xs text-gray-400 ml-auto">{charCount}/500</p>
               </div>
             </div>
+
+            {/* ── Deep Link Target ─────────────────────────────────── */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+    Opens (when tapped)
+  </label>
+  <select
+    value={form.deepLinkScreen}
+    onChange={(e) => setField("deepLinkScreen", e.target.value)}
+    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900
+               bg-white focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
+  >
+    <option value="">Nothing (just opens app)</option>
+    <option value="OrderDetail">Specific Order</option>
+    <option value="CreditSummary">Credit Summary / Pending Payments</option>
+    <option value="PaymentHistory">Payment History</option>
+    <option value="ProductList">Product List</option>
+    <option value="Notifications">Notifications</option>
+  </select>
+
+  {/* If OrderDetail selected, show order ID input */}
+  {form.deepLinkScreen === "OrderDetail" && (
+    <input
+      type="text"
+      value={form.deepLinkOrderId || ""}
+      onChange={(e) => setField("deepLinkOrderId", e.target.value)}
+      placeholder="Enter Order ID (MongoDB _id)"
+      className="mt-2 w-full px-4 py-3 border border-gray-200 rounded-xl
+                 text-gray-900 text-sm focus:ring-2 focus:ring-amber-400/30
+                 focus:border-amber-400 placeholder:text-gray-400"
+    />
+  )}
+</div>
 
             {/* Type + Priority */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
