@@ -14,6 +14,7 @@ import { CategoriesScreen } from '../screens/categories';
 import { CartScreen } from '../screens/cart';
 import { PlaceOrderScreen, OrderListScreen, OrderDetailScreen } from '../screens/orders';
 import { ProfileScreen, EditProfileScreen } from '../screens/profile';
+import NotificationPreferencesScreen from '../screens/profile/NotificationPreferencesScreen';
 import { LocationListScreen, AddLocationScreen, EditLocationScreen } from '../screens/locations';
 import { NotificationScreen } from '../screens/notifications';
 import { CreditSummaryScreen, PaymentHistoryScreen } from '../screens/payments';
@@ -29,6 +30,7 @@ const HomeStack = () => (
     <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
     <Stack.Screen name="Categories" component={CategoriesScreen} />
     <Stack.Screen name="Notifications" component={NotificationScreen} />
+    <Stack.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
   </Stack.Navigator>
 );
 

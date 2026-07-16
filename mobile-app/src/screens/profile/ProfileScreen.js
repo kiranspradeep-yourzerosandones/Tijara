@@ -19,7 +19,7 @@ import { useAuthStore } from '../../store';
 import { paymentsAPI } from '../../api';
 import { formatCurrency, getInitials } from '../../utils/helpers';
 
-// ─── Reuse ConfirmDialog from CartScreen ──────────────────────
+// ─── Reuse ConfirmDialog ──────────────────────────────────────
 const ConfirmDialog = ({
   visible,
   title,
@@ -60,11 +60,7 @@ const ConfirmDialog = ({
                 { backgroundColor: (iconColor || confirmColor) + '20' },
               ]}
             >
-              <Ionicons
-                name={icon}
-                size={28}
-                color={iconColor || confirmColor}
-              />
+              <Ionicons name={icon} size={28} color={iconColor || confirmColor} />
             </View>
           )}
           <Text style={dialogStyles.title}>{title}</Text>
@@ -206,12 +202,11 @@ const ProfileScreen = ({ navigation }) => {
     await logout();
   };
 
-  const availableCredit =
-    creditData?.availableCredit ?? user?.availableCredit ?? 0;
-  const creditLimit = creditData?.creditLimit ?? user?.creditLimit ?? 0;
-  const pendingAmount = creditData?.pendingAmount ?? user?.pendingAmount ?? 0;
-  const creditUtilization =
-    creditData?.creditUtilization ?? user?.creditUtilization ?? 0;
+  const availableCredit   = creditData?.availableCredit   ?? user?.availableCredit   ?? 0;
+  const creditLimit       = creditData?.creditLimit       ?? user?.creditLimit       ?? 0;
+  const pendingAmount     = creditData?.pendingAmount     ?? user?.pendingAmount     ?? 0;
+  const creditUtilization = creditData?.creditUtilization ?? user?.creditUtilization ?? 0;
+  const creditBalance     = creditData?.creditBalance     ?? user?.creditBalance     ?? 0; // ✅ NEW
 
   const menuItems = [
     {
@@ -235,9 +230,14 @@ const ProfileScreen = ({ navigation }) => {
     {
       icon: 'card-outline',
       title: 'Credit & Payments',
-      subtitle: `Available: ${formatCurrency(availableCredit)}`,
+      // ✅ UPDATED: Show credit balance in subtitle if available
+      subtitle: creditBalance > 0
+        ? `Credit: ${formatCurrency(creditBalance)}`
+        : `Available: ${formatCurrency(availableCredit)}`,
       onPress: () => navigation.navigate('CreditSummary'),
       highlight: pendingAmount > 0,
+      // ✅ NEW: Show green highlight if has credit balance
+      hasCredit: creditBalance > 0,
     },
     {
       icon: 'time-outline',
@@ -248,8 +248,8 @@ const ProfileScreen = ({ navigation }) => {
     {
       icon: 'notifications-outline',
       title: 'Notifications',
-      subtitle: 'Manage notifications',
-      onPress: () => navigation.navigate('Notifications'),
+      subtitle: 'Manage notification settings',
+      onPress: () => navigation.navigate('NotificationPreferences'),
     },
     {
       icon: 'help-circle-outline',
@@ -265,7 +265,6 @@ const ProfileScreen = ({ navigation }) => {
     },
   ];
 
-  // ✅ Skeleton while first load
   if (isLoading && !creditData) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
@@ -332,11 +331,7 @@ const ProfileScreen = ({ navigation }) => {
               </View>
               <View style={styles.viewDetailsButton}>
                 <Text style={styles.viewDetailsText}>Details</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={COLORS.primary}
-                />
+                <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
               </View>
             </View>
 
@@ -347,9 +342,7 @@ const ProfileScreen = ({ navigation }) => {
                   {
                     width: `${Math.min(creditUtilization, 100)}%`,
                     backgroundColor:
-                      creditUtilization > 80
-                        ? COLORS.warning
-                        : COLORS.primary,
+                      creditUtilization > 80 ? COLORS.warning : COLORS.primary,
                   },
                 ]}
               />
@@ -358,12 +351,10 @@ const ProfileScreen = ({ navigation }) => {
             <View style={styles.creditInfo}>
               <View style={styles.creditInfoItem}>
                 <Text style={styles.creditInfoLabel}>Pending</Text>
-                <Text
-                  style={[
-                    styles.creditInfoValue,
-                    pendingAmount > 0 && { color: COLORS.warning },
-                  ]}
-                >
+                <Text style={[
+                  styles.creditInfoValue,
+                  pendingAmount > 0 && { color: COLORS.warning },
+                ]}>
                   {formatCurrency(pendingAmount)}
                 </Text>
               </View>
@@ -380,6 +371,19 @@ const ProfileScreen = ({ navigation }) => {
                 </Text>
               </View>
             </View>
+
+            {/* ✅ NEW: Credit Balance row in credit card */}
+            {creditBalance > 0 && (
+              <View style={styles.creditBalanceRow}>
+                <View style={styles.creditBalanceLeft}>
+                  <Ionicons name="wallet-outline" size={14} color={COLORS.success} />
+                  <Text style={styles.creditBalanceLabel}>Credit Balance</Text>
+                </View>
+                <Text style={styles.creditBalanceValue}>
+                  {formatCurrency(creditBalance)}
+                </Text>
+              </View>
+            )}
 
             {creditData?.isCreditBlocked && (
               <View style={styles.creditWarning}>
@@ -404,37 +408,37 @@ const ProfileScreen = ({ navigation }) => {
               onPress={item.onPress}
             >
               <View style={styles.menuItemLeft}>
-                <View
-                  style={[
-                    styles.menuIcon,
-                    item.highlight && styles.menuIconHighlight,
-                  ]}
-                >
+                <View style={[
+                  styles.menuIcon,
+                  item.highlight && styles.menuIconHighlight,
+                  // ✅ NEW: Green icon bg when has credit balance
+                  item.hasCredit && styles.menuIconCredit,
+                ]}>
                   <Ionicons
                     name={item.icon}
                     size={22}
                     color={
-                      item.highlight ? COLORS.primary : COLORS.textPrimary
+                      item.hasCredit
+                        ? COLORS.success
+                        : item.highlight
+                        ? COLORS.error
+                        : COLORS.textPrimary
                     }
                   />
                 </View>
                 <View style={styles.menuItemContent}>
                   <Text style={styles.menuItemTitle}>{item.title}</Text>
-                  <Text
-                    style={[
-                      styles.menuItemSubtitle,
-                      item.highlight && styles.menuItemSubtitleHighlight,
-                    ]}
-                  >
+                  <Text style={[
+                    styles.menuItemSubtitle,
+                    item.highlight && styles.menuItemSubtitleHighlight,
+                    // ✅ NEW: Green subtitle when has credit
+                    item.hasCredit && styles.menuItemSubtitleCredit,
+                  ]}>
                     {item.subtitle}
                   </Text>
                 </View>
               </View>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={COLORS.gray}
-              />
+              <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
             </TouchableOpacity>
           ))}
         </View>
@@ -451,7 +455,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* ✅ Logout Confirmation */}
+      {/* Logout Confirmation */}
       <ConfirmDialog
         visible={showLogoutDialog}
         title="Logout?"
@@ -530,7 +534,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: SPACING.md,
   },
-  creditLabel: { ...FONTS.caption, color: COLORS.gray, marginBottom: SPACING.xs },
+  creditLabel: {
+    ...FONTS.caption,
+    color: COLORS.gray,
+    marginBottom: SPACING.xs,
+  },
   creditAmount: { ...FONTS.priceLarge, color: COLORS.white },
   viewDetailsButton: {
     flexDirection: 'row',
@@ -540,7 +548,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
     borderRadius: SPACING.sm,
   },
-  viewDetailsText: { ...FONTS.caption, color: COLORS.primary, marginRight: 2 },
+  viewDetailsText: {
+    ...FONTS.caption,
+    color: COLORS.primary,
+    marginRight: 2,
+  },
   creditProgress: {
     height: 6,
     backgroundColor: COLORS.borderDark,
@@ -553,14 +565,48 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderRadius: 3,
   },
-  creditInfo: { flexDirection: 'row', justifyContent: 'space-between' },
+  creditInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   creditInfoItem: { alignItems: 'center', flex: 1 },
-  creditInfoLabel: { ...FONTS.caption, color: COLORS.gray, marginBottom: 2 },
+  creditInfoLabel: {
+    ...FONTS.caption,
+    color: COLORS.gray,
+    marginBottom: 2,
+  },
   creditInfoValue: {
     ...FONTS.bodySmall,
     color: COLORS.white,
     fontWeight: '600',
   },
+
+  // ✅ NEW: Credit balance row styles
+  creditBalanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.white + '15',
+  },
+  creditBalanceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  creditBalanceLabel: {
+    ...FONTS.caption,
+    color: COLORS.success,
+    fontWeight: '600',
+  },
+  creditBalanceValue: {
+    ...FONTS.bodySmall,
+    color: COLORS.success,
+    fontWeight: '700',
+  },
+
   creditWarning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -571,7 +617,11 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     gap: SPACING.xs,
   },
-  creditWarningText: { ...FONTS.caption, color: COLORS.error, flex: 1 },
+  creditWarningText: {
+    ...FONTS.caption,
+    color: COLORS.error,
+    flex: 1,
+  },
   menuContainer: {
     backgroundColor: COLORS.white,
     marginHorizontal: SPACING.screenPadding,
@@ -602,15 +652,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
-  menuIconHighlight: { backgroundColor: COLORS.primaryLight + '30' },
+  menuIconHighlight: {
+    backgroundColor: COLORS.primaryLight + '30',
+  },
+  // ✅ NEW: Green icon for credit balance
+  menuIconCredit: {
+    backgroundColor: COLORS.success + '20',
+  },
   menuItemContent: { flex: 1 },
   menuItemTitle: {
     ...FONTS.body,
     color: COLORS.textPrimary,
     fontWeight: '500',
   },
-  menuItemSubtitle: { ...FONTS.caption, color: COLORS.gray, marginTop: 2 },
-  menuItemSubtitleHighlight: { color: COLORS.primary, fontWeight: '500' },
+  menuItemSubtitle: {
+    ...FONTS.caption,
+    color: COLORS.gray,
+    marginTop: 2,
+  },
+  menuItemSubtitleHighlight: {
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  // ✅ NEW: Green subtitle for credit balance
+  menuItemSubtitleCredit: {
+    color: COLORS.success,
+    fontWeight: '600',
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -622,8 +690,14 @@ const styles = StyleSheet.create({
     borderRadius: SPACING.cardRadius,
     gap: SPACING.sm,
   },
-  logoutText: { ...FONTS.body, color: COLORS.error, fontWeight: '600' },
-  bottomSpacing: { height: SPACING.tabBarHeight + SPACING.xl },
+  logoutText: {
+    ...FONTS.body,
+    color: COLORS.error,
+    fontWeight: '600',
+  },
+  bottomSpacing: {
+    height: SPACING.tabBarHeight + SPACING.xl,
+  },
 });
 
 export default ProfileScreen;

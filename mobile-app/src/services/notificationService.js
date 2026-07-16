@@ -9,22 +9,38 @@ import Constants from 'expo-constants';
 // CONFIGURE NOTIFICATION BEHAVIOR
 // ============================================================
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    // ── Determine priority based on notification type ──────
+    const data = notification.request.content.data;
+    const type = data?.type || '';
+
+    // High priority types — order updates, payment received
+    const isHighPriority =
+      type === 'order_update'     ||
+      type === 'payment_received' ||
+      type === 'payment_reminder';
+
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge:  true,
+      // ✅ iOS priority — ensures banner stays visible longer
+      priority: isHighPriority
+        ? Notifications.IosNotificationPriority?.HIGH    ?? 'high'
+        : Notifications.IosNotificationPriority?.DEFAULT ?? 'default',
+    };
+  },
 });
 
 class NotificationService {
   constructor() {
-    this.expoPushToken = null;
+    this.expoPushToken        = null;
     this.notificationListener = null;
-    this.responseListener = null;
-    this.navigationRef = null;
+    this.responseListener     = null;
+    this.navigationRef        = null;
   }
 
-  // Set navigation ref for deep linking
+  // ── Set navigation ref for deep linking ───────────────────
   setNavigationRef(ref) {
     this.navigationRef = ref;
   }
@@ -50,7 +66,6 @@ class NotificationService {
 
       let finalStatus = existingStatus;
 
-      // Request if not granted
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
@@ -63,54 +78,59 @@ class NotificationService {
 
       // ── Android notification channels ───────────────────────
       if (Platform.OS === 'android') {
-        // Default channel
+        // ── Default — HIGH so banners actually appear ──────────
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'General',
-          importance: Notifications.AndroidImportance.DEFAULT,
+          name:             'General',
+          importance:       Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#F5C518',
-          sound: 'default',
-          enableVibrate: true,
-          showBadge: true,
+          lightColor:       '#F5C518',
+          sound:            'default',
+          enableVibrate:    true,
+          showBadge:        true,
+          lockscreenVisibility:
+            Notifications.AndroidNotificationVisibility?.PUBLIC,
         });
 
-        // Orders channel
+        // ── Orders — MAX so heads-up banner stays visible ──────
         await Notifications.setNotificationChannelAsync('orders', {
-          name: 'Order Updates',
-          description: 'Notifications about your orders',
-          importance: Notifications.AndroidImportance.HIGH,
+          name:             'Order Updates',
+          description:      'Notifications about your orders',
+          importance:       Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#F5C518',
-          sound: 'default',
-          enableVibrate: true,
-          showBadge: true,
+          lightColor:       '#F5C518',
+          sound:            'default',
+          enableVibrate:    true,
+          showBadge:        true,
+          lockscreenVisibility:
+            Notifications.AndroidNotificationVisibility?.PUBLIC,
         });
 
-        // Payments channel
+        // ── Payments — HIGH ────────────────────────────────────
         await Notifications.setNotificationChannelAsync('payments', {
-          name: 'Payment Reminders',
-          description: 'Payment due and reminder notifications',
-          importance: Notifications.AndroidImportance.DEFAULT,
-          sound: 'default',
+          name:          'Payment Reminders',
+          description:   'Payment due and reminder notifications',
+          importance:    Notifications.AndroidImportance.HIGH,
+          sound:         'default',
           enableVibrate: true,
-          showBadge: true,
+          showBadge:     true,
+          lockscreenVisibility:
+            Notifications.AndroidNotificationVisibility?.PUBLIC,
         });
 
-        // Promotions channel
+        // ── Promotions — DEFAULT (no heads-up needed) ──────────
         await Notifications.setNotificationChannelAsync('promotions', {
-          name: 'Offers & Promotions',
-          description: 'Special offers and promotions',
-          importance: Notifications.AndroidImportance.LOW,
-          sound: null,
+          name:          'Offers & Promotions',
+          description:   'Special offers and promotions',
+          importance:    Notifications.AndroidImportance.DEFAULT,
+          sound:         'default',
           enableVibrate: false,
-          showBadge: false,
+          showBadge:     true,
         });
 
         console.log('✅ Android notification channels created');
       }
 
       // ── Get Expo push token ─────────────────────────────────
-      // Get projectId safely
       const projectId =
         Constants.expoConfig?.extra?.eas?.projectId ||
         Constants.easConfig?.projectId ||
@@ -122,24 +142,19 @@ class NotificationService {
           'Push token will NOT work in production builds. ' +
           'Run: npx eas init to link your project.'
         );
-        // In Expo Go, we can still get a token without projectId
-        // but it won't work in standalone builds
       }
 
       const tokenOptions = projectId ? { projectId } : {};
-      const tokenData = await Notifications.getExpoPushTokenAsync(tokenOptions);
+      const tokenData    = await Notifications.getExpoPushTokenAsync(tokenOptions);
 
       this.expoPushToken = tokenData.data;
 
       console.log('🔔 Expo Push Token obtained:', this.expoPushToken);
-      console.log(
-        '📋 Copy this token to test: https://expo.dev/notifications'
-      );
+      console.log('📋 Copy this token to test: https://expo.dev/notifications');
 
       return this.expoPushToken;
 
     } catch (error) {
-      // ── Graceful error handling ─────────────────────────────
       if (error.message?.includes('projectId')) {
         console.warn(
           '⚠️ Push token failed — projectId missing. ' +
@@ -164,13 +179,11 @@ class NotificationService {
         if (ENV.DEBUG) {
           console.log('🔔 Foreground notification received:');
           console.log('   Title:', notification.request.content.title);
-          console.log('   Body:', notification.request.content.body);
-          console.log('   Data:', notification.request.content.data);
+          console.log('   Body:',  notification.request.content.body);
+          console.log('   Data:',  notification.request.content.data);
         }
 
-        // Update badge count
         this.updateBadgeCount();
-
         onNotification?.(notification);
       });
 
@@ -193,65 +206,100 @@ class NotificationService {
   // HANDLE NOTIFICATION TAP — DEEP LINKING
   // ============================================================
   handleNotificationResponse(response) {
-  const data = response?.notification?.request?.content?.data;
+    const data = response?.notification?.request?.content?.data;
 
-  if (!data) return;
+    if (!data) return;
 
-  const navigate = () => {
-    if (!this.navigationRef?.isReady()) {
-      setTimeout(navigate, 500);
-      return;
-    }
-
-    try {
-      // ── Order notification → OrderDetail ──────────────────
-      // Push payload has orderId = MongoDB _id (24 hex chars)
-      if (data.orderId) {
-        this.navigationRef.navigate('OrderDetail', {
-          orderId: data.orderId,
-        });
-        console.log('🔔 Deep linked to OrderDetail:', data.orderId);
+    const navigate = () => {
+      if (!this.navigationRef?.isReady()) {
+        setTimeout(navigate, 500);
         return;
       }
 
-      // ── Payment reminder → CreditSummary ──────────────────
-      if (data.type === 'payment_reminder') {
-        this.navigationRef.navigate('CreditSummary');
-        console.log('🔔 Deep linked to CreditSummary');
-        return;
+      try {
+        // ── Order notification → OrderDetail ───────────────────
+        // Push payload sends orderId = MongoDB _id (24 hex chars)
+        if (data.orderId) {
+          this.navigationRef.navigate('OrderDetail', {
+            orderId: data.orderId,
+          });
+          console.log('🔔 Deep linked to OrderDetail:', data.orderId);
+          return;
+        }
+
+        // ── Product notification → ProductDetail ───────────────
+        // Push payload sends productId directly
+        if (data.productId) {
+          this.navigationRef.navigate('ProductDetail', {
+            productId: data.productId,
+          });
+          console.log('🔔 Deep linked to ProductDetail:', data.productId);
+          return;
+        }
+
+        // ── actionUrl-based deep links ─────────────────────────
+        if (data.actionUrl) {
+          // order:${orderId}
+          if (data.actionUrl.startsWith('order:')) {
+            const orderId = data.actionUrl.replace('order:', '');
+            this.navigationRef.navigate('OrderDetail', { orderId });
+            console.log('🔔 Deep linked to OrderDetail via actionUrl:', orderId);
+            return;
+          }
+
+          // product:${productId}
+          if (data.actionUrl.startsWith('product:')) {
+            const productId = data.actionUrl.replace('product:', '');
+            this.navigationRef.navigate('ProductDetail', { productId });
+            console.log('🔔 Deep linked to ProductDetail via actionUrl:', productId);
+            return;
+          }
+
+          // screen:${ScreenName}
+          if (data.actionUrl.startsWith('screen:')) {
+            const screen = data.actionUrl.replace('screen:', '');
+            this.navigationRef.navigate(screen);
+            console.log('🔔 Deep linked to screen via actionUrl:', screen);
+            return;
+          }
+        }
+
+        // ── Type-based fallback deep links ─────────────────────
+        if (data.type === 'payment_reminder') {
+          this.navigationRef.navigate('CreditSummary');
+          console.log('🔔 Deep linked to CreditSummary');
+          return;
+        }
+
+        if (data.type === 'payment_received') {
+          this.navigationRef.navigate('PaymentHistory');
+          console.log('🔔 Deep linked to PaymentHistory');
+          return;
+        }
+
+        if (data.type === 'new_product' || data.type === 'promotional') {
+          this.navigationRef.navigate('ProductList', {
+            title: data.type === 'new_product' ? 'New Products' : 'Offers',
+          });
+          console.log('🔔 Deep linked to ProductList');
+          return;
+        }
+
+        // ── Generic screen param ───────────────────────────────
+        if (data.screen) {
+          this.navigationRef.navigate(data.screen, data.params || {});
+          console.log('🔔 Deep linked to screen:', data.screen);
+          return;
+        }
+
+      } catch (error) {
+        console.warn('🔔 Deep link navigation failed:', error.message);
       }
+    };
 
-      // ── Payment received → PaymentHistory ─────────────────
-      if (data.type === 'payment_received') {
-        this.navigationRef.navigate('PaymentHistory');
-        console.log('🔔 Deep linked to PaymentHistory');
-        return;
-      }
-
-      // ── New product → ProductList ──────────────────────────
-      if (data.type === 'new_product') {
-        this.navigationRef.navigate('ProductList', {
-          title: 'New Products',
-        });
-        console.log('🔔 Deep linked to ProductList');
-        return;
-      }
-
-      // ── Generic screen deep link ───────────────────────────
-      if (data.screen) {
-        this.navigationRef.navigate(data.screen, data.params || {});
-        console.log('🔔 Deep linked to screen:', data.screen);
-        return;
-      }
-
-    } catch (error) {
-      console.warn('🔔 Deep link navigation failed:', error.message);
-    }
-  };
-
-  // ✅ Longer initial delay — ensures navigation stack is mounted
-  setTimeout(navigate, 800);
-}
+    // Longer initial delay — ensures navigation stack is mounted
+    setTimeout(navigate, 800);
+  }
 
   // ============================================================
   // UPDATE BADGE COUNT
@@ -282,9 +330,7 @@ class NotificationService {
   // ============================================================
   stopListening() {
     if (this.notificationListener) {
-      Notifications.removeNotificationSubscription(
-        this.notificationListener
-      );
+      Notifications.removeNotificationSubscription(this.notificationListener);
       this.notificationListener = null;
     }
 
@@ -336,13 +382,13 @@ class NotificationService {
 
     await this.scheduleLocalNotification({
       title: '🎉 Tijara',
-      body: 'Push notifications are working!',
-      data: { type: 'test' },
+      body:  'Push notifications are working!',
+      data:  { type: 'test' },
       seconds: 2,
     });
   }
 
-  // Get stored token
+  // ── Get stored token ───────────────────────────────────────
   getToken() {
     return this.expoPushToken;
   }

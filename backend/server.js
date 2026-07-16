@@ -7,6 +7,7 @@ const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 const mongoSanitize = require("./middleware/sanitize");
 const hpp = require("hpp");
+const mongoose = require("mongoose");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
@@ -16,67 +17,63 @@ const app = express();
 // ============================================================
 // SECURITY MIDDLEWARE
 // ============================================================
-
-// ✅ Security headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-
-// ✅ Compress responses
 app.use(compression());
-
-// ✅ Sanitize MongoDB queries (prevent injection)
 app.use(mongoSanitize());
-
-// ✅ Prevent HTTP parameter pollution
 app.use(hpp());
 
-// ✅ Global rate limiter
+// ============================================================
+// CORS — MUST BE BEFORE ROUTES AND RATE LIMITERS
+// ============================================================
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+    "X-Requested-With",
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200,
+}));
+
+// ── Handle preflight for ALL routes ──────────────────────────
+app.options(/.*/, cors());
+
+// ============================================================
+// RATE LIMITERS
+// ============================================================
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
-  message: {
-    success: false,
-    message: "Too many requests. Please try again later."
-  },
+  message: { success: false, message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use("/api", globalLimiter);
 
-// ✅ Strict rate limiter for auth routes
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 20,
-  message: {
-    success: false,
-    message: "Too many auth attempts. Please try again in 15 minutes."
-  },
+  message: { success: false, message: "Too many auth attempts. Please try again in 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// ✅ OTP rate limiter (very strict)
 const otpLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: 60 * 60 * 1000,
   max: 5,
-  message: {
-    success: false,
-    message: "Too many OTP requests. Please try again in 1 hour."
-  },
+  message: { success: false, message: "Too many OTP requests. Please try again in 1 hour." },
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// ============================================================
-// CORS
-// ============================================================
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? ["https://your-frontend.onrender.com"]
-    : "*",
-  credentials: true
-}));
 
 // ============================================================
 // BODY PARSING
@@ -92,34 +89,29 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // ============================================================
 // ROUTES
 // ============================================================
-
-// Auth routes with rate limiting
 app.use("/api/auth", authLimiter, require("./routes/authRoutes"));
-
-// OTP routes with strict limiting
 app.use("/api/auth/register/send-otp", otpLimiter);
 app.use("/api/auth/login/send-otp", otpLimiter);
 app.use("/api/auth/forgot-password/send-otp", otpLimiter);
 
-// Other routes
-app.use("/api/products", require("./routes/productRoutes"));
-app.use("/api/categories", require("./routes/categoryRoutes"));
-app.use("/api/locations", require("./routes/locationRoutes"));
-app.use("/api/cart", require("./routes/cartRoutes"));
-app.use("/api/orders", require("./routes/orderRoutes"));
-app.use("/api/payments", require("./routes/paymentRoutes"));
-app.use("/api/notifications", require("./routes/notificationRoutes"));
+app.use("/api/products",       require("./routes/productRoutes"));
+app.use("/api/categories",     require("./routes/categoryRoutes"));
+app.use("/api/locations",      require("./routes/locationRoutes"));
+app.use("/api/cart",           require("./routes/cartRoutes"));
+app.use("/api/orders",         require("./routes/orderRoutes"));
+app.use("/api/payments",       require("./routes/paymentRoutes"));
+app.use("/api/notifications",  require("./routes/notificationRoutes"));
 
 // Admin routes
-app.use("/api/admin", require("./routes/adminRoutes"));
-app.use("/api/admin/admins", require("./routes/adminManagementRoutes"));
-app.use("/api/admin/customers", require("./routes/adminCustomerRoutes"));
-app.use("/api/admin/orders", require("./routes/adminOrderRoutes"));
-app.use("/api/admin/payments", require("./routes/adminPaymentRoutes"));
-app.use("/api/admin/dashboard", require("./routes/adminDashboardRoutes"));
-app.use("/api/admin/carts", require("./routes/adminCartRoutes"));
-app.use("/api/admin/notifications", require("./routes/adminNotificationRoutes"));
-app.use("/api/admin/images", require("./routes/adminImageRoutes"));
+app.use("/api/admin",                    require("./routes/adminRoutes"));
+app.use("/api/admin/admins",             require("./routes/adminManagementRoutes"));
+app.use("/api/admin/customers",          require("./routes/adminCustomerRoutes"));
+app.use("/api/admin/orders",             require("./routes/adminOrderRoutes"));
+app.use("/api/admin/payments",           require("./routes/adminPaymentRoutes"));
+app.use("/api/admin/dashboard",          require("./routes/adminDashboardRoutes"));
+app.use("/api/admin/carts",              require("./routes/adminCartRoutes"));
+app.use("/api/admin/notifications",      require("./routes/adminNotificationRoutes"));
+app.use("/api/admin/images",             require("./routes/adminImageRoutes"));
 
 // ============================================================
 // HEALTH CHECK
@@ -129,7 +121,8 @@ app.get("/api/health", (req, res) => {
     success: true,
     message: "API Running",
     environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString()
+    mongoState: mongoose.connection.readyState, // 1 = connected
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -139,7 +132,7 @@ app.get("/api/health", (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route not found: ${req.method} ${req.originalUrl}`
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
 
@@ -149,45 +142,30 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("❌ Unhandled Error:", err);
 
-  // Mongoose validation error
   if (err.name === "ValidationError") {
-    const messages = Object.values(err.errors).map(e => e.message);
-    return res.status(400).json({
-      success: false,
-      message: messages.join(", ")
-    });
+    const messages = Object.values(err.errors).map((e) => e.message);
+    return res.status(400).json({ success: false, message: messages.join(", ") });
   }
-
-  // Mongoose duplicate key
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue)[0];
     return res.status(400).json({
       success: false,
-      message: `${field} already exists`
+      message: `${field} already exists`,
     });
   }
-
-  // JWT errors
   if (err.name === "JsonWebTokenError") {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid token"
-    });
+    return res.status(401).json({ success: false, message: "Invalid token" });
   }
-
   if (err.name === "TokenExpiredError") {
-    return res.status(401).json({
-      success: false,
-      message: "Token expired"
-    });
+    return res.status(401).json({ success: false, message: "Token expired" });
   }
 
-  // Default
   res.status(err.status || 500).json({
     success: false,
-    message: process.env.NODE_ENV === "development"
-      ? err.message
-      : "Something went wrong"
+    message:
+      process.env.NODE_ENV === "development"
+        ? err.message
+        : "Something went wrong",
   });
 });
 
@@ -201,9 +179,38 @@ connectDB()
     app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+      console.log(`🔓 CORS enabled for: http://localhost:3000`);
     });
   })
-  .catch(err => {
+  .catch((err) => {
     console.error("❌ DB connection failed:", err.message);
     process.exit(1);
   });
+
+// ============================================================
+// PROCESS STABILITY
+// ============================================================
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️  Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("⚠️  Uncaught Exception:", err.message);
+});
+
+// ── MongoDB auto-reconnect ────────────────────────────────────
+mongoose.connection.on("disconnected", () => {
+  console.log("🔄 MongoDB disconnected — reconnecting in 5s...");
+  setTimeout(() => {
+    mongoose
+      .connect(process.env.MONGO_URI)
+      .then(() => console.log("✅ MongoDB reconnected"))
+      .catch((err) =>
+        console.error("❌ MongoDB reconnect failed:", err.message)
+      );
+  }, 5000);
+});
+
+mongoose.connection.on("error", (err) => {
+  console.error("❌ MongoDB connection error:", err.message);
+});

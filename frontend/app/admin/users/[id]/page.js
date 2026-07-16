@@ -766,65 +766,95 @@ export default function UserDetailPage() {
           <div className="xl:col-span-5 space-y-6">
             <div className="xl:sticky xl:top-24 space-y-6">
               {/* ── Credit Summary Card ── */}
-              <div className="mb-2 bg-gradient-to-br from-amber-400 to-amber-500 rounded-2xl p-6 text-gray-900 shadow-xl shadow-amber-500/20">
-                <h3 className="text-xs font-bold opacity-80 uppercase tracking-wider mb-5">
-                  Credit Summary
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm opacity-80">Credit Limit</span>
-                    {isEditing ? (
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-900 font-medium">
-                          ₹
-                        </span>
-                        <input
-                          type="number"
-                          name="creditLimit"
-                          value={formData.creditLimit || ""}
-                          onChange={handleChange}
-                          className="w-36 text-right pl-6 pr-3 py-2 rounded-xl bg-white/30 backdrop-blur 
-                                     border-0 focus:ring-2 focus:ring-white/50 text-gray-900 font-bold"
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-2xl font-bold">
-                        {formatCurrency(user.creditLimit)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm opacity-80">Pending Amount</span>
-                    <span className="text-xl font-semibold">
-                      {formatCurrency(user.pendingAmount)}
-                    </span>
-                  </div>
-                  <div className="h-px bg-gray-900/10" />
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm opacity-80">Available Credit</span>
-                    <span className="text-xl font-bold">
-                      {formatCurrency(user.availableCredit)}
-                    </span>
-                  </div>
-                  {isEditing && (
-                    <div className="pt-2">
-                      <label className="text-xs opacity-80 uppercase tracking-wider font-semibold">
-                        Payment Terms (Days)
-                      </label>
-                      <input
-                        type="number"
-                        name="paymentTerms"
-                        value={formData.paymentTerms || ""}
-                        onChange={handleChange}
-                        min="0"
-                        max="365"
-                        className="w-full mt-2 px-4 py-3 rounded-xl bg-white/30 backdrop-blur 
-                                   border-0 focus:ring-2 focus:ring-white/50 text-gray-900 font-medium"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* ── Credit Summary Card ── */}
+<div className="mb-2 bg-gradient-to-br from-amber-200 to-amber-400 rounded-2xl p-6 text-gray-900 shadow-xl shadow-amber-500/20">
+  <h3 className="text-xs font-bold opacity-80 uppercase tracking-wider mb-5">
+    Credit Summary
+  </h3>
+  <div className="space-y-4">
+    <div className="flex justify-between items-baseline">
+      <span className="text-sm opacity-80">Credit Limit</span>
+      {isEditing ? (
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-900 font-medium">
+            ₹
+          </span>
+          <input
+            type="number"
+            name="creditLimit"
+            value={formData.creditLimit || ""}
+            onChange={handleChange}
+            className="w-36 text-right pl-6 pr-3 py-2 rounded-xl bg-white/30 backdrop-blur 
+                       border-0 focus:ring-2 focus:ring-white/50 text-gray-900 font-bold"
+          />
+        </div>
+      ) : (
+        <span className="text-2xl font-bold">
+          {formatCurrency(user.creditLimit)}
+        </span>
+      )}
+    </div>
+
+    <div className="flex justify-between items-baseline">
+      <span className="text-sm opacity-80">Pending Amount</span>
+      <span className="text-xl font-semibold">
+        {formatCurrency(user.pendingAmount)}
+      </span>
+    </div>
+
+    {/* ✅ NEW: Show credit balance if exists */}
+    {(user.creditBalance > 0 || true) && (
+      <div className="flex justify-between items-baseline">
+        <span className="text-sm opacity-80">Credit Balance</span>
+        <span className={`text-xl font-semibold ${
+          user.creditBalance > 0 ? "text-green-800" : "opacity-60"
+        }`}>
+          {formatCurrency(user.creditBalance || 0)}
+        </span>
+      </div>
+    )}
+
+    <div className="h-px bg-gray-900/10" />
+
+    <div className="flex justify-between items-baseline">
+      <span className="text-sm opacity-80">Available Credit</span>
+      <span className="text-xl font-bold">
+        {formatCurrency(user.availableCredit)}
+      </span>
+    </div>
+
+    {isEditing && (
+      <div className="pt-2">
+        <label className="text-xs opacity-80 uppercase tracking-wider font-semibold">
+          Payment Terms (Days)
+        </label>
+        <input
+          type="number"
+          name="paymentTerms"
+          value={formData.paymentTerms || ""}
+          onChange={handleChange}
+          min="0"
+          max="365"
+          className="w-full mt-2 px-4 py-3 rounded-xl bg-white/30 backdrop-blur 
+                     border-0 focus:ring-2 focus:ring-white/50 text-gray-900 font-medium"
+        />
+      </div>
+    )}
+  </div>
+
+  {/* ✅ NEW: Credit balance info banner */}
+  {user.creditBalance > 0 && (
+    <div className="mt-4 p-3 bg-green-800/20 border border-green-800/30 rounded-xl">
+      <p className="text-xs text-green-900 font-semibold flex items-center gap-1.5">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Customer has {formatCurrency(user.creditBalance)} in credit balance (overpayment)
+      </p>
+    </div>
+  )}
+</div>
 
               {/* ── Quick Actions Card ── */}
               <div className="bg-white mb-2 rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">

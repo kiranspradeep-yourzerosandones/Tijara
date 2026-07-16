@@ -1447,35 +1447,143 @@ exports.changePassword = async (req, res) => {
 };
 
 /**
- * @desc    Update FCM Token (for push notifications)
- * @route   PUT /api/auth/fcm-token
+ * @desc    Update or clear push token
+ * @route   PUT /api/auth/push-token
  * @access  Private
  */
 exports.updatePushToken = async (req, res) => {
   try {
     const { pushToken } = req.body;
 
-    if (!pushToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Push token is required"
-      });
-    }
-
-    await User.findByIdAndUpdate(req.user._id, { 
-      pushToken,
-      pushTokenUpdatedAt: new Date()
+    // pushToken can be null to clear it (user disabled push notifications)
+    await User.findByIdAndUpdate(req.user._id, {
+      pushToken:           pushToken || null,
+      pushTokenUpdatedAt:  new Date()
     });
 
     res.status(200).json({
       success: true,
-      message: "Push token updated successfully"
+      message: pushToken
+        ? "Push token updated successfully"
+        : "Push token cleared successfully"
     });
   } catch (error) {
     console.error("Update Push Token Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update push token",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Get notification preferences
+ * @route   GET /api/auth/notification-preferences
+ * @access  Private
+ */
+exports.getNotificationPreferences = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select("notificationPreferences");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Return with defaults if not set yet
+    const prefs = {
+      pushEnabled:           user.notificationPreferences?.pushEnabled          ?? true,
+      inAppEnabled:          user.notificationPreferences?.inAppEnabled         ?? true,
+      orderUpdates:          user.notificationPreferences?.orderUpdates         ?? true,
+      paymentNotifications:  user.notificationPreferences?.paymentNotifications ?? true,
+      promotions:            user.notificationPreferences?.promotions           ?? true,
+      announcements:         user.notificationPreferences?.announcements        ?? true,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: { preferences: prefs }
+    });
+
+  } catch (error) {
+    console.error("Get Notification Preferences Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get notification preferences",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Update notification preferences
+ * @route   PUT /api/auth/notification-preferences
+ * @access  Private
+ */
+exports.updateNotificationPreferences = async (req, res) => {
+  try {
+    const {
+      pushEnabled,
+      inAppEnabled,
+      orderUpdates,
+      paymentNotifications,
+      promotions,
+      announcements
+    } = req.body;
+
+    const user = await User.findById(req.user._id)
+      .select("notificationPreferences pushToken");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Initialize if not exists
+    if (!user.notificationPreferences) {
+      user.notificationPreferences = {};
+    }
+
+    // Only update fields that were provided
+    if (pushEnabled           !== undefined) user.notificationPreferences.pushEnabled           = pushEnabled;
+    if (inAppEnabled          !== undefined) user.notificationPreferences.inAppEnabled          = inAppEnabled;
+    if (orderUpdates          !== undefined) user.notificationPreferences.orderUpdates          = orderUpdates;
+    if (paymentNotifications  !== undefined) user.notificationPreferences.paymentNotifications  = paymentNotifications;
+    if (promotions            !== undefined) user.notificationPreferences.promotions            = promotions;
+    if (announcements         !== undefined) user.notificationPreferences.announcements         = announcements;
+
+    // Mark nested field as modified so mongoose saves it
+    user.markModified("notificationPreferences");
+    await user.save({ validateBeforeSave: false });
+
+    const prefs = {
+      pushEnabled:           user.notificationPreferences.pushEnabled          ?? true,
+      inAppEnabled:          user.notificationPreferences.inAppEnabled         ?? true,
+      orderUpdates:          user.notificationPreferences.orderUpdates         ?? true,
+      paymentNotifications:  user.notificationPreferences.paymentNotifications ?? true,
+      promotions:            user.notificationPreferences.promotions           ?? true,
+      announcements:         user.notificationPreferences.announcements        ?? true,
+    };
+
+    console.log(`🔔 Notification preferences updated for user ${user._id}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Notification preferences updated",
+      data: { preferences: prefs }
+    });
+
+  } catch (error) {
+    console.error("Update Notification Preferences Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update notification preferences",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }

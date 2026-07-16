@@ -9,7 +9,8 @@ const {
   adminUpdatePayment,
   adminCancelPayment,
   adminGetPaymentStats,
-  adminGetOverdueReport
+  adminGetOverdueReport,
+  adminApplyCreditBalance  // ✅ ADD THIS IMPORT
 } = require("../controllers/paymentController");
 
 const { protect } = require("../middleware/auth");
@@ -19,11 +20,15 @@ const { adminOnly, checkPermission } = require("../middleware/adminAuth");
 router.use(protect);
 router.use(adminOnly);
 
+
 // Payment statistics - viewReports permission
 router.get("/stats", checkPermission("viewReports"), adminGetPaymentStats);
 
 // Overdue report - viewReports permission
 router.get("/overdue", checkPermission("viewReports"), adminGetOverdueReport);
+
+// ✅ Apply credit balance - MUST be before /:id routes
+router.post("/apply-credit", checkPermission("managePayments"), adminApplyCreditBalance);
 
 // Payment CRUD - managePayments permission
 router.post("/", checkPermission("managePayments"), adminRecordPayment);

@@ -333,7 +333,7 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    if (!amount || amount <= 0) {
+    if (!amount || parseFloat(amount) <= 0) {
       return res.status(400).json({
         success: false,
         message: "Valid amount is required"
@@ -354,6 +354,8 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
+    const thisInstallment = parseFloat(amount);
+
     const order = await Order.findById(orderId);
 
     if (!order) {
@@ -370,93 +372,117 @@ exports.adminRecordPayment = async (req, res) => {
       });
     }
 
-    const currentPaid = order.payment?.amountPaid || 0;
-    const outstanding = order.totalAmount - currentPaid;
+    // ✅ Current cumulative paid before this installment
+    const previousAmountPaid = order.payment?.amountPaid || 0;
+    const outstanding        = Math.max(0, order.totalAmount - previousAmountPaid);
 
-    if (amount > outstanding) {
-      return res.status(400).json({
-        success: false,
-        message: `Payment amount (₹${amount}) exceeds outstanding amount (₹${outstanding})`
-      });
+    // ✅ Split: applied to order vs credit
+    let appliedAmount = thisInstallment;
+    let creditAmount  = 0;
+
+    if (outstanding <= 0) {
+      // Order already fully paid
+      appliedAmount = 0;
+      creditAmount  = thisInstallment;
+    } else if (thisInstallment > outstanding) {
+      // Overpayment
+      appliedAmount = outstanding;
+      creditAmount  = thisInstallment - outstanding;
     }
 
+    // ✅ New cumulative total on the order
+    const newCumulativeAmountPaid = previousAmountPaid + appliedAmount;
+
+    // ✅ Create payment record — FULL amount customer paid
     const paymentNumber = await Payment.generatePaymentNumber();
 
     const payment = new Payment({
-      order: order._id,
-      user: order.user,
+      order:       order._id,
+      user:        order.user,
       paymentNumber,
       orderNumber: order.orderNumber,
-      amount,
+      amount:      thisInstallment,  // ✅ Full amount paid by customer
       method,
       methodDetails,
       paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-      notes,
+      notes:       creditAmount > 0
+        ? (notes || `₹${appliedAmount} applied to order, ₹${creditAmount} added as customer credit`)
+        : (notes || `Payment of ₹${thisInstallment}`),
       internalNotes,
       receiptNumber,
-      recordedBy: req.user._id,
-      status: "completed"
+      recordedBy:  req.user._id,
+      status:      "completed"
     });
 
     await payment.save();
 
-    // Update order payment info
-    const newAmountPaid = currentPaid + amount;
-    order.payment.amountPaid = newAmountPaid;
-    order.payment.method = method;
-
-    if (newAmountPaid >= order.totalAmount) {
-      order.paymentStatus = "paid";
-      order.payment.paidAt = new Date();
-    } else {
-      order.paymentStatus = "partial";
-    }
-
+    // ✅ Update order cumulative amount
+    order.payment.amountPaid   = newCumulativeAmountPaid;
+    order.payment.method       = method;
     order.payment.markedPaidBy = req.user._id;
-    order.payment.notes = notes;
+    order.payment.notes        = notes;
+
+    if (newCumulativeAmountPaid >= order.totalAmount) {
+      order.paymentStatus    = "paid";
+      order.payment.paidAt   = new Date();
+    } else if (newCumulativeAmountPaid > 0) {
+      order.paymentStatus    = "partial";
+    } else {
+      order.paymentStatus    = "pending";
+    }
 
     await order.save();
 
-    // ✅ FIXED: Use updateOne to avoid full document validation
-    // This prevents ValidationError if pendingAmount has a corrupted value
-    const user = await User.findById(order.user).select("pendingAmount totalPaid");
+    // ✅ Update user financial records
+    const user = await User.findById(order.user).select(
+      "pendingAmount creditBalance totalPaid"
+    );
+
     if (user) {
-      const newPendingAmount = Math.max(
-        0,
-        (user.pendingAmount || 0) - amount
-      );
+      const prevPending       = user.pendingAmount    || 0;
+      const prevCreditBalance = user.creditBalance    || 0;
+
+      const newPendingAmount  = Math.max(0, prevPending - appliedAmount);
+      const newCreditBalance  = prevCreditBalance + creditAmount;
+
       await User.updateOne(
         { _id: order.user },
         {
           $set: {
-            pendingAmount: newPendingAmount,
+            pendingAmount:   newPendingAmount,
+            creditBalance:   newCreditBalance,
             lastPaymentDate: payment.paymentDate
           },
-          $inc: { totalPaid: amount }
+          $inc: { totalPaid: thisInstallment }  // ✅ Full amount
         }
+      );
+
+      console.log(
+        `👤 User ${order.user}: ` +
+        `pending ₹${prevPending}→₹${newPendingAmount}, ` +
+        `creditBalance ₹${prevCreditBalance}→₹${newCreditBalance}`
       );
     }
 
     console.log(
-      `💰 Payment recorded: ${paymentNumber} - ₹${amount} for order ${order.orderNumber}`
+      `💰 Payment recorded: ${paymentNumber} ` +
+      `Customer paid ₹${thisInstallment} ` +
+      `(applied: ₹${appliedAmount}, credit: ₹${creditAmount}) ` +
+      `for order ${order.orderNumber}`
     );
-     // ✅ Send payment notification (background — non-blocking)
+
+    // ✅ Notification (non-blocking)
     setImmediate(async () => {
       try {
         const notificationService = require("../services/notificationService");
         await notificationService.createPaymentNotification(
           order,
-          amount,
+          thisInstallment,
           req.user._id
         );
-        console.log(
-          `🔔 Payment notification sent for order ${order.orderNumber}`
-        );
+        console.log(`🔔 Payment notification sent for order ${order.orderNumber}`);
       } catch (notifError) {
-        console.warn(
-          `⚠️ Payment notification failed (non-fatal):`,
-          notifError.message
-        );
+        console.warn(`⚠️ Payment notification failed (non-fatal):`, notifError.message);
       }
     });
 
@@ -466,20 +492,31 @@ exports.adminRecordPayment = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Payment recorded successfully",
+      message: creditAmount > 0
+        ? `₹${thisInstallment} received. ₹${appliedAmount} applied to order, ₹${creditAmount} added as customer credit.`
+        : `Payment of ₹${thisInstallment} recorded successfully`,
       data: {
         payment,
-        orderPaymentStatus: order.paymentStatus,
-        orderOutstanding: order.totalAmount - newAmountPaid
+        orderPaymentStatus:  order.paymentStatus,
+        appliedAmount,
+        creditAmount,
+        summary: {
+          previouslyPaid:   previousAmountPaid,
+          thisInstallment,
+          appliedToOrder:   appliedAmount,
+          creditAdded:      creditAmount,
+          totalPaidOnOrder: newCumulativeAmountPaid,
+          outstanding:      Math.max(0, order.totalAmount - newCumulativeAmountPaid)
+        }
       }
     });
+
   } catch (error) {
     console.error("Record Payment Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to record payment",
-      error:
-        process.env.NODE_ENV === "development" ? error.message : undefined
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
@@ -1373,6 +1410,203 @@ exports.adminGetOverdueReport = async (req, res) => {
       message: "Failed to fetch overdue report",
       error:
         process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Apply customer credit balance to an order (Admin)
+ * @route   POST /api/admin/payments/apply-credit
+ * @access  Private/Admin
+ */
+exports.adminApplyCreditBalance = async (req, res) => {
+  try {
+    const { orderId, amount, notes } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required"
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID"
+      });
+    }
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    if (order.status === "cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot apply credit to cancelled order"
+      });
+    }
+
+    const user = await User.findById(order.user);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found"
+      });
+    }
+
+    const availableCreditBalance = user.creditBalance || 0;
+
+    if (availableCreditBalance <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer has no credit balance available"
+      });
+    }
+
+    const previousAmountPaid = order.payment?.amountPaid || 0;
+    const outstanding = Math.max(0, order.totalAmount - previousAmountPaid);
+
+    if (outstanding <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "This order is already fully paid"
+      });
+    }
+
+    // Determine how much credit to apply
+    let requestedAmount = amount ? parseFloat(amount) : availableCreditBalance;
+
+    if (isNaN(requestedAmount) || requestedAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid amount"
+      });
+    }
+
+    // Cap at available credit balance
+    const creditToApply = Math.min(requestedAmount, availableCreditBalance);
+    // Cap at outstanding amount
+    const appliedAmount = Math.min(creditToApply, outstanding);
+    // Remaining credit after application
+    const remainingCredit = availableCreditBalance - appliedAmount;
+
+    // New cumulative total on order
+    const newCumulativeAmountPaid = previousAmountPaid + appliedAmount;
+
+    // Derive payment status
+    let resolvedPaymentStatus;
+    if (newCumulativeAmountPaid >= order.totalAmount) {
+      resolvedPaymentStatus = "paid";
+    } else if (newCumulativeAmountPaid > 0) {
+      resolvedPaymentStatus = "partial";
+    } else {
+      resolvedPaymentStatus = "pending";
+    }
+
+    // ✅ Create Payment record — use "credit_note" in Payment model (it supports it)
+    const paymentNumber = await Payment.generatePaymentNumber();
+
+    const paymentRecord = new Payment({
+      order:        order._id,
+      user:         order.user,
+      paymentNumber,
+      orderNumber:  order.orderNumber,
+      amount:       appliedAmount,
+      method:       "credit_note",  // ✅ Payment model supports this
+      paymentDate:  new Date(),
+      notes:        notes || `Credit balance applied to order. ₹${appliedAmount} from customer credit balance.`,
+      recordedBy:   req.user._id,
+      status:       "completed"
+    });
+
+    await paymentRecord.save();
+
+    // ✅ Update order — use "credit" which IS in Order model's payment.method enum
+    order.paymentStatus        = resolvedPaymentStatus;
+    order.payment.amountPaid   = newCumulativeAmountPaid;
+    order.payment.method       = "credit";        // ✅ FIXED: Use "credit" not "credit_note"
+    order.payment.notes        = notes || order.payment.notes;
+    order.payment.markedPaidBy = req.user._id;
+
+    if (resolvedPaymentStatus === "paid") {
+      order.payment.paidAt = new Date();
+    }
+
+    await order.save();
+
+    // ✅ Deduct from user's credit balance and pending amount
+    await User.updateOne(
+      { _id: order.user },
+      {
+        $set: {
+          creditBalance:   Math.max(0, remainingCredit),
+          pendingAmount:   Math.max(0, (user.pendingAmount || 0) - appliedAmount),
+          lastPaymentDate: new Date()
+        }
+        // Note: Don't increment totalPaid — this is credit being used,
+        // not new money coming in. Money was counted when credit was created.
+      }
+    );
+
+    console.log(
+      `💳 Credit applied: ${paymentNumber} ` +
+      `₹${appliedAmount} from credit balance for order ${order.orderNumber}. ` +
+      `Remaining credit: ₹${remainingCredit}`
+    );
+
+    // Send notification (non-blocking)
+    setImmediate(async () => {
+      try {
+        const notificationService = require("../services/notificationService");
+        await notificationService.createPaymentNotification(
+          order,
+          appliedAmount,
+          req.user._id
+        );
+      } catch (notifError) {
+        console.warn(`⚠️ Payment notification failed:`, notifError.message);
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `₹${appliedAmount} credit applied to order successfully`,
+      data: {
+        order: {
+          _id:               order._id,
+          orderNumber:       order.orderNumber,
+          paymentStatus:     order.paymentStatus,
+          payment:           order.payment,
+          totalAmount:       order.totalAmount,
+          outstandingAmount: Math.max(0, order.totalAmount - newCumulativeAmountPaid)
+        },
+        paymentRecord: {
+          paymentNumber:  paymentRecord.paymentNumber,
+          amount:         appliedAmount,
+          method:         "credit_note"
+        },
+        creditSummary: {
+          previousCreditBalance:  availableCreditBalance,
+          creditApplied:          appliedAmount,
+          remainingCreditBalance: remainingCredit
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Apply Credit Balance Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to apply credit balance",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };

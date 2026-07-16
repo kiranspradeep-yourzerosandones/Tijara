@@ -57,6 +57,7 @@ const CreditSummaryScreen = ({ navigation }) => {
   }
 
   const utilizationPercentage = creditSummary?.creditUtilization || 0;
+  const creditBalance = creditSummary?.creditBalance || 0; // ✅ NEW
 
   return (
     <Screen backgroundColor={COLORS.backgroundLight}>
@@ -103,14 +104,14 @@ const CreditSummaryScreen = ({ navigation }) => {
           <Text style={styles.creditAmount}>
             {formatCurrency(creditSummary?.availableCredit || 0)}
           </Text>
-          
+
           <View style={styles.creditProgress}>
-            <View 
+            <View
               style={[
-                styles.creditProgressBar, 
+                styles.creditProgressBar,
                 { width: `${Math.min(utilizationPercentage, 100)}%` },
                 utilizationPercentage > 80 && styles.creditProgressBarWarning
-              ]} 
+              ]}
             />
           </View>
 
@@ -122,7 +123,7 @@ const CreditSummaryScreen = ({ navigation }) => {
               </Text>
             </View>
             <View style={styles.creditDetailItem}>
-              <Text style={styles.creditDetailLabel}>Pending Amount</Text>
+              <Text style={styles.creditDetailLabel}>Pending</Text>
               <Text style={[styles.creditDetailValue, { color: COLORS.warning }]}>
                 {formatCurrency(creditSummary?.pendingAmount || 0)}
               </Text>
@@ -133,6 +134,24 @@ const CreditSummaryScreen = ({ navigation }) => {
             </View>
           </View>
         </View>
+
+        {/* ✅ NEW: Credit Balance Banner (shown only when > 0) */}
+        {creditBalance > 0 && (
+          <View style={styles.creditBalanceBanner}>
+            <View style={styles.creditBalanceIconContainer}>
+              <Ionicons name="wallet" size={24} color={COLORS.success} />
+            </View>
+            <View style={styles.creditBalanceContent}>
+              <Text style={styles.creditBalanceTitle}>Credit Balance</Text>
+              <Text style={styles.creditBalanceSubtitle}>
+                Advance payment / overpayment credit
+              </Text>
+            </View>
+            <Text style={styles.creditBalanceAmount}>
+              {formatCurrency(creditBalance)}
+            </Text>
+          </View>
+        )}
 
         {/* Credit Blocked Warning */}
         {creditSummary?.isCreditBlocked && (
@@ -162,6 +181,17 @@ const CreditSummaryScreen = ({ navigation }) => {
               {formatCurrency(creditSummary?.totalPaid || 0)}
             </Text>
           </View>
+
+          {/* ✅ NEW: Credit Balance row in summary */}
+          {creditBalance > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Credit Balance</Text>
+              <Text style={[styles.summaryValue, { color: COLORS.success }]}>
+                {formatCurrency(creditBalance)}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Payment Terms</Text>
             <Text style={styles.summaryValue}>
@@ -344,6 +374,49 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '600',
   },
+
+  // ✅ NEW: Credit Balance Banner styles
+  creditBalanceBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.successLight || '#ECFDF5',
+    borderRadius: SPACING.cardRadius,
+    padding: SPACING.cardPadding,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.success + '40',
+    gap: SPACING.md,
+  },
+  creditBalanceIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.success + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  creditBalanceContent: {
+    flex: 1,
+  },
+  creditBalanceTitle: {
+    ...FONTS.body,
+    color: COLORS.success,
+    fontWeight: '700',
+  },
+  creditBalanceSubtitle: {
+    ...FONTS.caption,
+    color: COLORS.success,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  creditBalanceAmount: {
+    ...FONTS.h4,
+    color: COLORS.success,
+    fontWeight: '700',
+    flexShrink: 0,
+  },
+
   blockedWarning: {
     flexDirection: 'row',
     backgroundColor: COLORS.errorLight,

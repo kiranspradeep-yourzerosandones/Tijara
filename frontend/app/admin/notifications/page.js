@@ -178,17 +178,17 @@ export default function NotificationsPage() {
       ),
       color: "bg-emerald-50 text-emerald-600",
     },
-    {
-      label: "SMS Sent",
-      value: stats.stats?.totalSmsSent ?? 0,
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-        </svg>
-      ),
-      color: "bg-amber-50 text-amber-600",
-    },
+    // {
+    //   label: "SMS Sent",
+    //   value: stats.stats?.totalSmsSent ?? 0,
+    //   icon: (
+    //     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    //       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+    //         d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+    //     </svg>
+    //   ),
+    //   color: "bg-amber-50 text-amber-600",
+    // },
   ] : [];
 
   return (
@@ -217,7 +217,7 @@ export default function NotificationsPage() {
         </div>
 
         {/* ── Stats ──────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
           {statsLoading ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse">
@@ -244,7 +244,7 @@ export default function NotificationsPage() {
 
         {/* ── By Status breakdown ─────────────────────────── */}
         {stats?.byStatus && stats.byStatus.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-2">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Breakdown by Status</h3>
             <div className="flex flex-wrap gap-3">
               {stats.byStatus.map((s) => (
@@ -259,7 +259,7 @@ export default function NotificationsPage() {
         )}
 
         {/* ── Filters ────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-2">
           <div className="flex flex-col sm:flex-row gap-3">
             <select
               value={filters.type}
@@ -406,12 +406,12 @@ export default function NotificationsPage() {
                                 In-App
                               </span>
                             )}
-                            {n.channels?.sms && (
+                            {/* {n.channels?.sms && (
                               <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600
                                                text-[10px] font-bold rounded">
                                 SMS
                               </span>
-                            )}
+                            )} */}
                             {n.channels?.email && (
                               <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600
                                                text-[10px] font-bold rounded">

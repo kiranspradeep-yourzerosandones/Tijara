@@ -31,23 +31,33 @@ const IMAGE_HEIGHT = width * 0.8;
 const ProductDetailScreen = ({ navigation, route }) => {
   const { product: initialProduct, productId } = route.params || {};
 
-  const [product, setProduct] = useState(initialProduct);
-  const [isLoading, setIsLoading] = useState(!initialProduct);
+  const [product, setProduct]               = useState(initialProduct);
+  const [isLoading, setIsLoading]           = useState(!initialProduct);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity]             = useState(1);
 
   // ✅ Spam guard
-  const addingRef = useRef(false);
+  const addingRef   = useRef(false);
+  const removingRef = useRef(false);
 
   // ✅ Toast
   const { toast, showToast } = useToast();
 
   // ✅ Granular selectors
-  const addToCart = useCartStore((state) => state.addToCart);
+  const addToCart      = useCartStore((state) => state.addToCart);
+  const removeFromCart = useCartStore((state) => state.removeFromCart);
+  const updateQuantity = useCartStore((state) => state.updateQuantity);
   const getItemQuantity = useCartStore((state) => state.getItemQuantity);
-  const isCartLoading = useCartStore((state) => state.isLoading);
+  const isCartLoading  = useCartStore((state) => state.isLoading);
 
   const cartQuantity = product ? getItemQuantity(product._id) : 0;
+
+  // ── Keep local quantity in sync with minOrderQuantity ──
+  useEffect(() => {
+    if (product) {
+      setQuantity(product.minOrderQuantity || 1);
+    }
+  }, [product?._id]);
 
   useEffect(() => {
     if (!initialProduct && productId) {
@@ -68,21 +78,15 @@ const ProductDetailScreen = ({ navigation, route }) => {
     }
   };
 
-  // ✅ Add to cart with Toast + spam guard + cache invalidation
+  // ── Add to cart ────────────────────────────────────────
   const handleAddToCart = async () => {
     if (addingRef.current) return;
     addingRef.current = true;
 
     try {
       await addToCart(product._id, quantity);
-
-      // ✅ Invalidate product cache so stock updates reflect
       invalidateCacheByPrefix('products:');
-
-      showToast(
-        `${quantity} × ${product.title} added to cart`,
-        'cart'
-      );
+      showToast(`${quantity} × ${product.title} added to cart`, 'cart');
     } catch (error) {
       showToast(error.message || 'Failed to add to cart', 'error');
     } finally {
@@ -90,6 +94,52 @@ const ProductDetailScreen = ({ navigation, route }) => {
     }
   };
 
+  // ── Increase cart quantity by 1 ────────────────────────
+  const handleCartIncrease = async () => {
+    if (addingRef.current) return;
+    addingRef.current = true;
+
+    try {
+      const max = product.maxOrderQuantity || 99;
+      if (cartQuantity >= max) {
+        showToast(`Maximum order quantity is ${max}`, 'error');
+        return;
+      }
+      await addToCart(product._id, 1);
+      showToast(`${product.title} updated in cart`, 'cart');
+    } catch (error) {
+      showToast(error.message || 'Failed to update cart', 'error');
+    } finally {
+      addingRef.current = false;
+    }
+  };
+
+  // ── Decrease cart quantity by 1 (or remove if reaches 0) ─
+  const handleCartDecrease = async () => {
+    if (removingRef.current) return;
+    removingRef.current = true;
+
+    try {
+      const min = product.minOrderQuantity || 1;
+
+      if (cartQuantity <= min) {
+        // Remove entirely from cart
+        await removeFromCart(product._id);
+        showToast(`${product.title} removed from cart`, 'error');
+      } else {
+        // Decrease by 1
+        await updateQuantity(product._id, cartQuantity - 1);
+        showToast(`${product.title} updated in cart`, 'cart');
+      }
+      invalidateCacheByPrefix('products:');
+    } catch (error) {
+      showToast(error.message || 'Failed to update cart', 'error');
+    } finally {
+      removingRef.current = false;
+    }
+  };
+
+  // ── Local quantity stepper (before adding to cart) ─────
   const handleQuantityChange = (delta) => {
     const min = product?.minOrderQuantity || 1;
     const max = product?.maxOrderQuantity || 99;
@@ -110,7 +160,12 @@ const ProductDetailScreen = ({ navigation, route }) => {
   if (!product) return null;
 
   const discount = calculateDiscount(product.compareAtPrice, product.price);
-  const images = product.images || [];
+  const images   = product.images || [];
+  const min      = product.minOrderQuantity || 1;
+  const max      = product.maxOrderQuantity || 99;
+
+  // ── Is already in cart? Show cart stepper instead ──────
+  const isInCart = cartQuantity > 0;
 
   return (
     <Screen backgroundColor={COLORS.white}>
@@ -118,7 +173,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
+        {/* ── Header ─────────────────────────────────────── */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -130,11 +185,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
             style={styles.cartButton}
             onPress={() => navigation.navigate('Cart')}
           >
-            <Ionicons
-              name="cart-outline"
-              size={24}
-              color={COLORS.textPrimary}
-            />
+            <Ionicons name="cart-outline" size={24} color={COLORS.textPrimary} />
             {cartQuantity > 0 && (
               <View style={styles.cartBadge}>
                 <Text style={styles.cartBadgeText}>{cartQuantity}</Text>
@@ -143,7 +194,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Image Gallery */}
+        {/* ── Image Gallery ──────────────────────────────── */}
         <View style={styles.imageContainer}>
           {images.length > 0 ? (
             <Image
@@ -170,7 +221,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* Thumbnail Gallery */}
+        {/* ── Thumbnail Gallery ──────────────────────────── */}
         {images.length > 1 && (
           <ScrollView
             horizontal
@@ -196,7 +247,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </ScrollView>
         )}
 
-        {/* Product Info */}
+        {/* ── Product Info ───────────────────────────────── */}
         <View style={styles.infoContainer}>
           {product.category && (
             <Text style={styles.category}>{product.category}</Text>
@@ -205,9 +256,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           <Text style={styles.title}>{product.title}</Text>
 
           <View style={styles.priceContainer}>
-            <Text style={styles.price}>
-              {formatCurrency(product.price)}
-            </Text>
+            <Text style={styles.price}>{formatCurrency(product.price)}</Text>
             {product.compareAtPrice > product.price && (
               <Text style={styles.comparePrice}>
                 {formatCurrency(product.compareAtPrice)}
@@ -231,30 +280,23 @@ const ProductDetailScreen = ({ navigation, route }) => {
               ]}
             >
               <Ionicons
-                name={
-                  product.inStock ? 'checkmark-circle' : 'close-circle'
-                }
+                name={product.inStock ? 'checkmark-circle' : 'close-circle'}
                 size={16}
                 color={product.inStock ? COLORS.success : COLORS.error}
               />
               <Text
                 style={[
                   styles.stockText,
-                  {
-                    color: product.inStock
-                      ? COLORS.success
-                      : COLORS.error,
-                  },
+                  { color: product.inStock ? COLORS.success : COLORS.error },
                 ]}
               >
                 {product.inStock ? 'In Stock' : 'Out of Stock'}
               </Text>
             </View>
 
-            {/* Min order quantity hint */}
-            {product.minOrderQuantity > 1 && (
-              <Text style={styles.lowStockText}>
-                Min. order: {product.minOrderQuantity}
+            {min > 1 && (
+              <Text style={styles.minOrderText}>
+                Min. order: {min}
               </Text>
             )}
           </View>
@@ -292,11 +334,13 @@ const ProductDetailScreen = ({ navigation, route }) => {
             </View>
           )}
 
-          {/* Storage */}
+          {/* ✅ Storage — HTML stripped with cleanText */}
           {product.storage && (
             <View style={styles.descriptionContainer}>
               <Text style={styles.sectionTitle}>Storage</Text>
-              <Text style={styles.description}>{product.storage}</Text>
+              <Text style={styles.description}>
+                {cleanText(product.storage)}
+              </Text>
             </View>
           )}
         </View>
@@ -304,47 +348,120 @@ const ProductDetailScreen = ({ navigation, route }) => {
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Bottom Action Bar */}
+      {/* ── Bottom Action Bar ─────────────────────────────── */}
       {product.inStock && (
         <View style={styles.bottomBar}>
-          <View style={styles.quantityContainer}>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => handleQuantityChange(-1)}
-              disabled={quantity <= (product.minOrderQuantity || 1)}
-            >
-              <Ionicons
-                name="remove"
-                size={20}
-                color={
-                  quantity <= (product.minOrderQuantity || 1)
-                    ? COLORS.gray
-                    : COLORS.textPrimary
-                }
-              />
-            </TouchableOpacity>
-            <Text style={styles.quantityText}>{quantity}</Text>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => handleQuantityChange(1)}
-            >
-              <Ionicons name="add" size={20} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-          </View>
+          {isInCart ? (
+            // ── Cart stepper — shown when item already in cart ──
+            <View style={styles.cartStepperRow}>
+              {/* Cart quantity stepper */}
+              <View style={styles.cartStepper}>
+                <TouchableOpacity
+                  style={[
+                    styles.stepperBtn,
+                    styles.stepperBtnMinus,
+                  ]}
+                  onPress={handleCartDecrease}
+                  disabled={isCartLoading}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={cartQuantity <= min ? 'trash-outline' : 'remove'}
+                    size={20}
+                    color={COLORS.white}
+                  />
+                </TouchableOpacity>
 
-          <Button
-            title={
-              cartQuantity > 0
-                ? `Add More (${cartQuantity} in cart)`
-                : 'Add to Cart'
-            }
-            onPress={handleAddToCart}
-            loading={isCartLoading}
-            style={styles.addToCartButton}
-            icon={
-              <Ionicons name="cart" size={20} color={COLORS.black} />
-            }
-          />
+                <View style={styles.stepperCount}>
+                  <Text style={styles.stepperCountText}>{cartQuantity}</Text>
+                  <Text style={styles.stepperCountLabel}>in cart</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.stepperBtn,
+                    styles.stepperBtnPlus,
+                    cartQuantity >= max && styles.stepperBtnDisabled,
+                  ]}
+                  onPress={handleCartIncrease}
+                  disabled={isCartLoading || cartQuantity >= max}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={20} color={COLORS.white} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Go to Cart button */}
+              <TouchableOpacity
+                style={styles.goToCartBtn}
+                onPress={() => navigation.navigate('Cart')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="cart" size={18} color={COLORS.black} />
+                <Text style={styles.goToCartText}>View Cart</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // ── Add to cart — shown when item NOT in cart ──────
+            <View style={styles.addToCartRow}>
+              {/* Local quantity stepper */}
+              <View style={styles.localStepper}>
+                <TouchableOpacity
+                  style={[
+                    styles.localStepperBtn,
+                    quantity <= min && styles.localStepperBtnDisabled,
+                  ]}
+                  onPress={() => handleQuantityChange(-1)}
+                  disabled={quantity <= min}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="remove"
+                    size={18}
+                    color={quantity <= min ? COLORS.gray : COLORS.textPrimary}
+                  />
+                </TouchableOpacity>
+
+                <Text style={styles.localStepperCount}>{quantity}</Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.localStepperBtn,
+                    quantity >= max && styles.localStepperBtnDisabled,
+                  ]}
+                  onPress={() => handleQuantityChange(1)}
+                  disabled={quantity >= max}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="add"
+                    size={18}
+                    color={quantity >= max ? COLORS.gray : COLORS.textPrimary}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Add to Cart button */}
+              <TouchableOpacity
+                style={[
+                  styles.addToCartBtn,
+                  isCartLoading && styles.addToCartBtnDisabled,
+                ]}
+                onPress={handleAddToCart}
+                disabled={isCartLoading}
+                activeOpacity={0.85}
+              >
+                {isCartLoading ? (
+                  <Text style={styles.addToCartBtnText}>Adding...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="cart" size={20} color={COLORS.black} />
+                    <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       )}
 
@@ -360,214 +477,330 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   scrollView: { flex: 1 },
+
+  // ── Header ──────────────────────────────────────────────
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection:     'row',
+    justifyContent:    'space-between',
+    alignItems:        'center',
     paddingHorizontal: SPACING.screenPadding,
-    paddingVertical: SPACING.md,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    paddingVertical:   SPACING.md,
+    position:          'absolute',
+    top:    0,
+    left:   0,
+    right:  0,
     zIndex: 10,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width:           44,
+    height:          44,
+    borderRadius:    22,
     backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
     ...SHADOWS.small,
   },
   cartButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width:           44,
+    height:          44,
+    borderRadius:    22,
     backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
     ...SHADOWS.small,
   },
   cartBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
+    position:        'absolute',
+    top:    -4,
+    right:  -4,
     backgroundColor: COLORS.primary,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width:           20,
+    height:          20,
+    borderRadius:    10,
+    alignItems:      'center',
+    justifyContent:  'center',
   },
   cartBadgeText: {
-    fontSize: 10,
-    color: COLORS.black,
+    fontSize:   10,
+    color:      COLORS.black,
     fontWeight: '700',
   },
+
+  // ── Images ──────────────────────────────────────────────
   imageContainer: {
-    width: width,
-    height: IMAGE_HEIGHT,
+    width:    width,
+    height:   IMAGE_HEIGHT,
     backgroundColor: COLORS.card,
     position: 'relative',
   },
   mainImage: { width: '100%', height: '100%' },
   placeholderImage: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
+    width:          '100%',
+    height:         '100%',
+    alignItems:     'center',
     justifyContent: 'center',
     backgroundColor: COLORS.lightGray,
   },
   saleBadge: {
-    position: 'absolute',
-    top: SPACING.lg + 50,
-    left: SPACING.screenPadding,
-    backgroundColor: COLORS.error,
+    position:          'absolute',
+    top:               SPACING.lg + 50,
+    left:              SPACING.screenPadding,
+    backgroundColor:   COLORS.error,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: SPACING.buttonRadius,
+    paddingVertical:   SPACING.xs,
+    borderRadius:      SPACING.buttonRadius,
   },
   saleText: {
     ...FONTS.labelSmall,
-    color: COLORS.white,
+    color:      COLORS.white,
     fontWeight: '700',
   },
   outOfStockOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    position:        'absolute',
+    bottom:          0,
+    left:            0,
+    right:           0,
     backgroundColor: 'rgba(0,0,0,0.7)',
     paddingVertical: SPACING.md,
-    alignItems: 'center',
+    alignItems:      'center',
   },
   outOfStockText: {
     ...FONTS.body,
-    color: COLORS.white,
+    color:      COLORS.white,
     fontWeight: '600',
   },
   thumbnailContainer: {
     paddingHorizontal: SPACING.screenPadding,
-    paddingVertical: SPACING.md,
-    gap: SPACING.sm,
+    paddingVertical:   SPACING.md,
+    gap:               SPACING.sm,
   },
   thumbnail: {
-    width: 60,
-    height: 60,
+    width:        60,
+    height:       60,
     borderRadius: SPACING.cardRadiusSmall,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    marginRight: SPACING.sm,
+    overflow:     'hidden',
+    borderWidth:  2,
+    borderColor:  'transparent',
+    marginRight:  SPACING.sm,
   },
   thumbnailActive: { borderColor: COLORS.primary },
-  thumbnailImage: { width: '100%', height: '100%' },
+  thumbnailImage:  { width: '100%', height: '100%' },
+
+  // ── Info ────────────────────────────────────────────────
   infoContainer: { padding: SPACING.screenPadding },
   category: {
     ...FONTS.labelSmall,
-    color: COLORS.primary,
+    color:         COLORS.primary,
     textTransform: 'uppercase',
-    marginBottom: SPACING.xs,
+    marginBottom:  SPACING.xs,
   },
   title: {
     ...FONTS.h3,
-    color: COLORS.textPrimary,
+    color:        COLORS.textPrimary,
     marginBottom: SPACING.md,
   },
   priceContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: SPACING.md,
+    alignItems:    'baseline',
+    marginBottom:  SPACING.md,
   },
-  price: { ...FONTS.priceLarge, color: COLORS.textPrimary },
+  price:        { ...FONTS.priceLarge, color: COLORS.textPrimary },
   comparePrice: {
     ...FONTS.body,
-    color: COLORS.gray,
-    textDecorationLine: 'line-through',
-    marginLeft: SPACING.sm,
+    color:               COLORS.gray,
+    textDecorationLine:  'line-through',
+    marginLeft:          SPACING.sm,
   },
   unit: {
     ...FONTS.body,
-    color: COLORS.gray,
+    color:      COLORS.gray,
     marginLeft: SPACING.xs,
   },
   stockContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    gap: SPACING.md,
+    alignItems:    'center',
+    marginBottom:  SPACING.lg,
+    gap:           SPACING.md,
   },
   stockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection:     'row',
+    alignItems:        'center',
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: SPACING.xs,
-    gap: SPACING.xs,
+    paddingVertical:   SPACING.xs,
+    borderRadius:      SPACING.xs,
+    gap:               SPACING.xs,
   },
-  stockText: { ...FONTS.labelSmall, fontWeight: '600' },
-  lowStockText: { ...FONTS.caption, color: COLORS.warning },
+  stockText:    { ...FONTS.labelSmall, fontWeight: '600' },
+  minOrderText: { ...FONTS.caption, color: COLORS.warning },
+
   descriptionContainer: { marginBottom: SPACING.lg },
   sectionTitle: {
     ...FONTS.h4,
-    color: COLORS.textPrimary,
+    color:        COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
   description: {
     ...FONTS.body,
-    color: COLORS.textSecondary,
+    color:      COLORS.textSecondary,
     lineHeight: 24,
   },
   bulletRow: {
     flexDirection: 'row',
-    marginBottom: SPACING.xs,
+    marginBottom:  SPACING.xs,
   },
   bullet: {
     ...FONTS.body,
-    color: COLORS.primary,
+    color:       COLORS.primary,
     marginRight: SPACING.sm,
-    fontWeight: '700',
+    fontWeight:  '700',
   },
   bulletText: {
     ...FONTS.body,
-    color: COLORS.textSecondary,
-    flex: 1,
+    color:      COLORS.textSecondary,
+    flex:       1,
     lineHeight: 22,
   },
-  bottomSpacing: { height: 100 },
+  bottomSpacing: { height: 110 },
+
+  // ── Bottom Bar ──────────────────────────────────────────
   bottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: SPACING.screenPadding,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    gap: SPACING.md,
+    paddingVertical:   SPACING.md,
+    backgroundColor:   COLORS.white,
+    borderTopWidth:    1,
+    borderTopColor:    COLORS.border,
     ...SHADOWS.medium,
   },
-  quantityContainer: {
+
+  // ── Add to Cart row (item NOT in cart) ──────────────────
+  addToCartRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: SPACING.buttonRadius,
-    paddingHorizontal: SPACING.xs,
+    alignItems:    'center',
+    gap:           SPACING.md,
   },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
+
+  // Local quantity stepper
+  localStepper: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: COLORS.backgroundLight,
+    borderRadius:    14,
+    borderWidth:     1.5,
+    borderColor:     COLORS.border,
+    overflow:        'hidden',
+  },
+  localStepperBtn: {
+    width:           44,
+    height:          48,
+    alignItems:      'center',
+    justifyContent:  'center',
+    backgroundColor: COLORS.white,
+  },
+  localStepperBtnDisabled: {
+    backgroundColor: COLORS.backgroundLight,
+  },
+  localStepperCount: {
+    ...FONTS.h4,
+    color:       COLORS.textPrimary,
+    minWidth:    44,
+    textAlign:   'center',
+    fontWeight:  '700',
+    fontSize:    18,
+  },
+
+  // Add to cart button
+  addToCartBtn: {
+    flex:            1,
+    height:          52,
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius:    16,
+    ...SHADOWS.small,
+  },
+  addToCartBtnDisabled: {
+    opacity: 0.6,
+  },
+  addToCartBtnText: {
+    ...FONTS.body,
+    color:      COLORS.black,
+    fontWeight: '700',
+    fontSize:   15,
+  },
+
+  // ── Cart Stepper row (item IS in cart) ──────────────────
+  cartStepperRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           SPACING.md,
+  },
+
+  // Cart stepper
+  cartStepper: {
+    flex:          1,
+    flexDirection: 'row',
+    alignItems:    'center',
+    borderRadius:  16,
+    overflow:      'hidden',
+    borderWidth:   1.5,
+    borderColor:   COLORS.primary,
+    height:        52,
+  },
+  stepperBtn: {
+    width:          52,
+    height:         '100%',
+    alignItems:     'center',
     justifyContent: 'center',
   },
-  quantityText: {
-    ...FONTS.h4,
-    color: COLORS.textPrimary,
-    minWidth: 40,
-    textAlign: 'center',
+  stepperBtnMinus: {
+    backgroundColor: COLORS.error,
   },
-  addToCartButton: { flex: 1 },
+  stepperBtnPlus: {
+    backgroundColor: COLORS.primary,
+  },
+  stepperBtnDisabled: {
+    backgroundColor: COLORS.gray,
+    opacity:         0.5,
+  },
+  stepperCount: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  stepperCountText: {
+    ...FONTS.h4,
+    color:      COLORS.textPrimary,
+    fontWeight: '800',
+    fontSize:   18,
+    lineHeight: 22,
+  },
+  stepperCountLabel: {
+    ...FONTS.caption,
+    color:    COLORS.textSecondary,
+    fontSize: 10,
+  },
+
+  // Go to cart button
+  goToCartBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             6,
+    backgroundColor: COLORS.primary,
+    height:          52,
+    paddingHorizontal: SPACING.lg,
+    borderRadius:    16,
+    ...SHADOWS.small,
+  },
+  goToCartText: {
+    ...FONTS.body,
+    color:      COLORS.black,
+    fontWeight: '700',
+    fontSize:   14,
+  },
 });
 
 export default ProductDetailScreen;

@@ -1,4 +1,4 @@
-// frontend/app/admin/orders/[id]/page.js
+// frontend/app/admin/orders/[id]/page.js - FULLY UPDATED
 "use client";
 
 import { useState, useEffect } from "react";
@@ -67,6 +67,16 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
     </svg>
   ),
+  credit: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+  ),
+  wallet: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+  ),
   phone: (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -100,7 +110,6 @@ const Icons = {
   ),
 };
 
-// Status configuration with icon components
 const STATUS_CONFIG = {
   pending: {
     label: "Pending",
@@ -163,6 +172,9 @@ export default function OrderDetail() {
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
 
+  // ✅ NEW: Customer credit balance state
+  const [customerCreditBalance, setCustomerCreditBalance] = useState(0);
+
   // Status update modal
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -172,8 +184,15 @@ export default function OrderDetail() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentData, setPaymentData] = useState({
     paymentStatus: "",
-    amountPaid: 0,
+    amountPaid: "",
     method: "cash",
+    notes: ""
+  });
+
+  // ✅ NEW: Credit Balance modal
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditData, setCreditData] = useState({
+    amount: "",
     notes: ""
   });
 
@@ -210,17 +229,37 @@ export default function OrderDetail() {
         headers: getAuthHeaders()
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to fetch order");
-      }
+      if (!res.ok) throw new Error("Failed to fetch order");
 
       const data = await res.json();
-      setOrder(data.data?.order);
+      const fetchedOrder = data.data?.order;
+      setOrder(fetchedOrder);
+
+      // ✅ NEW: Fetch customer credit balance
+      if (fetchedOrder?.user?._id || fetchedOrder?.user) {
+        const userId = fetchedOrder.user?._id || fetchedOrder.user;
+        fetchCustomerCredit(userId);
+      }
     } catch (err) {
       console.error("Error fetching order:", err);
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ NEW: Fetch customer credit balance
+  const fetchCustomerCredit = async (userId) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/customers/${userId}`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCustomerCreditBalance(data.data?.customer?.creditBalance || 0);
+      }
+    } catch (err) {
+      console.warn("Could not fetch customer credit:", err.message);
     }
   };
 
@@ -232,10 +271,7 @@ export default function OrderDetail() {
 
       const res = await fetch(`${API_URL}/admin/orders/${orderId}/status`, {
         method: "PUT",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json"
-        },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           status: selectedStatus,
           note: statusNote || `Status updated to ${selectedStatus}`
@@ -251,7 +287,6 @@ export default function OrderDetail() {
       setShowStatusModal(false);
       setSelectedStatus("");
       setStatusNote("");
-
       alert("Order status updated successfully!");
     } catch (err) {
       console.error("Error updating status:", err);
@@ -265,13 +300,20 @@ export default function OrderDetail() {
     try {
       setUpdating(true);
 
+      const requestBody = {
+        paymentStatus: paymentData.paymentStatus,
+        method: paymentData.method,
+        notes: paymentData.notes
+      };
+
+      if (paymentData.amountPaid !== "" && paymentData.amountPaid !== undefined) {
+        requestBody.amountPaid = parseFloat(paymentData.amountPaid);
+      }
+
       const res = await fetch(`${API_URL}/admin/orders/${orderId}/payment`, {
         method: "PUT",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(paymentData)
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
       });
 
       if (!res.ok) {
@@ -281,11 +323,59 @@ export default function OrderDetail() {
 
       await fetchOrder();
       setShowPaymentModal(false);
-      setPaymentData({ paymentStatus: "", amountPaid: 0, method: "cash", notes: "" });
-
-      alert("Payment status updated successfully!");
+      setPaymentData({ paymentStatus: "", amountPaid: "", method: "cash", notes: "" });
+      alert("Payment recorded successfully!");
     } catch (err) {
       console.error("Error updating payment:", err);
+      alert(err.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // ✅ NEW: Apply credit balance to order
+  const applyCreditBalance = async () => {
+    try {
+      setUpdating(true);
+
+      const amountToApply = creditData.amount
+        ? parseFloat(creditData.amount)
+        : Math.min(customerCreditBalance, outstanding);
+
+      if (!amountToApply || amountToApply <= 0) {
+        alert("Please enter a valid amount");
+        return;
+      }
+
+      if (amountToApply > customerCreditBalance) {
+        alert(`Cannot apply more than available credit balance (${formatCurrency(customerCreditBalance)})`);
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/admin/payments/apply-credit`, {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          amount: amountToApply,
+          notes: creditData.notes || `Credit balance applied to order ${order?.orderNumber}`
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to apply credit");
+      }
+
+      const data = await res.json();
+      await fetchOrder();
+      setShowCreditModal(false);
+      setCreditData({ amount: "", notes: "" });
+
+      const remaining = data.data?.creditSummary?.remainingCreditBalance || 0;
+      alert(`✅ ${formatCurrency(amountToApply)} credit applied successfully!\nRemaining credit balance: ${formatCurrency(remaining)}`);
+    } catch (err) {
+      console.error("Error applying credit:", err);
       alert(err.message);
     } finally {
       setUpdating(false);
@@ -303,10 +393,7 @@ export default function OrderDetail() {
 
       const res = await fetch(`${API_URL}/admin/orders/${orderId}/expected-dates`, {
         method: "PUT",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json"
-        },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(expectedDatesData)
       });
 
@@ -325,7 +412,6 @@ export default function OrderDetail() {
         expectedOutForDeliveryDate: "",
         note: ""
       });
-
       alert("Expected delivery dates updated successfully!");
     } catch (err) {
       console.error("Error updating expected dates:", err);
@@ -346,10 +432,7 @@ export default function OrderDetail() {
 
       const res = await fetch(`${API_URL}/admin/orders/${orderId}/delay`, {
         method: "PUT",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json"
-        },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           isDelayed: true,
           delayReason: delayData.delayReason,
@@ -365,7 +448,6 @@ export default function OrderDetail() {
       await fetchOrder();
       setShowDelayModal(false);
       setDelayData({ delayReason: "", newExpectedDeliveryDate: "" });
-
       alert("Order marked as delayed!");
     } catch (err) {
       console.error("Error marking delayed:", err);
@@ -381,13 +463,8 @@ export default function OrderDetail() {
 
       const res = await fetch(`${API_URL}/admin/orders/${orderId}/delay`, {
         method: "PUT",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          isDelayed: false
-        })
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ isDelayed: false })
       });
 
       if (!res.ok) {
@@ -408,21 +485,15 @@ export default function OrderDetail() {
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
     });
   };
 
   const formatDateShort = (dateString) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString("en-IN", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric"
+      weekday: "short", day: "numeric", month: "short", year: "numeric"
     });
   };
 
@@ -434,7 +505,6 @@ export default function OrderDetail() {
     return new Date().toISOString().split("T")[0];
   };
 
-  // Get icon for tracking step
   const getStepIcon = (key) => {
     const iconMap = {
       pending: Icons.clock,
@@ -448,7 +518,6 @@ export default function OrderDetail() {
     return iconMap[key] || Icons.clock;
   };
 
-  // Build tracking timeline for display
   const buildTrackingTimeline = () => {
     const allSteps = [
       { key: "pending", label: "Order Placed" },
@@ -461,12 +530,9 @@ export default function OrderDetail() {
 
     if (order?.status === "cancelled") {
       return [{
-        key: "cancelled",
-        label: "Cancelled",
-        isCompleted: true,
-        isCurrent: true,
-        date: order.cancelledAt,
-        note: order.cancellation?.reason
+        key: "cancelled", label: "Cancelled",
+        isCompleted: true, isCurrent: true,
+        date: order.cancelledAt, note: order.cancellation?.reason
       }];
     }
 
@@ -477,11 +543,8 @@ export default function OrderDetail() {
       const isCompleted = index <= currentIndex;
       const isCurrent = index === currentIndex;
       const isPending = index > currentIndex;
-
-      // Get expected date from expectedTimeline
       const expectedInfo = order?.expectedTimeline?.[step.key];
-      
-      // Get actual date from status history
+
       let actualDate = null;
       if (step.key === "pending") {
         actualDate = order?.createdAt;
@@ -490,19 +553,13 @@ export default function OrderDetail() {
         actualDate = historyEntry?.timestamp || expectedInfo?.actualDate;
       }
 
-      // Check if delayed
       const now = new Date();
       const isDelayed = isPending && expectedInfo?.expectedDate && now > new Date(expectedInfo.expectedDate);
 
       return {
-        ...step,
-        isCompleted,
-        isCurrent,
-        isPending,
-        isDelayed,
+        ...step, isCompleted, isCurrent, isPending, isDelayed,
         expectedDate: expectedInfo?.expectedDate,
-        actualDate,
-        note: expectedInfo?.note
+        actualDate, note: expectedInfo?.note
       };
     });
   };
@@ -545,6 +602,10 @@ export default function OrderDetail() {
   const currentStatus = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
   const nextStatuses = order.nextStatuses || [];
   const trackingTimeline = buildTrackingTimeline();
+  const outstanding = Math.max(0, order.totalAmount - (order.payment?.amountPaid || 0));
+
+  // Credit that can actually be applied (min of credit balance and outstanding)
+  const applicableCredit = Math.min(customerCreditBalance, outstanding);
 
   return (
     <ProtectedPage permission="manageOrders">
@@ -552,34 +613,22 @@ export default function OrderDetail() {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Link
-              href="/admin/orders"
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
+            <Link href="/admin/orders" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
               {Icons.arrowLeft}
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Order #{order.orderNumber}
-              </h1>
-              <p className="text-gray-900">
-                Placed on {formatDate(order.createdAt)}
-              </p>
+              <h1 className="text-2xl font-bold text-gray-900">Order #{order.orderNumber}</h1>
+              <p className="text-gray-900">Placed on {formatDate(order.createdAt)}</p>
             </div>
           </div>
-
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Delay Badge */}
             {order.isDelayed && (
               <span className="px-3 py-1.5 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300 flex items-center gap-1.5">
-                {Icons.warning}
-                Delayed
+                {Icons.warning} Delayed
               </span>
             )}
-            {/* Current Status Badge */}
             <span className={`px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5 ${currentStatus.color}`}>
-              {currentStatus.icon}
-              {currentStatus.label}
+              {currentStatus.icon} {currentStatus.label}
             </span>
           </div>
         </div>
@@ -587,14 +636,10 @@ export default function OrderDetail() {
         {/* Delay Banner */}
         {order.isDelayed && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3">
-            <div className="text-yellow-600 flex-shrink-0 mt-0.5">
-              {Icons.warning}
-            </div>
+            <div className="text-yellow-600 flex-shrink-0 mt-0.5">{Icons.warning}</div>
             <div className="flex-1">
               <h3 className="font-semibold text-yellow-800">Order Delayed</h3>
-              {order.delayReason && (
-                <p className="text-yellow-700 text-sm mt-1">{order.delayReason}</p>
-              )}
+              {order.delayReason && <p className="text-yellow-700 text-sm mt-1">{order.delayReason}</p>}
               {order.expectedDeliveryDate && (
                 <p className="text-yellow-600 text-sm mt-1">
                   New expected delivery: {formatDateShort(order.expectedDeliveryDate)}
@@ -606,8 +651,7 @@ export default function OrderDetail() {
               disabled={updating}
               className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1.5"
             >
-              {Icons.check}
-              Mark On-Time
+              {Icons.check} Mark On-Time
             </button>
           </div>
         )}
@@ -616,7 +660,7 @@ export default function OrderDetail() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Order Items */}
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="bg-white mt-2 rounded-2xl border border-gray-100 overflow-hidden">
               <div className="p-6 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Order Items</h2>
               </div>
@@ -630,18 +674,12 @@ export default function OrderDetail() {
                           alt={item.productSnapshot.title}
                           className="w-full h-full object-cover"
                         />
-                      ) : (
-                        Icons.cube
-                      )}
+                      ) : Icons.cube}
                     </div>
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-900">{item.productSnapshot?.title}</h3>
-                      <p className="text-sm text-gray-900">
-                        {item.productSnapshot?.brand} • {item.productSnapshot?.unit}
-                      </p>
-                      <p className="text-sm text-gray-900 mt-1">
-                        {formatCurrency(item.unitPrice)} × {item.quantity}
-                      </p>
+                      <p className="text-sm text-gray-900">{item.productSnapshot?.brand} • {item.productSnapshot?.unit}</p>
+                      <p className="text-sm text-gray-900 mt-1">{formatCurrency(item.unitPrice)} × {item.quantity}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">{formatCurrency(item.subtotal)}</p>
@@ -676,33 +714,28 @@ export default function OrderDetail() {
             </div>
 
             {/* Order Tracking Timeline */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white mt-2 rounded-2xl border border-gray-100 p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-gray-900">Order Tracking</h2>
                 {order.expectedDeliveryDate && (
                   <div className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 ${
-                    order.isDelayed 
-                      ? "bg-yellow-100 text-yellow-800" 
-                      : "bg-green-100 text-green-800"
+                    order.isDelayed ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"
                   }`}>
                     {order.isDelayed ? Icons.warning : Icons.calendar}
                     Expected: {formatDateShort(order.expectedDeliveryDate)}
                   </div>
                 )}
               </div>
-
               <div className="space-y-0">
                 {trackingTimeline.map((step, index) => {
                   const isLast = index === trackingTimeline.length - 1;
                   const stepIcon = getStepIcon(step.key);
-
                   return (
                     <div key={step.key} className="flex gap-4">
-                      {/* Left - Line and Dot */}
                       <div className="flex flex-col items-center">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                          step.isCompleted 
-                            ? "bg-amber-400 border-amber-400 text-white" 
+                          step.isCompleted
+                            ? "bg-amber-400 border-amber-400 text-white"
                             : step.isDelayed
                             ? "bg-yellow-100 border-yellow-400 text-yellow-600"
                             : "bg-gray-100 border-gray-300 text-gray-400"
@@ -711,38 +744,26 @@ export default function OrderDetail() {
                         </div>
                         {!isLast && (
                           <div className={`w-0.5 h-12 my-1 ${
-                            step.isCompleted && !step.isCurrent
-                              ? "bg-amber-400"
-                              : "bg-gray-200"
+                            step.isCompleted && !step.isCurrent ? "bg-amber-400" : "bg-gray-200"
                           }`}></div>
                         )}
                       </div>
-
-                      {/* Right - Content */}
                       <div className="flex-1 pb-6">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className={`font-semibold ${
-                            step.isCompleted 
-                              ? "text-gray-900" 
-                              : step.isDelayed 
-                              ? "text-yellow-700"
-                              : "text-gray-400"
+                            step.isCompleted ? "text-gray-900"
+                            : step.isDelayed ? "text-yellow-700"
+                            : "text-gray-400"
                           }`}>
                             {step.label}
                           </h3>
                           {step.isDelayed && (
-                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
-                              Delayed
-                            </span>
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">Delayed</span>
                           )}
                           {step.isCurrent && !step.isCompleted && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                              Current
-                            </span>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Current</span>
                           )}
                         </div>
-
-                        {/* Dates */}
                         {step.isCompleted && step.actualDate && (
                           <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -752,18 +773,14 @@ export default function OrderDetail() {
                           </p>
                         )}
                         {step.isPending && step.expectedDate && (
-                          <p className={`text-sm mt-1 flex items-center gap-1 ${
-                            step.isDelayed ? "text-yellow-600" : "text-gray-900"
-                          }`}>
+                          <p className={`text-sm mt-1 flex items-center gap-1 ${step.isDelayed ? "text-yellow-600" : "text-gray-900"}`}>
                             {step.isDelayed && Icons.warning}
                             {step.isDelayed ? "Was expected by: " : "Expected by: "}
                             {formatDateShort(step.expectedDate)}
                           </p>
                         )}
                         {step.note && (
-                          <p className="text-sm text-gray-900 mt-1 italic">
-                            Note: {step.note}
-                          </p>
+                          <p className="text-sm text-gray-900 mt-1 italic">Note: {step.note}</p>
                         )}
                       </div>
                     </div>
@@ -773,13 +790,12 @@ export default function OrderDetail() {
             </div>
 
             {/* Status History */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white mt-2 rounded-2xl border border-gray-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Status History</h2>
               <div className="space-y-4">
                 {order.statusHistory?.map((history, index) => {
                   const statusConf = STATUS_CONFIG[history.status] || STATUS_CONFIG.pending;
                   const isLast = index === order.statusHistory.length - 1;
-
                   return (
                     <div key={index} className="flex gap-4">
                       <div className="flex flex-col items-center">
@@ -788,18 +804,14 @@ export default function OrderDetail() {
                         }`}>
                           {statusConf.icon}
                         </div>
-                        {!isLast && (
-                          <div className="w-0.5 h-full min-h-[40px] bg-gray-200 my-1"></div>
-                        )}
+                        {!isLast && <div className="w-0.5 h-full min-h-[40px] bg-gray-200 my-1"></div>}
                       </div>
                       <div className="flex-1 pb-4">
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <h3 className="font-semibold text-gray-900">{statusConf.label}</h3>
                           <span className="text-sm text-gray-900">{formatDate(history.timestamp)}</span>
                         </div>
-                        {history.note && (
-                          <p className="text-sm text-gray-900 mt-1">{history.note}</p>
-                        )}
+                        {history.note && <p className="text-sm text-gray-900 mt-1">{history.note}</p>}
                       </div>
                     </div>
                   );
@@ -817,27 +829,21 @@ export default function OrderDetail() {
               {/* Update Status */}
               {nextStatuses.length > 0 && order.status !== "delivered" && order.status !== "cancelled" && (
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Update Status
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">Update Status</label>
                   <div className="flex flex-wrap gap-2">
                     {nextStatuses.map((status) => {
                       const conf = STATUS_CONFIG[status];
                       return (
                         <button
                           key={status}
-                          onClick={() => {
-                            setSelectedStatus(status);
-                            setShowStatusModal(true);
-                          }}
+                          onClick={() => { setSelectedStatus(status); setShowStatusModal(true); }}
                           className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-colors flex items-center gap-1.5 ${
                             status === "cancelled"
                               ? "border-red-200 text-red-700 hover:bg-red-50"
                               : "border-amber-200 text-amber-700 hover:bg-amber-50"
                           }`}
                         >
-                          {conf?.icon}
-                          {conf?.label || status}
+                          {conf?.icon} {conf?.label || status}
                         </button>
                       );
                     })}
@@ -852,9 +858,7 @@ export default function OrderDetail() {
                 }`}>
                   {order.status === "delivered" ? Icons.delivered : Icons.cancel}
                   <p className="text-sm font-medium">
-                    {order.status === "delivered" 
-                      ? "This order has been delivered" 
-                      : "This order has been cancelled"}
+                    {order.status === "delivered" ? "This order has been delivered" : "This order has been cancelled"}
                   </p>
                 </div>
               )}
@@ -869,43 +873,83 @@ export default function OrderDetail() {
                     {PAYMENT_STATUS_CONFIG[order.paymentStatus]?.label || order.paymentStatus}
                   </span>
                 </div>
+
                 <div className="text-sm text-gray-900 mb-3">
                   <p>Paid: {formatCurrency(order.payment?.amountPaid || 0)}</p>
-                  <p>Outstanding: {formatCurrency(order.outstandingAmount || 0)}</p>
+                  <p>Outstanding: {formatCurrency(outstanding)}</p>
                 </div>
+
+                {/* ✅ NEW: Customer Credit Balance info */}
+                {customerCreditBalance > 0 && outstanding > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      <div>
+                        <p className="text-xs font-semibold text-blue-800">Customer has credit balance</p>
+                        <p className="text-xs text-blue-600">
+                          {formatCurrency(customerCreditBalance)} available
+                          {applicableCredit < outstanding
+                            ? ` (can cover ${formatCurrency(applicableCredit)} of ${formatCurrency(outstanding)})`
+                            : " (enough to cover full outstanding)"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {order.status !== "cancelled" && order.paymentStatus !== "paid" && (
-                  <button
-                    onClick={() => {
-                      setPaymentData({
-                        paymentStatus: "paid",
-                        amountPaid: order.totalAmount,
-                        method: "cash",
-                        notes: ""
-                      });
-                      setShowPaymentModal(true);
-                    }}
-                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2"
-                  >
-                    {Icons.money}
-                    Mark as Paid
-                  </button>
+                  <div className="space-y-2">
+                    {/* Record Cash Payment */}
+                    <button
+                      onClick={() => {
+                        setPaymentData({
+                          paymentStatus: "",
+                          amountPaid: outstanding.toString(),
+                          method: "cash",
+                          notes: ""
+                        });
+                        setShowPaymentModal(true);
+                      }}
+                      className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 
+                                 transition-colors font-medium flex items-center justify-center gap-2"
+                    >
+                      {Icons.money}
+                      Record Payment
+                    </button>
+
+                    {/* ✅ NEW: Use Credit Balance button */}
+                    {customerCreditBalance > 0 && outstanding > 0 && (
+                      <button
+                        onClick={() => {
+                          setCreditData({
+                            amount: Math.min(customerCreditBalance, outstanding).toString(),
+                            notes: ""
+                          });
+                          setShowCreditModal(true);
+                        }}
+                        className="w-full px-4 py-2 mt-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
+                                   transition-colors font-medium flex items-center justify-center gap-2"
+                      >
+                        {Icons.credit}
+                        Use Credit Balance ({formatCurrency(customerCreditBalance)})
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
 
             {/* Delivery Schedule Card */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white mt-2 rounded-2xl border border-gray-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                {Icons.calendar}
-                Delivery Schedule
+                {Icons.calendar} Delivery Schedule
               </h2>
-              
-              {/* Current Expected Date */}
               {order.expectedDeliveryDate ? (
                 <div className={`p-4 rounded-lg mb-4 ${
-                  order.isDelayed 
-                    ? "bg-yellow-50 border border-yellow-200" 
-                    : "bg-green-50 border border-green-200"
+                  order.isDelayed ? "bg-yellow-50 border border-yellow-200" : "bg-green-50 border border-green-200"
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
                     {order.isDelayed ? (
@@ -917,63 +961,52 @@ export default function OrderDetail() {
                       {order.isDelayed ? "Delayed" : "On Track"}
                     </span>
                   </div>
-                  <p className="text-gray-900 font-medium">
-                    Expected: {formatDateShort(order.expectedDeliveryDate)}
-                  </p>
+                  <p className="text-gray-900 font-medium">Expected: {formatDateShort(order.expectedDeliveryDate)}</p>
                   {order.isDelayed && order.delayReason && (
-                    <p className="text-yellow-700 text-sm mt-2">
-                      Reason: {order.delayReason}
-                    </p>
+                    <p className="text-yellow-700 text-sm mt-2">Reason: {order.delayReason}</p>
                   )}
                 </div>
               ) : (
                 <div className="p-4 bg-gray-50 rounded-lg mb-4 border border-dashed border-gray-300">
-                  <p className="text-gray-900 text-sm text-center">
-                    No expected delivery date set
-                  </p>
+                  <p className="text-gray-900 text-sm text-center">No expected delivery date set</p>
                 </div>
               )}
 
-              {/* Actions for non-completed orders */}
               {order.status !== "delivered" && order.status !== "cancelled" && (
                 <div className="space-y-3">
-                  {/* Set/Update Expected Date */}
                   <button
                     onClick={() => {
                       setExpectedDatesData({
                         ...expectedDatesData,
-                        expectedDeliveryDate: order.expectedDeliveryDate 
+                        expectedDeliveryDate: order.expectedDeliveryDate
                           ? new Date(order.expectedDeliveryDate).toISOString().split("T")[0]
                           : ""
                       });
                       setShowExpectedDatesModal(true);
                     }}
-                    className="w-full px-4 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-medium flex items-center justify-center gap-2"
+                    className="w-full px-4 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 
+                               transition-colors font-medium flex items-center justify-center gap-2"
                   >
                     {Icons.calendar}
                     {order.expectedDeliveryDate ? "Update Delivery Date" : "Set Delivery Date"}
                   </button>
-
-                  {/* Mark as Delayed */}
                   {order.expectedDeliveryDate && !order.isDelayed && (
                     <button
                       onClick={() => setShowDelayModal(true)}
-                      className="w-full px-4 py-2.5 border-2 border-yellow-400 text-yellow-700 rounded-lg hover:bg-yellow-50 transition-colors font-medium flex items-center justify-center gap-2"
+                      className="w-full px-4 py-2.5 border-2 border-yellow-400 text-yellow-700 rounded-lg 
+                                 hover:bg-yellow-50 transition-colors font-medium flex items-center justify-center gap-2"
                     >
-                      {Icons.warning}
-                      Mark as Delayed
+                      {Icons.warning} Mark as Delayed
                     </button>
                   )}
-
-                  {/* Remove Delay */}
                   {order.isDelayed && (
                     <button
                       onClick={removeDelay}
                       disabled={updating}
-                      className="w-full px-4 py-2.5 border-2 border-green-400 text-green-700 rounded-lg hover:bg-green-50 transition-colors font-medium flex items-center justify-center gap-2"
+                      className="w-full px-4 py-2.5 border-2 border-green-400 text-green-700 rounded-lg 
+                                 hover:bg-green-50 transition-colors font-medium flex items-center justify-center gap-2"
                     >
-                      {Icons.checkCircle}
-                      Mark as On-Time
+                      {Icons.checkCircle} Mark as On-Time
                     </button>
                   )}
                 </div>
@@ -981,7 +1014,7 @@ export default function OrderDetail() {
             </div>
 
             {/* Customer Info */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white mt-2 rounded-2xl border border-gray-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer</h2>
               <div className="space-y-3">
                 <div>
@@ -1000,11 +1033,18 @@ export default function OrderDetail() {
                     <p className="font-medium text-gray-900">{order.customerSnapshot.businessName}</p>
                   </div>
                 )}
+                {/* ✅ NEW: Show credit balance in customer card */}
+                {customerCreditBalance > 0 && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-sm text-gray-900">Credit Balance</p>
+                    <p className="font-semibold text-blue-600">{formatCurrency(customerCreditBalance)}</p>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Delivery Address */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white mt-2 rounded-2xl border border-gray-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Delivery Address</h2>
               {order.deliveryAddress && (
                 <div className="space-y-2 text-sm">
@@ -1017,22 +1057,20 @@ export default function OrderDetail() {
                     {order.deliveryAddress.city}, {order.deliveryAddress.state} - {order.deliveryAddress.pincode}
                   </p>
                   <p className="text-gray-900 pt-2 flex items-center gap-1.5">
-                    {Icons.phone}
-                    {order.deliveryAddress.contactPhone}
+                    {Icons.phone} {order.deliveryAddress.contactPhone}
                   </p>
                   {order.deliveryAddress.deliveryInstructions && (
                     <p className="text-gray-900 italic pt-2 flex items-start gap-1.5">
-                      {Icons.note}
-                      {order.deliveryAddress.deliveryInstructions}
+                      {Icons.note} {order.deliveryAddress.deliveryInstructions}
                     </p>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Notes */}
+            {/* Customer Notes */}
             {order.customerNotes && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="bg-white  rounded-2xl border border-gray-100 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Notes</h2>
                 <p className="text-sm text-gray-900 italic">"{order.customerNotes}"</p>
               </div>
@@ -1041,13 +1079,11 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* Status Update Modal */}
+      {/* ── Status Update Modal ── */}
       {showStatusModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Update Order Status
-            </h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Update Order Status</h3>
             <div className="mb-4">
               <p className="text-sm text-gray-900 mb-2">
                 Change status from <strong>{STATUS_CONFIG[order.status]?.label}</strong> to{" "}
@@ -1055,30 +1091,22 @@ export default function OrderDetail() {
               </p>
               <div className={`p-3 rounded-lg flex items-center gap-2 ${STATUS_CONFIG[selectedStatus]?.color || "bg-gray-100"}`}>
                 {STATUS_CONFIG[selectedStatus]?.icon}
-                <p className="text-sm">
-                  {STATUS_CONFIG[selectedStatus]?.description}
-                </p>
+                <p className="text-sm">{STATUS_CONFIG[selectedStatus]?.description}</p>
               </div>
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Note (optional)
-              </label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Note (optional)</label>
               <textarea
                 value={statusNote}
                 onChange={(e) => setStatusNote(e.target.value)}
                 placeholder="Add a note about this status change..."
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
                 rows={3}
               />
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  setShowStatusModal(false);
-                  setSelectedStatus("");
-                  setStatusNote("");
-                }}
+                onClick={() => { setShowStatusModal(false); setSelectedStatus(""); setStatusNote(""); }}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-900 rounded-lg hover:bg-gray-50 font-medium"
                 disabled={updating}
               >
@@ -1100,64 +1128,58 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {/* Payment Update Modal */}
+      {/* ── Payment Record Modal ── */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Update Payment Status
-            </h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Record Payment</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Payment Status
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Amount to Record *</label>
+                <input
+                  type="number"
+                  value={paymentData.amountPaid}
+                  onChange={(e) => setPaymentData({ ...paymentData, amountPaid: e.target.value })}
+                  placeholder="Enter amount"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
+                  step="0.01"
+                  min="0"
+                />
+                <p className="text-xs text-gray-900 mt-1">Outstanding: {formatCurrency(outstanding)}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Payment Status (optional)</label>
                 <select
                   value={paymentData.paymentStatus}
                   onChange={(e) => setPaymentData({ ...paymentData, paymentStatus: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
                 >
-                  <option value="" className="text-gray-500">Select Status</option>
-                  <option value="pending" className="text-gray-900">Pending</option>
-                  <option value="partial" className="text-gray-900">Partial</option>
-                  <option value="paid" className="text-gray-900">Paid</option>
+                  <option value="">Let system decide (recommended)</option>
+                  <option value="pending">Pending</option>
+                  <option value="partial">Partial</option>
+                  <option value="paid">Paid</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Amount Paid
-                </label>
-                <input
-                  type="number"
-                  value={paymentData.amountPaid}
-                  onChange={(e) => setPaymentData({ ...paymentData, amountPaid: Number(e.target.value) })}
-                  placeholder="Enter amount"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 placeholder:text-gray-500"
-                  max={order.totalAmount}
-                />
-                <p className="text-xs text-gray-900 mt-1">Order Total: {formatCurrency(order.totalAmount)}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Payment Method
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Payment Method</label>
                 <select
                   value={paymentData.method}
                   onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
                 >
-                  <option value="cash" className="text-gray-900">Cash</option>
-                  <option value="bank_transfer" className="text-gray-900">Bank Transfer</option>
-                  <option value="upi" className="text-gray-900">UPI</option>
-                  <option value="cheque" className="text-gray-900">Cheque</option>
-                  <option value="credit" className="text-gray-900">Credit</option>
-                  <option value="other" className="text-gray-900">Other</option>
+                  <option value="cash">Cash</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="upi">UPI</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="credit">Credit</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Notes
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Notes (optional)</label>
                 <textarea
                   value={paymentData.notes}
                   onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
@@ -1166,13 +1188,32 @@ export default function OrderDetail() {
                   rows={2}
                 />
               </div>
+
+              {paymentData.amountPaid && (
+                <div className={`p-3 rounded-lg border ${
+                  parseFloat(paymentData.amountPaid) > outstanding
+                    ? "bg-blue-50 border-blue-200"
+                    : "bg-amber-50 border-amber-200"
+                }`}>
+                  {parseFloat(paymentData.amountPaid) > outstanding && outstanding > 0 ? (
+                    <>
+                      <p className="text-sm font-semibold text-blue-800 mb-1">Overpayment — Credit will be created</p>
+                      <p className="text-sm text-gray-900">Applied to order: <span className="font-bold text-green-700">{formatCurrency(outstanding)}</span></p>
+                      <p className="text-sm text-gray-900 mt-1">Added as credit: <span className="font-bold text-blue-700">{formatCurrency(parseFloat(paymentData.amountPaid) - outstanding)}</span></p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-900">Recording: <span className="font-bold">{formatCurrency(parseFloat(paymentData.amountPaid) || 0)}</span></p>
+                      <p className="text-sm text-gray-900 mt-1">Remaining after: <span className="font-bold">{formatCurrency(Math.max(0, outstanding - (parseFloat(paymentData.amountPaid) || 0)))}</span></p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
+
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setPaymentData({ paymentStatus: "", amountPaid: 0, method: "cash", notes: "" });
-                }}
+                onClick={() => { setShowPaymentModal(false); setPaymentData({ paymentStatus: "", amountPaid: "", method: "cash", notes: "" }); }}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-900 rounded-lg hover:bg-gray-50 font-medium"
                 disabled={updating}
               >
@@ -1180,36 +1221,165 @@ export default function OrderDetail() {
               </button>
               <button
                 onClick={updatePaymentStatus}
-                disabled={updating || !paymentData.paymentStatus}
+                disabled={updating || !paymentData.amountPaid}
                 className={`flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium ${
-                  (updating || !paymentData.paymentStatus) ? "opacity-50 cursor-not-allowed" : ""
+                  (updating || !paymentData.amountPaid) ? "opacity-50 cursor-not-allowed" : ""
                 }`}
               >
-                {updating ? "Updating..." : "Update Payment"}
+                {updating ? "Recording..." : "Record Payment"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Expected Dates Modal */}
+      {/* ✅ NEW: Credit Balance Modal */}
+      {showCreditModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              Apply Credit Balance
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Use customer's existing credit balance to pay for this order
+            </p>
+
+            {/* Credit Summary */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-blue-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-blue-600 mb-1">Available Credit</p>
+                <p className="font-bold text-blue-800">{formatCurrency(customerCreditBalance)}</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-red-600 mb-1">Outstanding</p>
+                <p className="font-bold text-red-800">{formatCurrency(outstanding)}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-green-600 mb-1">Can Apply</p>
+                <p className="font-bold text-green-800">{formatCurrency(applicableCredit)}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Amount to Apply *</label>
+                <input
+                  type="number"
+                  value={creditData.amount}
+                  onChange={(e) => setCreditData({ ...creditData, amount: e.target.value })}
+                  placeholder="Enter amount"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-500"
+                  step="0.01"
+                  min="0.01"
+                  max={applicableCredit}
+                />
+                <div className="flex justify-between mt-1">
+                  <p className="text-xs text-gray-500">Max: {formatCurrency(applicableCredit)}</p>
+                  <button
+                    type="button"
+                    onClick={() => setCreditData({ ...creditData, amount: applicableCredit.toString() })}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                  >
+                    Apply Max
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Notes (optional)</label>
+                <textarea
+                  value={creditData.notes}
+                  onChange={(e) => setCreditData({ ...creditData, notes: e.target.value })}
+                  placeholder="Reason for applying credit..."
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-500"
+                  rows={2}
+                />
+              </div>
+
+              {/* Preview */}
+              {creditData.amount && parseFloat(creditData.amount) > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1.5">
+                  <p className="text-sm font-semibold text-blue-800">Summary</p>
+                  <p className="text-sm text-gray-900">
+                    Credit applied: <span className="font-bold text-blue-700">{formatCurrency(Math.min(parseFloat(creditData.amount), applicableCredit))}</span>
+                  </p>
+                  <p className="text-sm text-gray-900">
+                    Remaining outstanding: <span className="font-bold">
+                      {formatCurrency(Math.max(0, outstanding - Math.min(parseFloat(creditData.amount), applicableCredit)))}
+                    </span>
+                  </p>
+                  <p className="text-sm text-gray-900">
+                    Remaining credit balance: <span className="font-bold text-blue-700">
+                      {formatCurrency(Math.max(0, customerCreditBalance - Math.min(parseFloat(creditData.amount), applicableCredit)))}
+                    </span>
+                  </p>
+                  {Math.min(parseFloat(creditData.amount), applicableCredit) >= outstanding && (
+                    <p className="text-xs font-semibold text-green-700 flex items-center gap-1 mt-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      This will fully pay the order
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setShowCreditModal(false); setCreditData({ amount: "", notes: "" }); }}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-900 rounded-lg hover:bg-gray-50 font-medium"
+                disabled={updating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={applyCreditBalance}
+                disabled={updating || !creditData.amount || parseFloat(creditData.amount) <= 0}
+                className={`flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2 ${
+                  (updating || !creditData.amount || parseFloat(creditData.amount) <= 0)
+                    ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                {updating ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Applying...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Apply Credit
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Expected Dates Modal ── */}
       {showExpectedDatesModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              {Icons.calendar}
-              Set Expected Delivery Dates
+              {Icons.calendar} Set Expected Delivery Dates
             </h3>
             <p className="text-sm text-gray-900 mb-4">
               Set the expected delivery date. The system will automatically calculate expected dates for each step.
             </p>
-            
             <div className="space-y-4">
-              {/* Main Delivery Date */}
               <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Expected Delivery Date *
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Expected Delivery Date *</label>
                 <input
                   type="date"
                   value={expectedDatesData.expectedDeliveryDate}
@@ -1218,66 +1388,31 @@ export default function OrderDetail() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                 />
               </div>
-
-              {/* Optional: Individual Step Dates */}
               <details className="border border-gray-200 rounded-lg">
                 <summary className="px-4 py-3 cursor-pointer font-medium text-gray-900 hover:bg-gray-50 flex items-center gap-2">
-                  {Icons.settings}
-                  Advanced: Set individual step dates (optional)
+                  {Icons.settings} Advanced: Set individual step dates (optional)
                 </summary>
                 <div className="p-4 space-y-4 border-t border-gray-200">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Expected Confirm Date
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={expectedDatesData.expectedConfirmDate}
-                      onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedConfirmDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Expected Pack Date
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={expectedDatesData.expectedPackDate}
-                      onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedPackDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Expected Ship Date
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={expectedDatesData.expectedShipDate}
-                      onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedShipDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Expected Out for Delivery Date
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={expectedDatesData.expectedOutForDeliveryDate}
-                      onChange={(e) => setExpectedDatesData({ ...expectedDatesData, expectedOutForDeliveryDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
-                    />
-                  </div>
+                  {[
+                    { label: "Expected Confirm Date", key: "expectedConfirmDate" },
+                    { label: "Expected Pack Date", key: "expectedPackDate" },
+                    { label: "Expected Ship Date", key: "expectedShipDate" },
+                    { label: "Expected Out for Delivery Date", key: "expectedOutForDeliveryDate" }
+                  ].map(({ label, key }) => (
+                    <div key={key}>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">{label}</label>
+                      <input
+                        type="datetime-local"
+                        value={expectedDatesData[key]}
+                        onChange={(e) => setExpectedDatesData({ ...expectedDatesData, [key]: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
+                      />
+                    </div>
+                  ))}
                 </div>
               </details>
-
-              {/* Note */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Note (optional)
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Note (optional)</label>
                 <textarea
                   value={expectedDatesData.note}
                   onChange={(e) => setExpectedDatesData({ ...expectedDatesData, note: e.target.value })}
@@ -1287,18 +1422,14 @@ export default function OrderDetail() {
                 />
               </div>
             </div>
-
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => {
                   setShowExpectedDatesModal(false);
                   setExpectedDatesData({
-                    expectedDeliveryDate: "",
-                    expectedConfirmDate: "",
-                    expectedPackDate: "",
-                    expectedShipDate: "",
-                    expectedOutForDeliveryDate: "",
-                    note: ""
+                    expectedDeliveryDate: "", expectedConfirmDate: "",
+                    expectedPackDate: "", expectedShipDate: "",
+                    expectedOutForDeliveryDate: "", note: ""
                   });
                 }}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-900 rounded-lg hover:bg-gray-50 font-medium"
@@ -1320,7 +1451,7 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {/* Delay Modal */}
+      {/* ── Delay Modal ── */}
       {showDelayModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
@@ -1328,12 +1459,9 @@ export default function OrderDetail() {
               <div className="text-yellow-600">{Icons.warning}</div>
               Mark Order as Delayed
             </h3>
-            
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Delay Reason *
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Delay Reason *</label>
                 <textarea
                   value={delayData.delayReason}
                   onChange={(e) => setDelayData({ ...delayData, delayReason: e.target.value })}
@@ -1342,11 +1470,8 @@ export default function OrderDetail() {
                   rows={3}
                 />
               </div>
-              
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  New Expected Delivery Date (optional)
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">New Expected Delivery Date (optional)</label>
                 <input
                   type="date"
                   value={delayData.newExpectedDeliveryDate}
@@ -1355,17 +1480,13 @@ export default function OrderDetail() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900"
                 />
                 <p className="text-xs text-gray-900 mt-1">
-                  Leave empty to keep current expected date: {order.expectedDeliveryDate ? formatDateShort(order.expectedDeliveryDate) : "Not set"}
+                  Leave empty to keep current: {order.expectedDeliveryDate ? formatDateShort(order.expectedDeliveryDate) : "Not set"}
                 </p>
               </div>
             </div>
-
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => {
-                  setShowDelayModal(false);
-                  setDelayData({ delayReason: "", newExpectedDeliveryDate: "" });
-                }}
+                onClick={() => { setShowDelayModal(false); setDelayData({ delayReason: "", newExpectedDeliveryDate: "" }); }}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-900 rounded-lg hover:bg-gray-50 font-medium"
                 disabled={updating}
               >

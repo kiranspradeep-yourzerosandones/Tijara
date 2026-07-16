@@ -361,19 +361,28 @@ export default function ManageUsersPage() {
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-gray-500 text-xs">Credit Limit</p>
-                        <p className="font-semibold text-gray-900">
-                          {formatCurrency(user.creditLimit)}
-                        </p>
-                      </div>
-                      <div className="bg-orange-50 rounded-lg p-3">
-                        <p className="text-orange-600 text-xs">Pending</p>
-                        <p className="font-semibold text-orange-700">
-                          {formatCurrency(user.pendingAmount)}
-                        </p>
-                      </div>
-                    </div>
+  <div className="bg-gray-50 rounded-lg p-3">
+    <p className="text-gray-500 text-xs">Credit Limit</p>
+    <p className="font-semibold text-gray-900">
+      {formatCurrency(user.creditLimit)}
+    </p>
+  </div>
+  <div className="bg-orange-50 rounded-lg p-3">
+    <p className="text-orange-600 text-xs">Pending</p>
+    <p className="font-semibold text-orange-700">
+      {formatCurrency(user.pendingAmount)}
+    </p>
+  </div>
+  {/* ✅ NEW: Credit balance card */}
+  {user.creditBalance > 0 && (
+    <div className="col-span-2 bg-blue-50 rounded-lg p-3">
+      <p className="text-blue-600 text-xs">Credit Balance (Overpayment)</p>
+      <p className="font-semibold text-blue-700">
+        {formatCurrency(user.creditBalance)}
+      </p>
+    </div>
+  )}
+</div>
                     <div className="flex gap-2 mt-3">
                       <Link
                         href={`/admin/users/${user._id}`}
@@ -466,16 +475,22 @@ export default function ManageUsersPage() {
                             <p className="text-sm text-gray-400">{user.businessType}</p>
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm">
-                            <p className="text-gray-900 font-semibold">
-                              {formatCurrency(user.creditLimit)}
-                            </p>
-                            <p className="text-orange-600">
-                              Pending: {formatCurrency(user.pendingAmount)}
-                            </p>
-                          </div>
-                        </td>
+                       <td className="px-6 py-4">
+  <div className="text-sm">
+    <p className="text-gray-900 font-semibold">
+      {formatCurrency(user.creditLimit)}
+    </p>
+    <p className="text-orange-600">
+      Pending: {formatCurrency(user.pendingAmount)}
+    </p>
+    {/* ✅ NEW: Show credit balance */}
+    {user.creditBalance > 0 && (
+      <p className="text-blue-600 font-medium">
+        Credit: {formatCurrency(user.creditBalance)}
+      </p>
+    )}
+  </div>
+</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
                             <span

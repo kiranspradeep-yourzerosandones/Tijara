@@ -1,30 +1,33 @@
 // frontend/lib/api.js
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-// Get auth token
 const getToken = () => {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("token");
-  }
-  return null;
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token") || null;
 };
 
-// Get auth headers
 export const getAuthHeaders = () => {
   const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (!token) {
+    console.warn("⚠️ No auth token found in localStorage");
+    return {};
+  }
+  return { Authorization: `Bearer ${token}` };
 };
 
-// Handle API response
 const handleResponse = async (response) => {
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(`Non-JSON response from server (HTTP ${response.status})`);
+  }
   if (!response.ok) {
-    throw new Error(data.message || "Request failed");
+    throw new Error(data.message || `HTTP ${response.status}`);
   }
   return data;
 };
 
-// API request helper
 const apiRequest = async (endpoint, options = {}) => {
   const token = getToken();
 
@@ -33,364 +36,278 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  // Don't set Content-Type for FormData
   if (!(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
 
-  const config = {
+  const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,
-  };
+  });
 
-  const response = await fetch(`${API_URL}${endpoint}`, config);
   return handleResponse(response);
 };
 
-// ==================== USER API ====================
-
+// ============================================================
+// USER / CUSTOMER API
+// ============================================================
 export const userAPI = {
-  getAll: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/customers?${query}`);
-  },
+  getAll: (params = {}) =>
+    apiRequest(`/admin/customers?${new URLSearchParams(params)}`),
 
-  getById: async (id) => {
-    return apiRequest(`/admin/customers/${id}`);
-  },
+  getById: (id) => apiRequest(`/admin/customers/${id}`),
 
   create: async (userData) => {
     const token = getToken();
-    const response = await fetch(`${API_URL}/admin/customers`, {
+    const res = await fetch(`${API_URL}/admin/customers`, {
       method: "POST",
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
-        ...(!(userData instanceof FormData) && { "Content-Type": "application/json" }),
+        ...(!(userData instanceof FormData) && {
+          "Content-Type": "application/json",
+        }),
       },
       body: userData instanceof FormData ? userData : JSON.stringify(userData),
     });
-    return handleResponse(response);
+    return handleResponse(res);
   },
 
   update: async (id, userData) => {
     const token = getToken();
-    const response = await fetch(`${API_URL}/admin/customers/${id}`, {
+    const res = await fetch(`${API_URL}/admin/customers/${id}`, {
       method: "PUT",
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
-        ...(!(userData instanceof FormData) && { "Content-Type": "application/json" }),
+        ...(!(userData instanceof FormData) && {
+          "Content-Type": "application/json",
+        }),
       },
       body: userData instanceof FormData ? userData : JSON.stringify(userData),
     });
-    return handleResponse(response);
+    return handleResponse(res);
   },
 
-  delete: async (id, reason = "") => {
-    return apiRequest(`/admin/customers/${id}`, {
+  delete: (id, reason = "") =>
+    apiRequest(`/admin/customers/${id}`, {
       method: "DELETE",
       body: JSON.stringify({ reason }),
-    });
-  },
+    }),
 
-  toggleStatus: async (id, reason = "") => {
-    return apiRequest(`/admin/customers/${id}/toggle-status`, {
+  toggleStatus: (id, reason = "") =>
+    apiRequest(`/admin/customers/${id}/toggle-status`, {
       method: "PUT",
       body: JSON.stringify({ reason }),
-    });
-  },
+    }),
 
-  resetPassword: async (id, newPassword, sendEmail = true) => {
-    return apiRequest(`/admin/customers/${id}/reset-password`, {
+  resetPassword: (id, newPassword, sendEmail = true) =>
+    apiRequest(`/admin/customers/${id}/reset-password`, {
       method: "PUT",
       body: JSON.stringify({ newPassword, sendEmail }),
-    });
-  },
+    }),
 
-  updateCredit: async (id, creditData) => {
-    return apiRequest(`/admin/customers/${id}/credit`, {
+  updateCredit: (id, creditData) =>
+    apiRequest(`/admin/customers/${id}/credit`, {
       method: "PUT",
       body: JSON.stringify(creditData),
-    });
-  },
+    }),
 
-  getStats: async () => {
-    return apiRequest("/admin/customers/stats");
-  },
+  getStats: () => apiRequest("/admin/customers/stats"),
 
   exportCSV: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
     const token = getToken();
-
-    const response = await fetch(`${API_URL}/admin/customers/export?${query}`, {
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error("Export failed");
-    }
-
-    return response.blob();
+    const res = await fetch(
+      `${API_URL}/admin/customers/export?${new URLSearchParams(params)}`,
+      { headers: { ...(token && { Authorization: `Bearer ${token}` }) } }
+    );
+    if (!res.ok) throw new Error("Export failed");
+    return res.blob();
   },
 };
 
-// ==================== PRODUCT API ====================
-
+// ============================================================
+// PRODUCT API
+// ============================================================
 export const productAPI = {
-  getAll: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/products?${query}`);
-  },
+  getAll: (params = {}) =>
+    apiRequest(`/products?${new URLSearchParams(params)}`),
 
-  getById: async (id) => {
-    return apiRequest(`/products/${id}`);
-  },
+  getById: (id) => apiRequest(`/products/${id}`),
 
-  getBySlug: async (slug) => {
-    return apiRequest(`/products/slug/${slug}`);
-  },
+  getBySlug: (slug) => apiRequest(`/products/slug/${slug}`),
 
   create: async (productData) => {
     const token = getToken();
-    const response = await fetch(`${API_URL}/products`, {
+    const res = await fetch(`${API_URL}/products`, {
       method: "POST",
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: productData, // FormData for file upload
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+      body: productData,
     });
-    return handleResponse(response);
+    return handleResponse(res);
   },
 
   update: async (id, productData) => {
     const token = getToken();
-    const response = await fetch(`${API_URL}/products/${id}`, {
+    const res = await fetch(`${API_URL}/products/${id}`, {
       method: "PUT",
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: productData, // FormData for file upload
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+      body: productData,
     });
-    return handleResponse(response);
+    return handleResponse(res);
   },
 
-  delete: async (id) => {
-    return apiRequest(`/products/${id}`, { method: "DELETE" });
-  },
+  delete: (id) => apiRequest(`/products/${id}`, { method: "DELETE" }),
 
-  updateStock: async (id, quantity, operation = "set") => {
-    return apiRequest(`/products/${id}/stock`, {
+  updateStock: (id, quantity, operation = "set") =>
+    apiRequest(`/products/${id}/stock`, {
       method: "PUT",
       body: JSON.stringify({ quantity, operation }),
-    });
-  },
+    }),
 
-  getLowStock: async () => {
-    return apiRequest("/products/admin/low-stock");
-  },
+  getLowStock: () => apiRequest("/products/admin/low-stock"),
 
-  search: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/products/search?${query}`);
-  },
+  search: (params = {}) =>
+    apiRequest(`/products/search?${new URLSearchParams(params)}`),
 };
 
-// ==================== CATEGORY API ====================
-
+// ============================================================
+// CATEGORY API
+// ============================================================
 export const categoryAPI = {
-  getAll: async () => {
-    return apiRequest("/categories");
-  },
+  getAll: () => apiRequest("/categories"),
 
-  create: async (categoryData) => {
-    return apiRequest("/categories", {
+  create: (data) =>
+    apiRequest("/categories", {
       method: "POST",
-      body: JSON.stringify(categoryData),
-    });
-  },
+      body: JSON.stringify(data),
+    }),
 
-  update: async (id, categoryData) => {
-    return apiRequest(`/categories/${id}`, {
+  update: (id, data) =>
+    apiRequest(`/categories/${id}`, {
       method: "PUT",
-      body: JSON.stringify(categoryData),
-    });
-  },
+      body: JSON.stringify(data),
+    }),
 
-  delete: async (id) => {
-    return apiRequest(`/categories/${id}`, { method: "DELETE" });
-  },
+  delete: (id) => apiRequest(`/categories/${id}`, { method: "DELETE" }),
 };
 
-// ==================== ORDER API ====================
-
+// ============================================================
+// ORDER API
+// ============================================================
 export const orderAPI = {
-  getAll: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/orders?${query}`);
-  },
+  getAll: (params = {}) =>
+    apiRequest(`/admin/orders?${new URLSearchParams(params)}`),
 
-  getById: async (id) => {
-    return apiRequest(`/admin/orders/${id}`);
-  },
+  getById: (id) => apiRequest(`/admin/orders/${id}`),
 
-  getStats: async () => {
-    return apiRequest("/admin/orders/stats");
-  },
+  getStats: () => apiRequest("/admin/orders/stats"),
 
-  updateStatus: async (id, status) => {
-    return apiRequest(`/admin/orders/${id}/status`, {
+  updateStatus: (id, status) =>
+    apiRequest(`/admin/orders/${id}/status`, {
       method: "PUT",
       body: JSON.stringify({ status }),
-    });
-  },
+    }),
 
-  updatePaymentStatus: async (id, paymentData) => {
-    return apiRequest(`/admin/orders/${id}/payment`, {
+  updatePaymentStatus: (id, paymentData) =>
+    apiRequest(`/admin/orders/${id}/payment`, {
       method: "PUT",
       body: JSON.stringify(paymentData),
-    });
-  },
+    }),
 
-  addNote: async (id, note) => {
-    return apiRequest(`/admin/orders/${id}/notes`, {
+  addNote: (id, note) =>
+    apiRequest(`/admin/orders/${id}/notes`, {
       method: "PUT",
       body: JSON.stringify({ note }),
-    });
-  },
+    }),
 
-  generateDeliveryOtp: async (id) => {
-    return apiRequest(`/admin/orders/${id}/delivery-otp`, {
-      method: "POST",
-    });
-  },
+  generateDeliveryOtp: (id) =>
+    apiRequest(`/admin/orders/${id}/delivery-otp`, { method: "POST" }),
 
-  verifyDeliveryOtp: async (id, otp) => {
-    return apiRequest(`/admin/orders/${id}/verify-delivery`, {
+  verifyDeliveryOtp: (id, otp) =>
+    apiRequest(`/admin/orders/${id}/verify-delivery`, {
       method: "POST",
       body: JSON.stringify({ otp }),
-    });
-  },
+    }),
 };
 
-// ==================== PAYMENT API ====================
-
+// ============================================================
+// PAYMENT API
+// ============================================================
 export const paymentAPI = {
-  getAll: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/payments?${query}`);
-  },
+  getAll: (params = {}) =>
+    apiRequest(`/admin/payments?${new URLSearchParams(params)}`),
 
-  getById: async (id) => {
-    return apiRequest(`/admin/payments/${id}`);
-  },
+  getById: (id) => apiRequest(`/admin/payments/${id}`),
 
-  getStats: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/payments/stats?${query}`);
-  },
+  getStats: (params = {}) =>
+    apiRequest(`/admin/payments/stats?${new URLSearchParams(params)}`),
 
-  record: async (paymentData) => {
-    return apiRequest("/admin/payments", {
+  record: (paymentData) =>
+    apiRequest("/admin/payments", {
       method: "POST",
       body: JSON.stringify(paymentData),
-    });
-  },
+    }),
 
-  update: async (id, paymentData) => {
-    return apiRequest(`/admin/payments/${id}`, {
+  update: (id, paymentData) =>
+    apiRequest(`/admin/payments/${id}`, {
       method: "PUT",
       body: JSON.stringify(paymentData),
-    });
-  },
+    }),
 
-  cancel: async (id, reason) => {
-    return apiRequest(`/admin/payments/${id}/cancel`, {
+  cancel: (id, reason) =>
+    apiRequest(`/admin/payments/${id}/cancel`, {
       method: "PUT",
       body: JSON.stringify({ reason }),
-    });
-  },
+    }),
 
-  getOverdueReport: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/payments/overdue?${query}`);
-  },
+  getOverdueReport: (params = {}) =>
+    apiRequest(`/admin/payments/overdue?${new URLSearchParams(params)}`),
 
-  getUserPayments: async (userId, params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/users/${userId}/payments?${query}`);
-  },
+  getUserPayments: (userId, params = {}) =>
+    apiRequest(
+      `/admin/users/${userId}/payments?${new URLSearchParams(params)}`
+    ),
 };
 
-// ==================== ADMIN API ====================
-
+// ============================================================
+// ADMIN MANAGEMENT API
+// ============================================================
 export const adminAPI = {
-  getAll: async () => {
-    return apiRequest("/admin/admins");
-  },
+  getAll: () => apiRequest("/admin/admins"),
 
-  getById: async (id) => {
-    return apiRequest(`/admin/admins/${id}`);
-  },
+  getById: (id) => apiRequest(`/admin/admins/${id}`),
 
-  create: async (adminData) => {
-    return apiRequest("/admin/create-admin", {
+  create: (adminData) =>
+    apiRequest("/admin/create-admin", {
       method: "POST",
       body: JSON.stringify(adminData),
-    });
-  },
+    }),
 
-  update: async (id, adminData) => {
-    return apiRequest(`/admin/admins/${id}`, {
+  update: (id, adminData) =>
+    apiRequest(`/admin/admins/${id}`, {
       method: "PUT",
       body: JSON.stringify(adminData),
-    });
-  },
+    }),
 
-  toggleStatus: async (id) => {
-    return apiRequest(`/admin/admins/${id}/toggle-status`, {
-      method: "PUT",
-    });
-  },
+  toggleStatus: (id) =>
+    apiRequest(`/admin/admins/${id}/toggle-status`, { method: "PUT" }),
 
-  delete: async (id) => {
-    return apiRequest(`/admin/admins/${id}`, { method: "DELETE" });
-  },
+  delete: (id) => apiRequest(`/admin/admins/${id}`, { method: "DELETE" }),
 };
 
-// ══════════════════════════════════════════════════════════════
-// IMAGE MANAGEMENT API
-// ══════════════════════════════════════════════════════════════
+// ============================================================
+// IMAGE API
+// ============================================================
 export const imageAPI = {
-  // Get storage statistics
-  getStats: async () => {
-    return apiRequest("/admin/images/stats");
-  },
-
-  // Get orphaned images
-  getOrphaned: async () => {
-    return apiRequest("/admin/images/orphaned");
-  },
-
-  // Get all images
-  getAll: async () => {
-    return apiRequest("/admin/images/all");
-  },
-
-  // Delete selected images
-  deleteSelected: async (filenames) => {
-    return apiRequest("/admin/images/delete", {
+  getStats: () => apiRequest("/admin/images/stats"),
+  getOrphaned: () => apiRequest("/admin/images/orphaned"),
+  getAll: () => apiRequest("/admin/images/all"),
+  deleteSelected: (filenames) =>
+    apiRequest("/admin/images/delete", {
       method: "POST",
       body: JSON.stringify({ filenames }),
-    });
-  },
-
-  // Cleanup all orphaned images
-  cleanupAll: async () => {
-    return apiRequest("/admin/images/cleanup", {
-      method: "DELETE",
-    });
-  },
+    }),
+  cleanupAll: () =>
+    apiRequest("/admin/images/cleanup", { method: "DELETE" }),
 };
 
 export default {

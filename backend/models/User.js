@@ -112,15 +112,22 @@ const userSchema = new mongoose.Schema({
     min: 0
   },
 
-  // ✅ FIXED: Removed min: 0 constraint
-  // pendingAmount is protected via application logic in
-  // recordPayment(), adminRecordPayment(), adminCancelPayment()
+  // ✅ pendingAmount: how much customer OWES (order total - payments)
+  // No min:0 constraint — protected via application logic
   pendingAmount: {
     type: Number,
     default: 0
   },
 
   totalPaid: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  // ✅ NEW: creditBalance = overpayment / advance payment by customer
+  // This is money the business OWES the customer
+  creditBalance: {
     type: Number,
     default: 0,
     min: 0
@@ -167,11 +174,38 @@ const userSchema = new mongoose.Schema({
   },
 
   pushToken: {
-  type: String,
-  select: false  // Don't expose in normal queries
+    type: String,
+    select: false
   },
 
   pushTokenUpdatedAt: Date,
+
+  notificationPreferences: {
+    pushEnabled: {
+      type: Boolean,
+      default: true
+    },
+    inAppEnabled: {
+      type: Boolean,
+      default: true
+    },
+    orderUpdates: {
+      type: Boolean,
+      default: true
+    },
+    paymentNotifications: {
+      type: Boolean,
+      default: true
+    },
+    promotions: {
+      type: Boolean,
+      default: true
+    },
+    announcements: {
+      type: Boolean,
+      default: true
+    }
+  },
 
   lastLoginAt: Date,
 
@@ -198,6 +232,7 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ isActive: 1 });
 userSchema.index({ isCreditBlocked: 1 });
 userSchema.index({ pendingAmount: 1 });
+userSchema.index({ creditBalance: 1 }); // ✅ NEW index
 userSchema.index({ createdAt: -1 });
 
 // ============================================================
@@ -222,14 +257,10 @@ userSchema.virtual("fullName").get(function () {
 // PRE-SAVE HOOKS
 // ============================================================
 
-/**
- * Hash password before saving
- */
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) {
     return;
   }
-
   try {
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
@@ -240,11 +271,8 @@ userSchema.pre("save", async function () {
   }
 });
 
-/**
- * Ensure pendingAmount never goes below 0 on save
- */
 userSchema.pre("save", function () {
-  // ✅ Guard: clamp pendingAmount to 0 minimum before any save
+  // Clamp pendingAmount to 0 minimum
   if (this.pendingAmount < 0) {
     console.warn(
       `⚠️ pendingAmount was ${this.pendingAmount} for user ${this.phone}, clamping to 0`
@@ -252,11 +280,16 @@ userSchema.pre("save", function () {
     this.pendingAmount = 0;
   }
 
+  // Clamp creditBalance to 0 minimum
+  if (this.creditBalance < 0) {
+    console.warn(
+      `⚠️ creditBalance was ${this.creditBalance} for user ${this.phone}, clamping to 0`
+    );
+    this.creditBalance = 0;
+  }
+
   if (this.isModified("pendingAmount") || this.isModified("creditLimit")) {
-    if (
-      this.pendingAmount > this.creditLimit &&
-      this.creditLimit > 0
-    ) {
+    if (this.pendingAmount > this.creditLimit && this.creditLimit > 0) {
       console.warn(
         `⚠️ Pending amount (${this.pendingAmount}) exceeds credit limit (${this.creditLimit}) for user: ${this.phone}`
       );
@@ -279,14 +312,11 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 
 userSchema.methods.generatePasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
-
   this.passwordResetToken = crypto
     .createHash("sha256")
     .update(resetToken)
     .digest("hex");
-
   this.passwordResetExpires = Date.now() + 60 * 60 * 1000;
-
   return resetToken;
 };
 
@@ -308,6 +338,7 @@ userSchema.methods.getPublicProfile = function () {
     pendingAmount: Math.max(0, this.pendingAmount || 0),
     totalPaid: this.totalPaid || 0,
     totalCredit: this.totalCredit || 0,
+    creditBalance: this.creditBalance || 0, // ✅ NEW
     availableCredit: this.availableCredit,
     creditUtilization: this.creditUtilization,
     isCreditBlocked: this.isCreditBlocked || false,
@@ -322,7 +353,15 @@ userSchema.methods.getPublicProfile = function () {
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
 
-    role: this.role || "customer"
+    role: this.role || "customer",
+    notificationPreferences: {
+      pushEnabled:           this.notificationPreferences?.pushEnabled          ?? true,
+      inAppEnabled:          this.notificationPreferences?.inAppEnabled         ?? true,
+      orderUpdates:          this.notificationPreferences?.orderUpdates         ?? true,
+      paymentNotifications:  this.notificationPreferences?.paymentNotifications ?? true,
+      promotions:            this.notificationPreferences?.promotions           ?? true,
+      announcements:         this.notificationPreferences?.announcements        ?? true,
+    },
   };
 };
 
@@ -332,6 +371,7 @@ userSchema.methods.getCreditSummary = function () {
     pendingAmount: Math.max(0, this.pendingAmount || 0),
     totalPaid: this.totalPaid || 0,
     totalCredit: this.totalCredit || 0,
+    creditBalance: this.creditBalance || 0, // ✅ NEW
     availableCredit: this.availableCredit,
     creditUtilization: this.creditUtilization,
     isCreditBlocked: this.isCreditBlocked || false,
@@ -376,10 +416,21 @@ userSchema.methods.canPlaceOrder = function (orderAmount) {
     };
   }
 
-  if (orderAmount > this.availableCredit) {
+  // ✅ UPDATED: Factor in creditBalance when checking available credit
+  // creditBalance can offset pendingAmount
+  const effectivePending = Math.max(
+    0,
+    (this.pendingAmount || 0) - (this.creditBalance || 0)
+  );
+  const effectiveAvailableCredit = Math.max(
+    0,
+    (this.creditLimit || 0) - effectivePending
+  );
+
+  if (orderAmount > effectiveAvailableCredit) {
     return {
       allowed: false,
-      reason: `Insufficient credit. Available: ₹${this.availableCredit}, Required: ₹${orderAmount}`
+      reason: `Insufficient credit. Available: ₹${effectiveAvailableCredit}, Required: ₹${orderAmount}`
     };
   }
 
@@ -392,26 +443,46 @@ userSchema.methods.addToPending = async function (amount) {
   return this.save();
 };
 
+// ✅ UPDATED: recordPayment now handles credit balance
 userSchema.methods.recordPayment = async function (amount) {
-  // ✅ Always clamp to 0 minimum
-  this.pendingAmount = Math.max(0, (this.pendingAmount || 0) - amount);
-  this.totalPaid = (this.totalPaid || 0) + amount;
-  this.lastPaymentDate = new Date();
+  const outstanding = Math.max(0, this.pendingAmount || 0);
+
+  let appliedAmount = amount;
+  let creditAmount  = 0;
+
+  if (amount > outstanding) {
+    appliedAmount = outstanding;
+    creditAmount  = amount - outstanding;
+  }
+
+  this.pendingAmount    = Math.max(0, outstanding - appliedAmount);
+  this.creditBalance    = (this.creditBalance || 0) + creditAmount;
+  this.totalPaid        = (this.totalPaid || 0) + amount;
+  this.lastPaymentDate  = new Date();
+
+  return this.save();
+};
+
+// ✅ NEW: Use credit balance to offset pending amount
+userSchema.methods.applyCreditBalance = async function (amount) {
+  const availableCredit = this.creditBalance || 0;
+  const amountToApply   = Math.min(amount, availableCredit);
+
+  this.creditBalance    = Math.max(0, availableCredit - amountToApply);
+  this.pendingAmount    = Math.max(0, (this.pendingAmount || 0) - amountToApply);
+
   return this.save();
 };
 
 userSchema.methods.isOtpLocked = function () {
   if (!this.otpLockedUntil) return { locked: false };
 
-  const now = new Date();
+  const now         = new Date();
   const lockedUntil = new Date(this.otpLockedUntil);
 
   if (lockedUntil > now) {
     const minutesRemaining = Math.ceil((lockedUntil - now) / 60000);
-    return {
-      locked: true,
-      minutesRemaining
-    };
+    return { locked: true, minutesRemaining };
   }
 
   return { locked: false };
@@ -437,7 +508,7 @@ userSchema.statics.findUsersWithPendingCredit = function () {
   return this.find({
     isActive: true,
     pendingAmount: { $gt: 0 }
-  }).select("name phone businessName pendingAmount creditLimit");
+  }).select("name phone businessName pendingAmount creditLimit creditBalance");
 };
 
 userSchema.statics.findOverdueUsers = function (days = 30) {
@@ -449,24 +520,26 @@ userSchema.statics.findOverdueUsers = function (days = 30) {
     pendingAmount: { $gt: 0 },
     lastPaymentDate: { $lt: overdueDate }
   }).select(
-    "name phone businessName pendingAmount lastPaymentDate paymentTerms"
+    "name phone businessName pendingAmount lastPaymentDate paymentTerms creditBalance"
   );
 };
 
 userSchema.statics.getCreditStats = async function () {
   const stats = await this.aggregate([
-    {
-      $match: { isActive: true }
-    },
+    { $match: { isActive: true } },
     {
       $group: {
         _id: null,
-        totalUsers: { $sum: 1 },
-        totalCreditLimit: { $sum: "$creditLimit" },
+        totalUsers:         { $sum: 1 },
+        totalCreditLimit:   { $sum: "$creditLimit" },
         totalPendingAmount: { $sum: "$pendingAmount" },
-        totalPaid: { $sum: "$totalPaid" },
+        totalPaid:          { $sum: "$totalPaid" },
+        totalCreditBalance: { $sum: "$creditBalance" }, // ✅ NEW
         usersWithPending: {
           $sum: { $cond: [{ $gt: ["$pendingAmount", 0] }, 1, 0] }
+        },
+        usersWithCredit: { // ✅ NEW
+          $sum: { $cond: [{ $gt: ["$creditBalance", 0] }, 1, 0] }
         },
         blockedUsers: {
           $sum: { $cond: ["$isCreditBlocked", 1, 0] }
@@ -477,12 +550,14 @@ userSchema.statics.getCreditStats = async function () {
 
   return (
     stats[0] || {
-      totalUsers: 0,
-      totalCreditLimit: 0,
+      totalUsers:         0,
+      totalCreditLimit:   0,
       totalPendingAmount: 0,
-      totalPaid: 0,
-      usersWithPending: 0,
-      blockedUsers: 0
+      totalPaid:          0,
+      totalCreditBalance: 0,
+      usersWithPending:   0,
+      usersWithCredit:    0,
+      blockedUsers:       0
     }
   );
 };

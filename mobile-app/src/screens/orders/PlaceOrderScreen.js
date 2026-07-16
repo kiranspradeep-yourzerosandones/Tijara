@@ -1,5 +1,5 @@
 // src/screens/orders/PlaceOrderScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button, Loading, Card, Screen } from '../../components/common';
 import { useCartStore, useAuthStore } from '../../store';
@@ -57,7 +58,6 @@ const OrderSuccessModal = ({ visible, orderNumber, total, onViewOrder, onContinu
             </View>
           </View>
 
-          {/* Content */}
           <Text style={successStyles.title}>Order Placed!</Text>
           <Text style={successStyles.subtitle}>
             Your order has been placed successfully
@@ -121,7 +121,7 @@ const OrderSuccessModal = ({ visible, orderNumber, total, onViewOrder, onContinu
 };
 
 // ─── Main Screen ──────────────────────────────────────────────
-const PlaceOrderScreen = ({ navigation }) => {
+const PlaceOrderScreen = ({ navigation, route }) => {
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [customerNotes, setCustomerNotes] = useState('');
@@ -129,7 +129,6 @@ const PlaceOrderScreen = ({ navigation }) => {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
-  // ✅ Success modal state
   const [showSuccess, setShowSuccess] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
 
@@ -140,8 +139,21 @@ const PlaceOrderScreen = ({ navigation }) => {
     loadLocations();
   }, []);
 
+  // ✅ FIXED: Re-fetch locations when screen comes back into focus
+  // This handles the case where user added a new location and came back
+  useFocusEffect(
+    useCallback(() => {
+      // Only reload if we already have the initial load done
+      // (avoids double-loading on first mount)
+      if (!isLoading) {
+        reloadLocations();
+      }
+    }, [isLoading])
+  );
+
   const loadLocations = async () => {
     try {
+      setIsLoading(true);
       const response = await locationsAPI.getLocations();
       const locationList = response.data?.locations || [];
       setLocations(locationList);
@@ -156,6 +168,40 @@ const PlaceOrderScreen = ({ navigation }) => {
       Alert.alert('Error', 'Failed to load delivery addresses');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ✅ Reload without showing full loading screen
+  const reloadLocations = async () => {
+    try {
+      const response = await locationsAPI.getLocations();
+      const locationList = response.data?.locations || [];
+      setLocations(locationList);
+
+      // ✅ If no location is selected yet, auto-select default or first
+      if (!selectedLocation && locationList.length > 0) {
+        const defaultLocation =
+          locationList.find((loc) => loc.isDefault) || locationList[0];
+        setSelectedLocation(defaultLocation);
+      }
+
+      // ✅ If a location was selected, keep it selected
+      // but update it with fresh data in case anything changed
+      if (selectedLocation) {
+        const updatedSelected = locationList.find(
+          (loc) => loc._id === selectedLocation._id
+        );
+        if (updatedSelected) {
+          setSelectedLocation(updatedSelected);
+        } else if (locationList.length > 0) {
+          // Previously selected location no longer exists
+          const defaultLocation =
+            locationList.find((loc) => loc.isDefault) || locationList[0];
+          setSelectedLocation(defaultLocation);
+        }
+      }
+    } catch (error) {
+      console.error('Reload locations error:', error);
     }
   };
 
@@ -174,13 +220,9 @@ const PlaceOrderScreen = ({ navigation }) => {
 
       const order = response.data?.order;
 
-      // ✅ Invalidate product cache (stock changed)
       invalidateCacheByPrefix('products:');
-
-      // ✅ Reset cart
       resetCart();
 
-      // ✅ Store placed order + show success modal
       setPlacedOrder(order);
       setShowSuccess(true);
     } catch (error) {
@@ -191,38 +233,34 @@ const PlaceOrderScreen = ({ navigation }) => {
   };
 
   const handleViewOrder = () => {
-  setShowSuccess(false);
-  if (placedOrder?._id) {
-    // ✅ Use the root-level OrderDetail screen
-    navigation.reset({
-      index: 1,
-      routes: [
-        { name: 'MainTabs' },
-        {
-          name: 'OrderDetail',
-          params: { orderId: placedOrder._id },
-        },
-      ],
-    });
-  }
-};
+    setShowSuccess(false);
+    if (placedOrder?._id) {
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: 'MainTabs' },
+          {
+            name: 'OrderDetail',
+            params: { orderId: placedOrder._id },
+          },
+        ],
+      });
+    }
+  };
 
   const handleContinueShopping = () => {
-  setShowSuccess(false);
-  // ✅ Just go to MainTabs (lands on Home by default)
-  navigation.reset({
-    index: 0,
-    routes: [{ name: 'MainTabs' }],
-  });
-};
+    setShowSuccess(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+  };
+
+  // ✅ FIXED: No callback in params — just navigate
   const handleAddNewLocation = () => {
     setShowLocationPicker(false);
-    navigation.navigate('AddLocation', {
-      onLocationAdded: (newLocation) => {
-        setLocations((prev) => [...prev, newLocation]);
-        setSelectedLocation(newLocation);
-      },
-    });
+    navigation.navigate('AddLocation');
+    // When user comes back, useFocusEffect will reload locations automatically
   };
 
   const renderLocationPicker = () => (
@@ -241,49 +279,59 @@ const PlaceOrderScreen = ({ navigation }) => {
         </View>
 
         <ScrollView style={styles.modalContent}>
-          {locations.map((location) => (
-            <TouchableOpacity
-              key={location._id}
-              style={[
-                styles.locationOption,
-                selectedLocation?._id === location._id &&
-                  styles.locationOptionSelected,
-              ]}
-              onPress={() => {
-                setSelectedLocation(location);
-                setShowLocationPicker(false);
-              }}
-            >
-              <View style={styles.locationOptionHeader}>
-                <View style={styles.locationLabelBadge}>
-                  <Text style={styles.locationLabelText}>
-                    {location.displayLabel || location.label}
-                  </Text>
-                </View>
-                {location.isDefault && (
-                  <View style={styles.defaultBadge}>
-                    <Text style={styles.defaultBadgeText}>Default</Text>
+          {locations.length === 0 ? (
+            <View style={styles.emptyLocations}>
+              <Ionicons name="location-outline" size={48} color={COLORS.gray} />
+              <Text style={styles.emptyLocationsText}>No addresses yet</Text>
+              <Text style={styles.emptyLocationsSubtext}>
+                Add a delivery address to continue
+              </Text>
+            </View>
+          ) : (
+            locations.map((location) => (
+              <TouchableOpacity
+                key={location._id}
+                style={[
+                  styles.locationOption,
+                  selectedLocation?._id === location._id &&
+                    styles.locationOptionSelected,
+                ]}
+                onPress={() => {
+                  setSelectedLocation(location);
+                  setShowLocationPicker(false);
+                }}
+              >
+                <View style={styles.locationOptionHeader}>
+                  <View style={styles.locationLabelBadge}>
+                    <Text style={styles.locationLabelText}>
+                      {location.displayLabel || location.label}
+                    </Text>
                   </View>
-                )}
-                {selectedLocation?._id === location._id && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color={COLORS.primary}
-                  />
-                )}
-              </View>
-              <Text style={styles.locationShopName}>
-                {location.shopName}
-              </Text>
-              <Text style={styles.locationAddress}>
-                {location.fullAddress}
-              </Text>
-              <Text style={styles.locationPhone}>
-                📞 {location.contactPhone}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                  {location.isDefault && (
+                    <View style={styles.defaultBadge}>
+                      <Text style={styles.defaultBadgeText}>Default</Text>
+                    </View>
+                  )}
+                  {selectedLocation?._id === location._id && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </View>
+                <Text style={styles.locationShopName}>
+                  {location.shopName}
+                </Text>
+                <Text style={styles.locationAddress}>
+                  {location.fullAddress}
+                </Text>
+                <Text style={styles.locationPhone}>
+                  📞 {location.contactPhone}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
 
           <TouchableOpacity
             style={styles.addNewLocationButton}
@@ -502,7 +550,6 @@ const PlaceOrderScreen = ({ navigation }) => {
 
       {renderLocationPicker()}
 
-      {/* ✅ Order Success Modal */}
       <OrderSuccessModal
         visible={showSuccess}
         orderNumber={placedOrder?.orderNumber}
@@ -531,9 +578,7 @@ const successStyles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.large,
   },
-  iconContainer: {
-    marginBottom: 20,
-  },
+  iconContainer: { marginBottom: 20 },
   iconCircle: {
     width: 80,
     height: 80,
@@ -569,19 +614,9 @@ const successStyles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
-  infoDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
+  infoDivider: { height: 1, backgroundColor: COLORS.border },
+  infoLabel: { fontSize: 13, color: COLORS.textSecondary },
+  infoValue: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
   infoValueHighlight: {
     fontSize: 16,
     fontWeight: '700',
@@ -602,12 +637,7 @@ const successStyles = StyleSheet.create({
     gap: 8,
     width: '100%',
   },
-  noteText: {
-    fontSize: 12,
-    color: '#92400E',
-    flex: 1,
-    lineHeight: 18,
-  },
+  noteText: { fontSize: 12, color: '#92400E', flex: 1, lineHeight: 18 },
   primaryButton: {
     width: '100%',
     height: 52,
@@ -620,11 +650,7 @@ const successStyles = StyleSheet.create({
     marginBottom: 12,
     ...SHADOWS.small,
   },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.black,
-  },
+  primaryButtonText: { fontSize: 16, fontWeight: '700', color: COLORS.black },
   secondaryButton: {
     width: '100%',
     height: 48,
@@ -721,11 +747,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     gap: SPACING.md,
   },
-  addLocationText: {
-    ...FONTS.body,
-    color: COLORS.gray,
-    flex: 1,
-  },
+  addLocationText: { ...FONTS.body, color: COLORS.gray, flex: 1 },
   itemsCard: { padding: 0, overflow: 'hidden' },
   orderItem: {
     flexDirection: 'row',
@@ -845,6 +867,21 @@ const styles = StyleSheet.create({
   },
   modalTitle: { ...FONTS.h4, color: COLORS.textPrimary },
   modalContent: { flex: 1, padding: SPACING.screenPadding },
+  // ✅ NEW: Empty locations state in modal
+  emptyLocations: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xxxl,
+    gap: SPACING.md,
+  },
+  emptyLocationsText: {
+    ...FONTS.h4,
+    color: COLORS.textPrimary,
+  },
+  emptyLocationsSubtext: {
+    ...FONTS.bodySmall,
+    color: COLORS.gray,
+    textAlign: 'center',
+  },
   locationOption: {
     backgroundColor: COLORS.card,
     borderRadius: SPACING.cardRadius,
@@ -892,6 +929,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderRadius: SPACING.cardRadius,
     gap: SPACING.sm,
+    marginTop: SPACING.sm,
   },
   addNewLocationText: {
     ...FONTS.body,

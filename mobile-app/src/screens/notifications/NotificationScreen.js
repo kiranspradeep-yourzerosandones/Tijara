@@ -99,10 +99,17 @@ const NotificationScreen = ({ navigation }) => {
   }
 
   // ── Generic actionUrl deep link ────────────────────────────
+    // ── Generic actionUrl deep link ────────────────────────────
   if (notification.actionUrl) {
     if (notification.actionUrl.startsWith('order:')) {
       const orderId = notification.actionUrl.replace('order:', '');
       navigation.navigate('OrderDetail', { orderId });
+      return;
+    }
+    // ✅ ADD THIS
+    if (notification.actionUrl.startsWith('product:')) {
+      const productId = notification.actionUrl.replace('product:', '');
+      navigation.navigate('ProductDetail', { productId });
       return;
     }
     if (notification.actionUrl.startsWith('screen:')) {

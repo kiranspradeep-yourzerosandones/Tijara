@@ -1,4 +1,3 @@
-// backend/routes/authRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -22,8 +21,10 @@ const {
   getMe,
   updateProfile,
   changePassword,
-  // ✅ Renamed
   updatePushToken,
+  // ✅ ADD THESE TWO
+  getNotificationPreferences,
+  updateNotificationPreferences,
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/auth");
@@ -51,7 +52,10 @@ router.post("/reset-password/email", resetPasswordWithToken);
 router.get("/me", protect, getMe);
 router.put("/profile", protect, updateProfile);
 router.put("/change-password", protect, changePassword);
-// ✅ Renamed from /fcm-token
 router.put("/push-token", protect, updatePushToken);
+
+// ✅ Notification preferences
+router.get("/notification-preferences", protect, getNotificationPreferences);
+router.put("/notification-preferences", protect, updateNotificationPreferences);
 
 module.exports = router;

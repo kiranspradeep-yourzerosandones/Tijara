@@ -23,10 +23,13 @@ export default function PaymentsPage() {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [pagination, setPagination] = useState({ current: 1, pages: 1, total: 0 });
 
-  useEffect(() => {
-    fetchPayments();
-    fetchPaymentStats();
-  }, [filter, dateRange, pagination.current]);
+ useEffect(() => {
+  fetchPaymentStats();
+}, []); // only once on mount
+
+useEffect(() => {
+  fetchPayments();
+}, [filter, dateRange.start, dateRange.end, pagination.current]); // stable primitives
 
   const fetchPayments = async () => {
     try {
@@ -92,10 +95,12 @@ export default function PaymentsPage() {
     }
   };
 
-  const handleSearch = () => {
-    setPagination(prev => ({ ...prev, current: 1 }));
-    fetchPayments();
-  };
+ const handleSearch = () => {
+  setPagination(prev => ({ ...prev, current: 1 }));
+  // fetchPayments will be called by useEffect when pagination.current resets
+  // but since it might already be 1, force it:
+  fetchPayments();
+};
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat("en-IN", {
