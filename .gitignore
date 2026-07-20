@@ -67,5 +67,39 @@ temp/
 *.tgz
 
 # -----------------------------
-# Local config
-# -------
+# Firebase / Google
+# -----------------------------
+google-services.json
+GoogleService-Info.plist
+
+# -----------------------------
+# Android
+# -----------------------------
+*.keystore
+!debug.keystore
+*.jks
+android/app/google-services.json
+mobile-app/google-services.json
+
+# -----------------------------
+# iOS
+# -----------------------------
+ios/GoogleService-Info.plist
+*.p12
+*.mobileprovision
+
+# -----------------------------
+# Expo
+# -----------------------------
+.expo/
+.expo-shared/
+
+# -----------------------------
+# React Native
+# -----------------------------
+android/local.properties
+android/.gradle/
+android/app/debug/
+android/app/release/
+ios/Pods/
+ios/build/
