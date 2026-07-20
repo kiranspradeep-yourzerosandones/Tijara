@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Tijara Mobile",
+    "name": "Tijara",
     "slug": "tijara-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -27,12 +27,11 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#000000"
       },
       "package": "com.yourcompany.tijaramobile",
-       "googleServicesFile": "./android/app/google-services.json",
+      "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
