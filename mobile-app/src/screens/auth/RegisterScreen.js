@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,13 +14,76 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../theme';
 import { sendRegistrationOtp } from '../../api/auth';
 import { useAuthStore } from '../../store';
 import { validatePhone, validateEmail, validateName } from '../../utils/validation';
 import GoogleLogo from '../../components/common/GoogleLogo';
 
 const { height } = Dimensions.get('window');
+
+const FormInput = ({
+  icon,
+  placeholder,
+  value,
+  onChange,
+  error,
+  focused,
+  onFocus,
+  onBlur,
+  keyboardType = 'default',
+  autoCapitalize = 'none',
+  maxLength,
+}) => (
+  <View style={styles.inputContainer}>
+    <View
+      style={[
+        styles.inputWrapper,
+        focused && styles.inputWrapperFocused,
+        error && styles.inputWrapperError,
+      ]}
+    >
+      <View style={styles.inputIconContainer}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={focused ? '#F5C518' : '#666'}
+        />
+      </View>
+      <TextInput
+        style={styles.textInput}
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChange}
+        placeholderTextColor="#666"
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
+        maxLength={maxLength}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+    </View>
+    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+  </View>
+);
+
+const SocialButtons = () => (
+  <>
+    <View style={styles.divider}>
+      <View style={styles.dividerLine} />
+      <Text style={styles.dividerText}>Or sign with</Text>
+      <View style={styles.dividerLine} />
+    </View>
+
+    <View style={styles.socialButtons}>
+      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+        <GoogleLogo size={24} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+        <Ionicons name="logo-apple" size={26} color="#000" />
+      </TouchableOpacity>
+    </View>
+  </>
+);
 
 const RegisterScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -32,7 +95,7 @@ const RegisterScreen = ({ navigation }) => {
 
   const setRegistrationPhone = useAuthStore((state) => state.setRegistrationPhone);
 
-  const handleGenerateOtp = async () => {
+  const handleGenerateOtp = useCallback(async () => {
     const nameValidation = validateName(name);
     const phoneValidation = validatePhone(phone);
     const emailValidation = email ? validateEmail(email) : { isValid: true };
@@ -64,174 +127,102 @@ const RegisterScreen = ({ navigation }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [name, phone, email, navigation, setRegistrationPhone]);
+
+  const handleFocus = useCallback((field) => () => setFocusedInput(field), []);
+  const handleBlur = useCallback(() => setFocusedInput(null), []);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Yellow Top Section */}
-      <View style={styles.topSection}>
-        {/* Shape 1 - Back shape */}
-        <View style={styles.shape1} />
-        {/* Shape 2 - Front shape */}
-        <View style={styles.shape2} />
-
-        <View style={styles.header}>
-          <Text style={styles.welcomeText}>Create Your</Text>
-          <Text style={styles.welcomeText}>Account</Text>
-        </View>
-      </View>
-
-      {/* Black Bottom Card */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.formContainer}
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          showsVerticalScrollIndicator={false}
+          style={styles.container}
           contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           bounces={false}
         >
-          <View style={styles.card}>
-            {/* Name Input */}
-            <View style={styles.inputContainer}>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  focusedInput === 'name' && styles.inputWrapperFocused,
-                  errors.name && styles.inputWrapperError,
-                ]}
+          {/* Top Section */}
+          <View style={styles.topSection}>
+            <View style={styles.shape1} />
+            <View style={styles.shape2} />
+
+            <View style={styles.header}>
+              <Text style={styles.welcomeText}>Create Your</Text>
+              <Text style={styles.welcomeText}>Account</Text>
+            </View>
+          </View>
+
+          {/* Bottom Fill */}
+          <View style={styles.bottomSection}>
+            <View style={styles.card}>
+              <FormInput
+                icon="person-outline"
+                placeholder="Full Name"
+                value={name}
+                onChange={setName}
+                error={errors.name}
+                focused={focusedInput === 'name'}
+                onFocus={handleFocus('name')}
+                onBlur={handleBlur}
+                autoCapitalize="words"
+              />
+
+              <FormInput
+                icon="call-outline"
+                placeholder="Phone Number"
+                value={phone}
+                onChange={setPhone}
+                error={errors.phone}
+                focused={focusedInput === 'phone'}
+                onFocus={handleFocus('phone')}
+                onBlur={handleBlur}
+                keyboardType="phone-pad"
+                maxLength={10}
+              />
+
+              <FormInput
+                icon="mail-outline"
+                placeholder="Email (Optional)"
+                value={email}
+                onChange={setEmail}
+                error={errors.email}
+                focused={focusedInput === 'email'}
+                onFocus={handleFocus('email')}
+                onBlur={handleBlur}
+                keyboardType="email-address"
+              />
+
+              <TouchableOpacity
+                style={[styles.otpButton, isLoading && styles.buttonDisabled]}
+                onPress={handleGenerateOtp}
+                disabled={isLoading}
+                activeOpacity={0.8}
               >
-                <View style={styles.inputIconContainer}>
-                  <Ionicons
-                    name="person-outline"
-                    size={20}
-                    color={focusedInput === 'name' ? '#F5C518' : '#666'}
-                  />
-                </View>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Full Name"
-                  value={name}
-                  onChangeText={setName}
-                  placeholderTextColor="#666"
-                  autoCapitalize="words"
-                  onFocus={() => setFocusedInput('name')}
-                  onBlur={() => setFocusedInput(null)}
-                />
-              </View>
-              {errors.name && (
-                <Text style={styles.errorText}>{errors.name}</Text>
-              )}
-            </View>
-
-            {/* Phone Input */}
-            <View style={styles.inputContainer}>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  focusedInput === 'phone' && styles.inputWrapperFocused,
-                  errors.phone && styles.inputWrapperError,
-                ]}
-              >
-                <View style={styles.inputIconContainer}>
-                  <Ionicons
-                    name="call-outline"
-                    size={20}
-                    color={focusedInput === 'phone' ? '#F5C518' : '#666'}
-                  />
-                </View>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Phone Number"
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholderTextColor="#666"
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  onFocus={() => setFocusedInput('phone')}
-                  onBlur={() => setFocusedInput(null)}
-                />
-              </View>
-              {errors.phone && (
-                <Text style={styles.errorText}>{errors.phone}</Text>
-              )}
-            </View>
-
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  focusedInput === 'email' && styles.inputWrapperFocused,
-                  errors.email && styles.inputWrapperError,
-                ]}
-              >
-                <View style={styles.inputIconContainer}>
-                  <Ionicons
-                    name="mail-outline"
-                    size={20}
-                    color={focusedInput === 'email' ? '#F5C518' : '#666'}
-                  />
-                </View>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Email (Optional)"
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholderTextColor="#666"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  onFocus={() => setFocusedInput('email')}
-                  onBlur={() => setFocusedInput(null)}
-                />
-              </View>
-              {errors.email && (
-                <Text style={styles.errorText}>{errors.email}</Text>
-              )}
-            </View>
-
-            {/* Sign Up Button */}
-            <TouchableOpacity
-              style={[styles.otpButton, isLoading && styles.buttonDisabled]}
-              onPress={handleGenerateOtp}
-              disabled={isLoading}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#000" size="small" />
-              ) : (
-                <>
-                  <Text style={styles.otpButtonText}>Sign Up</Text>
-                  <View style={styles.buttonArrow}>
-                    <Ionicons name="arrow-forward" size={18} color="#000" />
-                  </View>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Or sign with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Buttons */}
-            <View style={styles.socialButtons}>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <GoogleLogo size={24} />
+                {isLoading ? (
+                  <ActivityIndicator color="#000" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.otpButtonText}>Sign Up</Text>
+                    <View style={styles.buttonArrow}>
+                      <Ionicons name="arrow-forward" size={18} color="#000" />
+                    </View>
+                  </>
+                )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <Ionicons name="logo-apple" size={26} color="#000" />
-              </TouchableOpacity>
-            </View>
 
-            {/* Login Link */}
-            <View style={styles.loginLink}>
-              <Text style={styles.loginText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.loginLinkText}>Login here</Text>
-              </TouchableOpacity>
+              <SocialButtons />
+
+              <View style={styles.loginLink}>
+                <Text style={styles.loginText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                  <Text style={styles.loginLinkText}>Login here</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -245,12 +236,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5C518',
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   topSection: {
     height: height * 0.45,
     backgroundColor: '#F5C518',
     justifyContent: 'center',
     paddingHorizontal: 24,
     overflow: 'hidden',
+  },
+  bottomSection: {
+    flex: 1,
+    backgroundColor: '#0A0A0A',
   },
   shape1: {
     position: 'absolute',
@@ -281,21 +279,15 @@ const styles = StyleSheet.create({
     color: '#000000',
     lineHeight: 44,
   },
-  formContainer: {
-    flex: 1,
-    marginTop: -35,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
   card: {
-    flex: 1,
     backgroundColor: '#0A0A0A',
     borderTopLeftRadius: 35,
     borderTopRightRadius: 35,
     paddingHorizontal: 24,
     paddingTop: 35,
     paddingBottom: 20,
+    marginTop: -35,
+    flexGrow: 1,
   },
   inputContainer: {
     marginBottom: 18,

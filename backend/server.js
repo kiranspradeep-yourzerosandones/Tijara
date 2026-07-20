@@ -27,12 +27,21 @@ app.use(hpp());
 // ============================================================
 // CORS — MUST BE BEFORE ROUTES AND RATE LIMITERS
 // ============================================================
+const getAllowedOrigins = () => {
+  if (process.env.NODE_ENV === "development") {
+    // ✅ Allow everything in development
+    return true;
+  }
+
+  // ✅ Production — only allow your real domains
+  return [
+    "https://yourdomain.com",
+    "https://admin.yourdomain.com",
+  ];
+};
+
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-  ],
+  origin: getAllowedOrigins(),
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
@@ -170,16 +179,23 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// START SERVER
+// START SERVER — Listen on 0.0.0.0 for network access
 // ============================================================
 const PORT = process.env.PORT || 5000;
+const HOST = "0.0.0.0"; // ✅ Accept connections from all network interfaces
 
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, HOST, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
-      console.log(`🔓 CORS enabled for: http://localhost:3000`);
+      console.log(`📱 Local:   http://localhost:${PORT}`);
+      console.log(`📱 Network: http://192.168.29.69:${PORT}`);
+      console.log(
+        process.env.NODE_ENV === "development"
+          ? "🔓 CORS: Open for all origins (development)"
+          : "🔒 CORS: Restricted to allowed origins (production)"
+      );
     });
   })
   .catch((err) => {

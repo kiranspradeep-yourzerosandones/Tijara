@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,13 +15,145 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../theme';
 import { useAuthStore } from '../../store';
 import { sendLoginOtp } from '../../api/auth';
 import { validatePhone, validatePassword } from '../../utils/validation';
 import GoogleLogo from '../../components/common/GoogleLogo';
 
 const { height } = Dimensions.get('window');
+
+const GRADIENT_COLORS = ['#000000', '#0a0a0a', '#1a1500'];
+const GRADIENT_START = { x: 0, y: 0 };
+const GRADIENT_END = { x: 1, y: 1 };
+
+const MethodToggle = ({ loginMethod, onSelect }) => (
+  <View style={styles.methodToggle}>
+    {['password', 'otp'].map((method) => (
+      <TouchableOpacity
+        key={method}
+        style={[
+          styles.methodButton,
+          loginMethod === method && styles.methodButtonActive,
+        ]}
+        onPress={() => onSelect(method)}
+        activeOpacity={0.8}
+      >
+        <Ionicons
+          name={method === 'password' ? 'lock-closed' : 'keypad'}
+          size={16}
+          color={loginMethod === method ? '#000' : '#888'}
+          style={styles.methodIcon}
+        />
+        <Text
+          style={[
+            styles.methodButtonText,
+            loginMethod === method && styles.methodButtonTextActive,
+          ]}
+        >
+          {method === 'password' ? 'Password' : 'OTP'}
+        </Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+);
+
+const PhoneInput = ({ value, onChange, error, focused, onFocus, onBlur }) => (
+  <View style={styles.inputContainer}>
+    <View
+      style={[
+        styles.inputWrapper,
+        focused && styles.inputWrapperFocused,
+        error && styles.inputWrapperError,
+      ]}
+    >
+      <View style={styles.inputIconContainer}>
+        <Ionicons
+          name="call-outline"
+          size={20}
+          color={focused ? '#F5C518' : '#888'}
+        />
+      </View>
+      <TextInput
+        style={styles.textInput}
+        placeholder="Phone Number"
+        value={value}
+        onChangeText={onChange}
+        placeholderTextColor="#888"
+        keyboardType="phone-pad"
+        maxLength={10}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+    </View>
+    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+  </View>
+);
+
+const PasswordInput = ({
+  value,
+  onChange,
+  error,
+  focused,
+  onFocus,
+  onBlur,
+  showPassword,
+  onToggleShow,
+}) => (
+  <View style={styles.inputContainer}>
+    <View
+      style={[
+        styles.inputWrapper,
+        focused && styles.inputWrapperFocused,
+        error && styles.inputWrapperError,
+      ]}
+    >
+      <View style={styles.inputIconContainer}>
+        <Ionicons
+          name="lock-closed-outline"
+          size={20}
+          color={focused ? '#F5C518' : '#888'}
+        />
+      </View>
+      <TextInput
+        style={styles.textInput}
+        placeholder="Password"
+        value={value}
+        onChangeText={onChange}
+        placeholderTextColor="#888"
+        secureTextEntry={!showPassword}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+      <TouchableOpacity onPress={onToggleShow} style={styles.eyeButton}>
+        <Ionicons
+          name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+          size={20}
+          color="#888"
+        />
+      </TouchableOpacity>
+    </View>
+    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+  </View>
+);
+
+const SocialButtons = () => (
+  <>
+    <View style={styles.divider}>
+      <View style={styles.dividerLine} />
+      <Text style={styles.dividerText}>Or sign with</Text>
+      <View style={styles.dividerLine} />
+    </View>
+
+    <View style={styles.socialButtons}>
+      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+        <GoogleLogo size={24} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+        <Ionicons name="logo-apple" size={26} color="#000" />
+      </TouchableOpacity>
+    </View>
+  </>
+);
 
 const LoginScreen = ({ navigation }) => {
   const [phone, setPhone] = useState('');
@@ -34,7 +166,7 @@ const LoginScreen = ({ navigation }) => {
 
   const login = useAuthStore((state) => state.login);
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     const phoneValidation = validatePhone(phone);
     const passwordValidation = validatePassword(password);
 
@@ -56,10 +188,11 @@ const LoginScreen = ({ navigation }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [phone, password, login]);
 
-  const handleOtpLogin = async () => {
+  const handleOtpLogin = useCallback(async () => {
     const phoneValidation = validatePhone(phone);
+
     if (!phoneValidation.isValid) {
       setErrors({ phone: phoneValidation.message });
       return;
@@ -79,218 +212,118 @@ const LoginScreen = ({ navigation }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [phone, navigation]);
+
+  const handleMethodSelect = useCallback((method) => {
+    setLoginMethod(method);
+    setErrors({});
+  }, []);
+
+  const handleFocus = useCallback((field) => () => setFocusedInput(field), []);
+  const handleBlur = useCallback(() => setFocusedInput(null), []);
+  const togglePassword = useCallback(() => {
+    setShowPassword((prev) => !prev);
+  }, []);
+
+  const isPasswordMode = loginMethod === 'password';
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Dark Gradient Top Section */}
-      <LinearGradient
-        colors={['#000000', '#0a0a0a', '#1a1500']}
-        style={styles.topSection}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        {/* Shape 1 - Back shape */}
-        <View style={styles.shape1} />
-        {/* Shape 2 - Front shape */}
-        <View style={styles.shape2} />
-
-        <View style={styles.header}>
-          <Text style={styles.welcomeText}>Hello</Text>
-          <Text style={styles.welcomeText}>Sign In !</Text>
-        </View>
-      </LinearGradient>
-
-      {/* White Bottom Card */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.formContainer}
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          showsVerticalScrollIndicator={false}
+          style={styles.container}
           contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           bounces={false}
         >
-          <View style={styles.card}>
-            {/* Login Method Toggle */}
-            <View style={styles.methodToggle}>
-              <TouchableOpacity
-                style={[
-                  styles.methodButton,
-                  loginMethod === 'password' && styles.methodButtonActive,
-                ]}
-                onPress={() => setLoginMethod('password')}
-              >
-                <Ionicons
-                  name="lock-closed"
-                  size={16}
-                  color={loginMethod === 'password' ? '#000' : '#888'}
-                  style={styles.methodIcon}
-                />
-                <Text
-                  style={[
-                    styles.methodButtonText,
-                    loginMethod === 'password' && styles.methodButtonTextActive,
-                  ]}
-                >
-                  Password
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.methodButton,
-                  loginMethod === 'otp' && styles.methodButtonActive,
-                ]}
-                onPress={() => setLoginMethod('otp')}
-              >
-                <Ionicons
-                  name="keypad"
-                  size={16}
-                  color={loginMethod === 'otp' ? '#000' : '#888'}
-                  style={styles.methodIcon}
-                />
-                <Text
-                  style={[
-                    styles.methodButtonText,
-                    loginMethod === 'otp' && styles.methodButtonTextActive,
-                  ]}
-                >
-                  OTP
-                </Text>
-              </TouchableOpacity>
-            </View>
+          {/* Top Section */}
+          <LinearGradient
+            colors={GRADIENT_COLORS}
+            style={styles.topSection}
+            start={GRADIENT_START}
+            end={GRADIENT_END}
+          >
+            <View style={styles.shape1} />
+            <View style={styles.shape2} />
 
-            {/* Phone Input */}
-            <View style={styles.inputContainer}>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  focusedInput === 'phone' && styles.inputWrapperFocused,
-                  errors.phone && styles.inputWrapperError,
-                ]}
-              >
-                <View style={styles.inputIconContainer}>
-                  <Ionicons
-                    name="call-outline"
-                    size={20}
-                    color={focusedInput === 'phone' ? '#F5C518' : '#888'}
-                  />
-                </View>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Phone Number"
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholderTextColor="#888"
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  onFocus={() => setFocusedInput('phone')}
-                  onBlur={() => setFocusedInput(null)}
+            <View style={styles.header}>
+              <Text style={styles.welcomeText}>Hello</Text>
+              <Text style={styles.welcomeText}>Sign In !</Text>
+            </View>
+          </LinearGradient>
+
+          {/* Bottom Fill */}
+          <View style={styles.bottomSection}>
+            <View style={styles.card}>
+              <MethodToggle
+                loginMethod={loginMethod}
+                onSelect={handleMethodSelect}
+              />
+
+              <PhoneInput
+                value={phone}
+                onChange={setPhone}
+                error={errors.phone}
+                focused={focusedInput === 'phone'}
+                onFocus={handleFocus('phone')}
+                onBlur={handleBlur}
+              />
+
+              {isPasswordMode && (
+                <PasswordInput
+                  value={password}
+                  onChange={setPassword}
+                  error={errors.password}
+                  focused={focusedInput === 'password'}
+                  onFocus={handleFocus('password')}
+                  onBlur={handleBlur}
+                  showPassword={showPassword}
+                  onToggleShow={togglePassword}
                 />
-              </View>
-              {errors.phone && (
-                <Text style={styles.errorText}>{errors.phone}</Text>
               )}
-            </View>
 
-            {/* Password Input */}
-            {loginMethod === 'password' && (
-              <View style={styles.inputContainer}>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    focusedInput === 'password' && styles.inputWrapperFocused,
-                    errors.password && styles.inputWrapperError,
-                  ]}
+              {isPasswordMode && (
+                <TouchableOpacity
+                  style={styles.forgotPassword}
+                  onPress={() => navigation.navigate('ForgotPassword')}
                 >
-                  <View style={styles.inputIconContainer}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color={focusedInput === 'password' ? '#F5C518' : '#888'}
-                    />
-                  </View>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholderTextColor="#888"
-                    secureTextEntry={!showPassword}
-                    onFocus={() => setFocusedInput('password')}
-                    onBlur={() => setFocusedInput(null)}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeButton}
-                  >
-                    <Ionicons
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                      size={20}
-                      color="#888"
-                    />
-                  </TouchableOpacity>
-                </View>
-                {errors.password && (
-                  <Text style={styles.errorText}>{errors.password}</Text>
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[styles.loginButton, isLoading && styles.buttonDisabled]}
+                onPress={isPasswordMode ? handleLogin : handleOtpLogin}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#000" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.loginButtonText}>
+                      {isPasswordMode ? 'Sign In' : 'Generate OTP'}
+                    </Text>
+                    <View style={styles.buttonArrow}>
+                      <Ionicons name="arrow-forward" size={18} color="#000" />
+                    </View>
+                  </>
                 )}
+              </TouchableOpacity>
+
+              <SocialButtons />
+
+              <View style={styles.signupLink}>
+                <Text style={styles.signupText}>You don't have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                  <Text style={styles.signupLinkText}>Signup here</Text>
+                </TouchableOpacity>
               </View>
-            )}
-
-            {/* Forgot Password */}
-            {loginMethod === 'password' && (
-              <TouchableOpacity
-                style={styles.forgotPassword}
-                onPress={() => navigation.navigate('ForgotPassword')}
-              >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Login Button */}
-            <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.buttonDisabled]}
-              onPress={loginMethod === 'password' ? handleLogin : handleOtpLogin}
-              disabled={isLoading}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#000" size="small" />
-              ) : (
-                <>
-                  <Text style={styles.loginButtonText}>
-                    {loginMethod === 'password' ? 'Sign In' : 'Generate OTP'}
-                  </Text>
-                  <View style={styles.buttonArrow}>
-                    <Ionicons name="arrow-forward" size={18} color="#000" />
-                  </View>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Or sign with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Buttons */}
-            <View style={styles.socialButtons}>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <GoogleLogo size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <Ionicons name="logo-apple" size={26} color="#000" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Sign Up Link */}
-            <View style={styles.signupLink}>
-              <Text style={styles.signupText}>You don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                <Text style={styles.signupLinkText}>Signup here</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -304,11 +337,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   topSection: {
     height: height * 0.45,
     justifyContent: 'center',
     paddingHorizontal: 24,
     overflow: 'hidden',
+  },
+  bottomSection: {
+    flex: 1,
+    backgroundColor: '#FAFAFA',
   },
   shape1: {
     position: 'absolute',
@@ -339,21 +379,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 44,
   },
-  formContainer: {
-    flex: 1,
-    marginTop: -35,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
   card: {
-    flex: 1,
     backgroundColor: '#FAFAFA',
     borderTopLeftRadius: 35,
     borderTopRightRadius: 35,
     paddingHorizontal: 24,
     paddingTop: 30,
     paddingBottom: 20,
+    marginTop: -35,
+    flexGrow: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -5 },
     shadowOpacity: 0.1,

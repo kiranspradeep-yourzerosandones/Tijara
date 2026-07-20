@@ -1,5 +1,5 @@
 // src/components/common/NetworkBanner.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
@@ -8,38 +8,77 @@ import { COLORS, FONTS, SPACING } from '../../theme';
 const NetworkBanner = () => {
   const [isConnected, setIsConnected] = useState(true);
   const [showReconnected, setShowReconnected] = useState(false);
-  const translateY = new Animated.Value(-60);
+  const translateY = useRef(new Animated.Value(-60)).current;
+  const isConnectedRef = useRef(true);
+  const hideTimerRef = useRef(null);
+  const initialCheckDone = useRef(false);
+
+  const slideIn = () => {
+    Animated.timing(translateY, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const slideOut = (callback) => {
+    Animated.timing(translateY, {
+      toValue: -60,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(callback);
+  };
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = state.isConnected && state.isInternetReachable !== false;
+      // ✅ Fix: treat null isInternetReachable as connected
+      // null means Android hasn't determined yet — assume connected
+      const connected =
+        state.isConnected === true &&
+        state.isInternetReachable !== false; // null or true = connected
 
-      if (!connected) {
+      // ✅ Skip first event to avoid false "no internet" on startup
+      if (!initialCheckDone.current) {
+        initialCheckDone.current = true;
+        isConnectedRef.current = connected;
+        setIsConnected(connected);
+        return;
+      }
+
+      const wasConnected = isConnectedRef.current;
+      isConnectedRef.current = connected;
+
+      if (!connected && wasConnected) {
+        // 🔴 Just lost connection
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current);
+        }
         setIsConnected(false);
         setShowReconnected(false);
-        // Slide in
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      } else if (!isConnected && connected) {
-        // Was disconnected, now reconnected
+        slideIn();
+
+      } else if (connected && !wasConnected) {
+        // 🟢 Just reconnected
         setShowReconnected(true);
         setIsConnected(true);
-        // Show reconnected briefly then hide
-        setTimeout(() => {
-          Animated.timing(translateY, {
-            toValue: -60,
-            duration: 300,
-            useNativeDriver: true,
-          }).start(() => setShowReconnected(false));
+
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current);
+        }
+
+        hideTimerRef.current = setTimeout(() => {
+          slideOut(() => setShowReconnected(false));
         }, 2000);
       }
     });
 
-    return () => unsubscribe();
-  }, [isConnected]);
+    return () => {
+      unsubscribe();
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
 
   if (isConnected && !showReconnected) return null;
 

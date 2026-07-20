@@ -173,6 +173,26 @@ const AppNavigator = () => (
       component={OrderDetailScreen}
       options={{ presentation: 'card' }}
     />
+    <Stack.Screen 
+      name="PaymentHistory" 
+      component={PaymentHistoryScreen}
+      options={{ presentation: 'card' }}
+    />
+    <Stack.Screen 
+      name="CreditSummary" 
+      component={CreditSummaryScreen}
+      options={{ presentation: 'card' }}
+    />
+    <Stack.Screen 
+      name="Notifications" 
+      component={NotificationScreen}
+      options={{ presentation: 'card' }}
+    />
+    <Stack.Screen 
+      name="ProductList" 
+      component={ProductListScreen}
+      options={{ presentation: 'card' }}
+    />
   </Stack.Navigator>
 );
 
