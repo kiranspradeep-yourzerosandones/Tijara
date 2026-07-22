@@ -19,6 +19,7 @@ const adminDashboardRoutes = require("./adminDashboardRoutes");
 const adminLocationRoutes = require("./adminLocationRoutes");
 const adminCartRoutes = require("./adminCartRoutes");
 const adminNotificationRoutes = require("./adminNotificationRoutes");
+const adminSseRoutes = require("./adminSseRoutes");
 
 // Mount routes
 router.use("/auth", authRoutes); // Customer auth
@@ -37,6 +38,7 @@ router.use("/admin/dashboard", adminDashboardRoutes);
 router.use("/admin/locations", adminLocationRoutes);
 router.use("/admin/carts", adminCartRoutes);
 router.use("/admin/notifications", adminNotificationRoutes);
+router.use("/admin/sse", adminSseRoutes);
 
 // Health check
 router.get("/health", (req, res) => {
