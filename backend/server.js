@@ -10,6 +10,7 @@ const hpp = require("hpp");
 const mongoose = require("mongoose");
 require("dotenv").config();
 
+
 const connectDB = require("./config/db");
 
 const app = express();
@@ -20,9 +21,22 @@ const app = express();
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-app.use(compression());
+app.use((req, res, next) => {
+  // Skip compression for SSE — compression buffers responses
+  // which prevents SSE events from being flushed immediately
+  if (req.path === "/api/admin/sse" || req.originalUrl.startsWith("/api/admin/sse")) {
+    return next();
+  }
+  return compression()(req, res, next);
+});
 app.use(mongoSanitize());
-app.use(hpp());
+app.use((req, res, next) => {
+  // Skip hpp for SSE — it interferes with long-lived connections
+  if (req.path === "/api/admin/sse" || req.originalUrl.startsWith("/api/admin/sse")) {
+    return next();
+  }
+  return hpp()(req, res, next);
+});
 
 // ============================================================
 // CORS — MUST BE BEFORE ROUTES AND RATE LIMITERS
@@ -56,6 +70,7 @@ app.use(cors({
 // ── Handle preflight for ALL routes ──────────────────────────
 app.options(/.*/, cors());
 
+app.use("/api/admin/sse",                require("./routes/adminSseRoutes"));
 // ============================================================
 // RATE LIMITERS
 // ============================================================
@@ -65,6 +80,8 @@ const globalLimiter = rateLimit({
   message: { success: false, message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  // ✅ Skip SSE route — long-lived connections are not compatible with rate limiting
+  skip: (req) => req.path === "/api/admin/sse" || req.originalUrl.startsWith("/api/admin/sse"),
 });
 app.use("/api", globalLimiter);
 
@@ -121,6 +138,7 @@ app.use("/api/admin/dashboard",          require("./routes/adminDashboardRoutes"
 app.use("/api/admin/carts",              require("./routes/adminCartRoutes"));
 app.use("/api/admin/notifications",      require("./routes/adminNotificationRoutes"));
 app.use("/api/admin/images",             require("./routes/adminImageRoutes"));
+
 
 // ============================================================
 // HEALTH CHECK

@@ -1,13 +1,14 @@
-// frontend/app/admin/orders/page.js
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedPage from "@/components/admin/ProtectedPage";
 import { getAuthHeaders } from "@/lib/api";
+import { useAdminSse } from "@/context/AdminSseContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+// ── All existing constants stay exactly the same ───────────
 const STATUS_COLORS = {
   pending:          "bg-yellow-100 text-yellow-800",
   confirmed:        "bg-blue-100 text-blue-800",
@@ -44,19 +45,34 @@ export default function Orders() {
   const router           = useRouter();
   const searchTimeoutRef = useRef(null);
 
-  // ── All state ──────────────────────────────────────────────
-  const [filter,     setFilter]     = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
+  // ── All existing state stays exactly the same ──────────
+  const [filter,      setFilter]      = useState("all");
+  const [searchTerm,  setSearchTerm]  = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [orders,      setOrders]      = useState([]);
+  const [stats,       setStats]       = useState(DEFAULT_STATS);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [pagination,  setPagination]  = useState({ current: 1, pages: 1, total: 0 });
 
-  const [orders,  setOrders]  = useState([]);
-  const [stats,   setStats]   = useState(DEFAULT_STATS);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
-  const [pagination, setPagination] = useState({ current: 1, pages: 1, total: 0 });
+  // ✅ NEW: SSE state
+  const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const filterRef       = useRef("all");
+  const currentPageRef  = useRef(1);
 
-  // ── Core fetch function (plain async — no useCallback) ────
-  const fetchOrders = async (search, status, page) => {
+  // ── Keep refs in sync with state ───────────────────────
+  // (SSE callback is a closure — it can't see updated state directly)
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  // ── All existing fetch functions stay exactly the same ──
+
+  const fetchOrders = useCallback(async (search, status, page) => {
     try {
       setLoading(true);
       setError(null);
@@ -108,9 +124,9 @@ export default function Orders() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const headers = getAuthHeaders();
       if (!headers.Authorization) return;
@@ -120,28 +136,42 @@ export default function Orders() {
 
       const data = await res.json();
       if (data.success) setStats(data.data?.stats || DEFAULT_STATS);
-    } catch (err) {
+     } catch (err) {
       console.warn("fetchStats failed (non-critical):", err.message);
     }
-  };
-
-  // ── Single effect — fires only when these 3 primitives change ──
-  useEffect(() => {
-    fetchOrders(searchTerm, filter, currentPage);
-  }, [filter, currentPage]); // ✅ searchTerm NOT here — debounce handles it
-
-  // ── Stats: load once on mount ──────────────────────────────
-  useEffect(() => {
-    fetchStats();
   }, []);
 
-  // ── Handlers ──────────────────────────────────────────────
+  // ── Existing effects stay exactly the same ──────────────
+    useEffect(() => {
+    fetchOrders(searchTerm, filter, currentPage);
+  }, [filter, currentPage, fetchOrders]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  
+    // ✅ SSE — shared connection from AdminSseProvider in layout
+  useAdminSse("new_order", (orderData) => {
+    console.log("🛒 Orders page: New order via SSE:", orderData);
+
+    setNewOrderAlert(orderData);
+
+    if (currentPageRef.current === 1 && filterRef.current === "all") {
+      fetchOrders("", "all", 1);
+      fetchStats();
+    } else {
+      fetchStats();
+    }
+
+    setTimeout(() => setNewOrderAlert(null), 8000);
+  });
+
+  // ── All existing handlers stay exactly the same ────────
 
   const handleSearchChange = (value) => {
     setSearchTerm(value);
-
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-
     searchTimeoutRef.current = setTimeout(() => {
       setCurrentPage(1);
       fetchOrders(value, filter, 1);
@@ -149,17 +179,15 @@ export default function Orders() {
   };
 
   const handleFilterChange = (newFilter) => {
-    if (newFilter === filter) return; // ✅ prevent duplicate fetch
+    if (newFilter === filter) return;
     setFilter(newFilter);
     setCurrentPage(1);
-    // useEffect [filter, currentPage] will fire
   };
 
   const handlePageChange = (page) => {
     if (page < 1 || page > pagination.pages || page === currentPage) return;
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
-    // useEffect [filter, currentPage] will fire
   };
 
   const handleClearSearch = () => {
@@ -187,13 +215,10 @@ export default function Orders() {
     router.push(`/admin/orders/${orderId}`);
   };
 
-  // ── Smart page number array ───────────────────────────────
   const getPageNumbers = () => {
     const { pages } = pagination;
     const current   = currentPage;
-
     if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
-
     const nums = [];
     if (current <= 4) {
       for (let i = 1; i <= 5; i++) nums.push(i);
@@ -228,13 +253,65 @@ export default function Orders() {
   const rangeStart = pagination.total === 0
     ? 0
     : Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, pagination.total);
-  const rangeEnd   = Math.min(currentPage * ITEMS_PER_PAGE, pagination.total);
+  const rangeEnd = Math.min(currentPage * ITEMS_PER_PAGE, pagination.total);
 
   return (
     <ProtectedPage permission="manageOrders">
       <div className="space-y-6">
 
-        {/* ── Header ──────────────────────────────────────────── */}
+        {/* ✅ NEW: New Order Alert Banner */}
+        {newOrderAlert && (
+          <div className="fixed top-4 right-4 z-50 max-w-sm w-full animate-in">
+            <div className="bg-white border-l-4 border-amber-500 rounded-2xl shadow-2xl p-4
+                            flex items-start gap-3">
+              {/* Animated dot */}
+              <div className="flex-shrink-0 mt-0.5">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full
+                                   rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
+                </span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-900 text-sm">New Order Received!</p>
+                <p className="text-xs text-gray-600 mt-0.5 truncate">
+                  #{newOrderAlert.orderNumber} —{" "}
+                  {newOrderAlert.customer?.businessName ||
+                   newOrderAlert.customer?.name ||
+                   "Customer"}
+                </p>
+                <p className="text-xs font-semibold text-amber-700 mt-1">
+                  ₹{(newOrderAlert.totalAmount || 0).toLocaleString("en-IN")}
+                  {" · "}
+                  {newOrderAlert.totalItems || 0} item(s)
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setNewOrderAlert(null);
+                    handleViewOrder(newOrderAlert.orderId);
+                  }}
+                  className="px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold
+                             rounded-lg hover:bg-amber-600 transition-colors"
+                >
+                  View
+                </button>
+                <button
+                  onClick={() => setNewOrderAlert(null)}
+                  className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-medium
+                             rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Header — exactly as before ─────────────────── */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
@@ -259,7 +336,7 @@ export default function Orders() {
           </button>
         </div>
 
-        {/* ── Error Banner ──────────────────────────────────────── */}
+        {/* ── Error Banner — exactly as before ───────────── */}
         {error && (
           <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
             <svg className="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none"
@@ -281,7 +358,7 @@ export default function Orders() {
           </div>
         )}
 
-        {/* ── Stats Cards ───────────────────────────────────────── */}
+        {/* ── Stats Cards — exactly as before ────────────── */}
         <div className="grid grid-cols-4 md:grid-cols-7 gap-3">
           {filterTabs.map((tab) => (
             <div
@@ -307,10 +384,9 @@ export default function Orders() {
           ))}
         </div>
 
-        {/* ── Search + Filter ───────────────────────────────────── */}
-        <div className="bg-white mt-3 mb-3  rounded-2xl border border-gray-100 p-4">
+        {/* ── Search + Filter — exactly as before ────────── */}
+        <div className="bg-white mt-3 mb-3 rounded-2xl border border-gray-100 p-4">
           <div className="flex gap-3">
-            {/* Search — 70% */}
             <div className="flex-[7] relative">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -349,7 +425,6 @@ export default function Orders() {
               )}
             </div>
 
-            {/* Status Dropdown — 30% */}
             <div className="flex-[3] relative">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -384,7 +459,6 @@ export default function Orders() {
             </div>
           </div>
 
-          {/* Results info */}
           {(searchTerm || filter !== "all") && !loading && (
             <div className="mt-3 flex items-center justify-between">
               <p className="text-xs text-gray-500">
@@ -421,7 +495,7 @@ export default function Orders() {
           )}
         </div>
 
-        {/* ── Orders Table ─────────────────────────────────────── */}
+        {/* ── Orders Table — exactly as before ───────────── */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           {loading ? (
             <div className="p-16 text-center">
@@ -512,26 +586,20 @@ export default function Orders() {
                             #{order.orderNumber}
                           </span>
                         </td>
-
                         <td className="px-6 py-4">
                           <p className="font-medium text-gray-900">
-                            {order.customerSnapshot?.name
-                              || order.user?.name
-                              || "Unknown"}
+                            {order.customerSnapshot?.name || order.user?.name || "Unknown"}
                           </p>
                           <p className="text-sm text-gray-500">
                             {order.customerSnapshot?.phone || ""}
                           </p>
                         </td>
-
                         <td className="px-6 py-4 text-gray-600">
                           {order.totalItems || order.items?.length || 0} items
                         </td>
-
                         <td className="px-6 py-4 font-semibold text-gray-900">
                           ₹{order.totalAmount?.toLocaleString("en-IN")}
                         </td>
-
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                             STATUS_COLORS[order.status] || "bg-gray-100 text-gray-700"
@@ -539,7 +607,6 @@ export default function Orders() {
                             {STATUS_LABELS[order.status] || order.status}
                           </span>
                         </td>
-
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             order.paymentStatus === "paid"
@@ -551,15 +618,11 @@ export default function Orders() {
                             {order.paymentStatus}
                           </span>
                         </td>
-
                         <td className="px-6 py-4 text-gray-600 whitespace-nowrap">
                           {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
+                            day: "numeric", month: "short", year: "numeric",
                           })}
                         </td>
-
                         <td className="px-6 py-4 text-right">
                           <button
                             onClick={(e) => {
@@ -579,11 +642,9 @@ export default function Orders() {
                 </table>
               </div>
 
-              {/* ── Pagination ──────────────────────────────────── */}
+              {/* ── Pagination — exactly as before ─────────── */}
               <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row
                               items-center justify-between gap-4 bg-gray-50/50">
-
-                {/* Range info */}
                 <p className="text-sm text-gray-500 order-2 sm:order-1">
                   {pagination.total > 0 ? (
                     <>
@@ -600,11 +661,8 @@ export default function Orders() {
                   )}
                 </p>
 
-                {/* Page controls — only show if more than 1 page */}
                 {pagination.pages > 1 && (
                   <div className="flex items-center gap-1 order-1 sm:order-2">
-
-                    {/* First page */}
                     <button
                       onClick={() => handlePageChange(1)}
                       disabled={currentPage === 1}
@@ -618,8 +676,6 @@ export default function Orders() {
                           d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                       </svg>
                     </button>
-
-                    {/* Previous */}
                     <button
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
@@ -634,15 +690,10 @@ export default function Orders() {
                       </svg>
                       <span className="hidden sm:inline">Prev</span>
                     </button>
-
-                    {/* Page numbers */}
                     <div className="flex items-center gap-1">
                       {getPageNumbers().map((page, idx) =>
                         page === "..." ? (
-                          <span
-                            key={`dots-${idx}`}
-                            className="px-2 py-2 text-sm text-gray-400 select-none"
-                          >
+                          <span key={`dots-${idx}`} className="px-2 py-2 text-sm text-gray-400 select-none">
                             ···
                           </span>
                         ) : (
@@ -661,8 +712,6 @@ export default function Orders() {
                         )
                       )}
                     </div>
-
-                    {/* Next */}
                     <button
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === pagination.pages}
@@ -677,8 +726,6 @@ export default function Orders() {
                           d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
-
-                    {/* Last page */}
                     <button
                       onClick={() => handlePageChange(pagination.pages)}
                       disabled={currentPage === pagination.pages}

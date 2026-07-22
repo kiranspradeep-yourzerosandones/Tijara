@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { usePermissions } from "@/context/PermissionContext";
+import { useAdminSse } from "@/context/AdminSseContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -36,6 +37,18 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
       return () => clearInterval(interval);
     }
   }, [admin]);
+
+  useAdminSse("new_order", () => {
+    // Increment pending orders badge immediately without waiting for API call
+    setBadges((prev) => ({
+      ...prev,
+      pendingOrders: (prev.pendingOrders || 0) + 1,
+    }));
+    // Also refresh from API to get accurate count
+    if (hasPermission("manageOrders") || hasPermission("viewReports")) {
+      fetchBadgeCounts();
+    }
+  });
 
   useEffect(() => {
     setIsMobileOpen(false);

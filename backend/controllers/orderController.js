@@ -7,6 +7,7 @@ const Product = require("../models/Product");
 const User = require("../models/User");
 const mongoose = require("mongoose");
 const { generateOrderNumber } = require("../utils/generateOrderNumber");
+const { broadcastToAllAdmins } = require("../utils/sseManager");
 
 // ============================================================
 // CUSTOMER ORDER OPERATIONS
@@ -223,6 +224,22 @@ exports.placeOrder = async (req, res) => {
     );
 
     console.log(`📦 Order placed: ${orderNumber} by user: ${req.user._id}`);
+
+    setImmediate(() => {
+      broadcastToAllAdmins("new_order", {
+        orderId:     order._id,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        totalItems:  order.totalItems,
+        customer: {
+          name:         user.name,
+          phone:        user.phone,
+          businessName: user.businessName || null
+        },
+        status:    order.status,
+        createdAt: order.createdAt
+      });
+    });
 
     // Populate order for response
     await order.populate('items.product', 'title slug images price');

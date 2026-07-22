@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { productAPI, categoryAPI, userAPI, getAuthHeaders } from "@/lib/api";
 import { getImageUrl, ImagePlaceholder } from "@/lib/imageHelper";
+import { useAdminSse } from "@/context/AdminSseContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -29,6 +30,10 @@ export default function Dashboard() {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+  useAdminSse("new_order", () => {
+    console.log("🛒 Dashboard: New order received — refreshing...");
+    fetchDashboardData();
+  });
 
   const fetchDashboardData = async () => {
     try {
@@ -97,10 +102,9 @@ export default function Dashboard() {
             }
 
             // Pending orders
-            const pendingStatuses = ["pending", "confirmed", "processing", "shipped", "out_for_delivery", "out-for-delivery"];
-            if (pendingStatuses.includes(status)) {
-              pendingOrders++;
-            }
+            if (status === "pending") {
+  pendingOrders++;
+}
 
             // Completed/Delivered orders
             if (status === "delivered" || status === "completed" || status === "complete") {
