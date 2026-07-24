@@ -506,20 +506,21 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
   // ════════════════════════════════════════
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
+     
+            {/* Logo */}
       <div
         className={`flex items-center border-b border-gray-100 ${
           isCollapsed ? "px-3 py-4 justify-center" : "px-5 py-5 gap-3"
         }`}
       >
         <Link href="/admin/dashboard" className="flex items-center gap-3">
-          <div
-            className={`rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-200/50 ${
+          <img
+            src="/images/tijarablack.png"
+            alt="Tijara"
+            className={`rounded-xl object-contain shadow-lg shadow-amber-200/50 ${
               isCollapsed ? "w-10 h-10" : "w-11 h-11"
             }`}
-          >
-            <span className="text-white font-bold text-lg">T</span>
-          </div>
+          />
           {!isCollapsed && (
             <div>
               <h1 className="font-bold text-gray-900 text-lg tracking-tight">

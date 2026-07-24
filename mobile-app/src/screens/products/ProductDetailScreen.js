@@ -349,121 +349,115 @@ const ProductDetailScreen = ({ navigation, route }) => {
       </ScrollView>
 
       {/* ── Bottom Action Bar ─────────────────────────────── */}
-      {product.inStock && (
-        <View style={styles.bottomBar}>
-          {isInCart ? (
-            // ── Cart stepper — shown when item already in cart ──
-            <View style={styles.cartStepperRow}>
-              {/* Cart quantity stepper */}
-              <View style={styles.cartStepper}>
-                <TouchableOpacity
-                  style={[
-                    styles.stepperBtn,
-                    styles.stepperBtnMinus,
-                  ]}
-                  onPress={handleCartDecrease}
-                  disabled={isCartLoading}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={cartQuantity <= min ? 'trash-outline' : 'remove'}
-                    size={20}
-                    color={COLORS.white}
-                  />
-                </TouchableOpacity>
 
-                <View style={styles.stepperCount}>
-                  <Text style={styles.stepperCountText}>{cartQuantity}</Text>
-                  <Text style={styles.stepperCountLabel}>in cart</Text>
-                </View>
+{product.inStock && (
+  <View style={styles.bottomBar}>
+    {isInCart ? (
+      <View style={styles.cartStepperRow}>
+        {/* Cart Stepper */}
+        <View style={styles.cartStepper}>
+          <TouchableOpacity
+            style={styles.stepperBtnMinus}
+            onPress={handleCartDecrease}
+            disabled={isCartLoading}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={cartQuantity <= min ? 'trash-outline' : 'remove'}
+              size={18}
+              color={COLORS.white}
+            />
+          </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.stepperBtn,
-                    styles.stepperBtnPlus,
-                    cartQuantity >= max && styles.stepperBtnDisabled,
-                  ]}
-                  onPress={handleCartIncrease}
-                  disabled={isCartLoading || cartQuantity >= max}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={20} color={COLORS.white} />
-                </TouchableOpacity>
-              </View>
+          <View style={styles.stepperCount}>
+            <Text style={styles.stepperCountText}>{cartQuantity}</Text>
+          </View>
 
-              {/* Go to Cart button */}
-              <TouchableOpacity
-                style={styles.goToCartBtn}
-                onPress={() => navigation.navigate('Cart')}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="cart" size={18} color={COLORS.black} />
-                <Text style={styles.goToCartText}>View Cart</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            // ── Add to cart — shown when item NOT in cart ──────
-            <View style={styles.addToCartRow}>
-              {/* Local quantity stepper */}
-              <View style={styles.localStepper}>
-                <TouchableOpacity
-                  style={[
-                    styles.localStepperBtn,
-                    quantity <= min && styles.localStepperBtnDisabled,
-                  ]}
-                  onPress={() => handleQuantityChange(-1)}
-                  disabled={quantity <= min}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="remove"
-                    size={18}
-                    color={quantity <= min ? COLORS.gray : COLORS.textPrimary}
-                  />
-                </TouchableOpacity>
-
-                <Text style={styles.localStepperCount}>{quantity}</Text>
-
-                <TouchableOpacity
-                  style={[
-                    styles.localStepperBtn,
-                    quantity >= max && styles.localStepperBtnDisabled,
-                  ]}
-                  onPress={() => handleQuantityChange(1)}
-                  disabled={quantity >= max}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="add"
-                    size={18}
-                    color={quantity >= max ? COLORS.gray : COLORS.textPrimary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* Add to Cart button */}
-              <TouchableOpacity
-                style={[
-                  styles.addToCartBtn,
-                  isCartLoading && styles.addToCartBtnDisabled,
-                ]}
-                onPress={handleAddToCart}
-                disabled={isCartLoading}
-                activeOpacity={0.85}
-              >
-                {isCartLoading ? (
-                  <Text style={styles.addToCartBtnText}>Adding...</Text>
-                ) : (
-                  <>
-                    <Ionicons name="cart" size={20} color={COLORS.black} />
-                    <Text style={styles.addToCartBtnText}>Add to Cart</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
+          <TouchableOpacity
+            style={[
+              styles.stepperBtnPlus,
+              cartQuantity >= max && styles.stepperBtnDisabled,
+            ]}
+            onPress={handleCartIncrease}
+            disabled={isCartLoading || cartQuantity >= max}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={18} color={COLORS.white} />
+          </TouchableOpacity>
         </View>
-      )}
+
+        {/* View Cart */}
+        <TouchableOpacity
+          style={styles.goToCartBtn}
+          onPress={() => navigation.navigate('Cart')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="cart" size={18} color={COLORS.black} />
+          <Text style={styles.goToCartText}>View Cart</Text>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <View style={styles.addToCartRow}>
+        {/* Quantity Stepper */}
+        <View style={styles.localStepper}>
+          <TouchableOpacity
+            style={[
+              styles.localStepperBtn,
+              quantity <= min && styles.localStepperBtnDisabled,
+            ]}
+            onPress={() => handleQuantityChange(-1)}
+            disabled={quantity <= min}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="remove"
+              size={16}
+              color={quantity <= min ? COLORS.gray : COLORS.textPrimary}
+            />
+          </TouchableOpacity>
+
+          <Text style={styles.localStepperCount}>{quantity}</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.localStepperBtn,
+              quantity >= max && styles.localStepperBtnDisabled,
+            ]}
+            onPress={() => handleQuantityChange(1)}
+            disabled={quantity >= max}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="add"
+              size={16}
+              color={quantity >= max ? COLORS.gray : COLORS.textPrimary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Add to Cart */}
+        <TouchableOpacity
+          style={[
+            styles.addToCartBtn,
+            isCartLoading && styles.addToCartBtnDisabled,
+          ]}
+          onPress={handleAddToCart}
+          disabled={isCartLoading}
+          activeOpacity={0.85}
+        >
+          {isCartLoading ? (
+            <Text style={styles.addToCartBtnText}>Adding...</Text>
+          ) : (
+            <>
+              <Ionicons name="cart-outline" size={18} color={COLORS.black} />
+              <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    )}
+  </View>
+)}
 
       {/* ✅ Toast */}
       <Toast
@@ -662,79 +656,80 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: { height: 110 },
 
-  // ── Bottom Bar ──────────────────────────────────────────
+    // ── Bottom Bar ──────────────────────────────────────────
   bottomBar: {
     paddingHorizontal: SPACING.screenPadding,
-    paddingVertical:   SPACING.md,
+    paddingTop:        SPACING.sm,
+    paddingBottom:     SPACING.lg,
     backgroundColor:   COLORS.white,
     borderTopWidth:    1,
     borderTopColor:    COLORS.border,
     ...SHADOWS.medium,
   },
 
-  // ── Add to Cart row (item NOT in cart) ──────────────────
+  // ── Add to Cart Row ─────────────────────────────────────
   addToCartRow: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           SPACING.md,
+    gap:           SPACING.sm,
+    height:        52,
   },
 
   // Local quantity stepper
   localStepper: {
     flexDirection:   'row',
     alignItems:      'center',
-    backgroundColor: COLORS.backgroundLight,
-    borderRadius:    14,
+    height:          52,
+    borderRadius:    12,
     borderWidth:     1.5,
     borderColor:     COLORS.border,
+    backgroundColor: COLORS.white,
     overflow:        'hidden',
   },
   localStepperBtn: {
     width:           44,
-    height:          48,
+    height:          '100%',
     alignItems:      'center',
     justifyContent:  'center',
-    backgroundColor: COLORS.white,
   },
   localStepperBtnDisabled: {
-    backgroundColor: COLORS.backgroundLight,
+    opacity: 0.35,
   },
   localStepperCount: {
-    ...FONTS.h4,
-    color:       COLORS.textPrimary,
-    minWidth:    44,
-    textAlign:   'center',
-    fontWeight:  '700',
-    fontSize:    18,
+    minWidth:   40,
+    textAlign:  'center',
+    fontSize:   16,
+    fontWeight: '700',
+    color:      COLORS.textPrimary,
   },
 
-  // Add to cart button
+  // Add to Cart button
   addToCartBtn: {
     flex:            1,
     height:          52,
     flexDirection:   'row',
     alignItems:      'center',
     justifyContent:  'center',
-    gap:             SPACING.sm,
+    gap:             SPACING.xs,
     backgroundColor: COLORS.primary,
-    borderRadius:    16,
+    borderRadius:    12,
     ...SHADOWS.small,
   },
   addToCartBtnDisabled: {
     opacity: 0.6,
   },
   addToCartBtnText: {
-    ...FONTS.body,
-    color:      COLORS.black,
-    fontWeight: '700',
     fontSize:   15,
+    fontWeight: '700',
+    color:      COLORS.black,
   },
 
-  // ── Cart Stepper row (item IS in cart) ──────────────────
+  // ── Cart Stepper Row ────────────────────────────────────
   cartStepperRow: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           SPACING.md,
+    gap:           SPACING.sm,
+    height:        52,
   },
 
   // Cart stepper
@@ -742,64 +737,58 @@ const styles = StyleSheet.create({
     flex:          1,
     flexDirection: 'row',
     alignItems:    'center',
-    borderRadius:  16,
-    overflow:      'hidden',
+    height:        52,
+    borderRadius:  12,
     borderWidth:   1.5,
     borderColor:   COLORS.primary,
-    height:        52,
-  },
-  stepperBtn: {
-    width:          52,
-    height:         '100%',
-    alignItems:     'center',
-    justifyContent: 'center',
+    overflow:      'hidden',
   },
   stepperBtnMinus: {
+    width:           52,
+    height:          '100%',
+    alignItems:      'center',
+    justifyContent:  'center',
     backgroundColor: COLORS.error,
   },
   stepperBtnPlus: {
+    width:           52,
+    height:          '100%',
+    alignItems:      'center',
+    justifyContent:  'center',
     backgroundColor: COLORS.primary,
   },
   stepperBtnDisabled: {
     backgroundColor: COLORS.gray,
-    opacity:         0.5,
+    opacity:         0.4,
   },
   stepperCount: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
+    flex:            1,
+    alignItems:      'center',
+    justifyContent:  'center',
     backgroundColor: COLORS.white,
   },
   stepperCountText: {
-    ...FONTS.h4,
-    color:      COLORS.textPrimary,
+    fontSize:   17,
     fontWeight: '800',
-    fontSize:   18,
-    lineHeight: 22,
-  },
-  stepperCountLabel: {
-    ...FONTS.caption,
-    color:    COLORS.textSecondary,
-    fontSize: 10,
+    color:      COLORS.textPrimary,
   },
 
-  // Go to cart button
+  // Go to Cart button
   goToCartBtn: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             6,
-    backgroundColor: COLORS.primary,
-    height:          52,
-    paddingHorizontal: SPACING.lg,
-    borderRadius:    16,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'center',
+    gap:               6,
+    height:            52,
+    paddingHorizontal: SPACING.xl,
+    backgroundColor:   COLORS.primary,
+    borderRadius:      12,
     ...SHADOWS.small,
   },
   goToCartText: {
-    ...FONTS.body,
-    color:      COLORS.black,
-    fontWeight: '700',
     fontSize:   14,
+    fontWeight: '700',
+    color:      COLORS.black,
   },
 });
 
