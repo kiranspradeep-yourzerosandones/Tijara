@@ -7,20 +7,58 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 // ============================================================
+// SOUND PLAYER
+// Browsers block audio until the user has interacted with the page.
+// We pre-load the audio on first user interaction so it plays
+// instantly when a new order arrives.
+// ============================================================
+function initSound() {
+  if (typeof window === "undefined") return;
+  if (window.__adminOrderSound) return; // already initialized
+
+  const audio = new Audio("/sounds/new-order.mp3");
+  audio.preload = "auto";
+  audio.volume = 0.8;
+  window.__adminOrderSound = audio;
+}
+
+function playOrderSound() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const audio = window.__adminOrderSound;
+    if (!audio) {
+      // Fallback: create fresh instance if not pre-loaded
+      const fresh = new Audio("/sounds/new-order.mp3");
+      fresh.volume = 0.8;
+      fresh.play().catch((err) =>
+        console.warn("AdminSSE: Sound play failed:", err.message)
+      );
+      return;
+    }
+
+    // Reset to start in case it was already playing
+    audio.currentTime = 0;
+    audio.play().catch((err) =>
+      console.warn("AdminSSE: Sound play failed:", err.message)
+    );
+  } catch (err) {
+    console.warn("AdminSSE: Sound error:", err.message);
+  }
+}
+
+// ============================================================
 // SINGLETON stored on window — survives HMR reloads
 // ============================================================
 function getSSE() {
   if (typeof window === "undefined") return null;
-
-  // Already initialized
   if (window.__adminSse) return window.__adminSse;
 
-  // Initialize singleton
   window.__adminSse = {
-    es:            null,   // EventSource instance
-    listeners:     new Map(),
-    reconnectTid:  null,
-    connected:     false,
+    es:           null,
+    listeners:    new Map(),
+    reconnectTid: null,
+    connected:    false,
   };
 
   return window.__adminSse;
@@ -30,7 +68,6 @@ function sseConnect() {
   const sse = getSSE();
   if (!sse) return;
 
-  // Already open
   if (sse.es && sse.es.readyState !== EventSource.CLOSED) {
     console.log("📡 AdminSSE: Already connected, skipping");
     return;
@@ -54,13 +91,18 @@ function sseConnect() {
   });
 
   es.addEventListener("heartbeat", () => {
-    // silent
+    // silent keep-alive
   });
 
   es.addEventListener("new_order", (e) => {
     const data = JSON.parse(e.data);
     console.log("🛒 AdminSSE: new_order received", data);
 
+    // ✅ Play sound globally — fires on every new order
+    // regardless of which page the admin is on
+    playOrderSound();
+
+    // Notify all subscribers
     const callbacks = sse.listeners.get("new_order");
     if (callbacks) {
       callbacks.forEach((cb) => {
@@ -71,13 +113,8 @@ function sseConnect() {
     }
   });
 
-  // Catch-all for debugging
-  es.onmessage = (e) => {
-    console.log("📨 AdminSSE: raw message:", e.data);
-  };
-
-  es.onerror = (err) => {
-    console.warn("📡 AdminSSE: Error — will reconnect in 5s");
+  es.onerror = () => {
+    console.warn("📡 AdminSSE: Error — reconnecting in 5s...");
     sse.connected = false;
     es.close();
     sse.es = null;
@@ -125,16 +162,43 @@ const AdminSseContext = createContext(null);
 
 export function AdminSseProvider({ children }) {
   useEffect(() => {
-    // Connect once — window.__adminSse survives HMR
-    // so even if this effect runs multiple times,
-    // sseConnect() checks if already open and skips
+    // ✅ Pre-load sound on first render (after user interaction
+    // with the page — browser requires this for autoplay policy)
+    initSound();
+
+    // ✅ Also init sound on first user interaction
+    // (covers the case where admin opens the page fresh)
+    const handleInteraction = () => {
+      initSound();
+      // Pre-play at volume 0 to "unlock" audio on Safari/Chrome
+      if (window.__adminOrderSound) {
+        window.__adminOrderSound.volume = 0;
+        window.__adminOrderSound
+          .play()
+          .then(() => {
+            window.__adminOrderSound.pause();
+            window.__adminOrderSound.currentTime = 0;
+            window.__adminOrderSound.volume = 0.8;
+          })
+          .catch(() => {
+            // Silently ignore — will retry on next interaction
+          });
+      }
+      // Remove listeners after first interaction
+      window.removeEventListener("click", handleInteraction);
+      window.removeEventListener("keydown", handleInteraction);
+    };
+
+    window.addEventListener("click", handleInteraction);
+    window.addEventListener("keydown", handleInteraction);
+
+    // Connect SSE
     sseConnect();
 
-    // Cleanup only on actual page unload / logout
-    // NOT on HMR reload (window.__adminSse persists)
     return () => {
-      // Don't disconnect on HMR — only disconnect if
-      // the token is gone (user logged out)
+      window.removeEventListener("click", handleInteraction);
+      window.removeEventListener("keydown", handleInteraction);
+
       const token = localStorage.getItem("token");
       if (!token) {
         sseDisconnect();
