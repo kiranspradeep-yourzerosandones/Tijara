@@ -1,10 +1,14 @@
-// frontend\app\layout.js
 import "./globals.css";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
 
 export const metadata = {
   title: "Tijara Admin",
   description: "Tijara Admin Dashboard",
+  icons: {
+    icon: "/images/tijarawhite.png",
+    shortcut: "/images/tijarawhite.png",
+    apple: "/images/tijarawhite.png",
+  },
 };
 
 export default function RootLayout({ children }) {
