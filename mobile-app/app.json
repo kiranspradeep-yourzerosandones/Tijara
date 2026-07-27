@@ -54,11 +54,11 @@
         }
       ]
     ],
+    "owner": "yourzerosandones",
     "extra": {
       "eas": {
-        "projectId": "23ec5334-87ac-4f1c-9646-2ea568dc23cf"
+        "projectId": "ea84ccfa-33d3-40ac-a698-880a9554039c"
       }
-    },
-    "owner": "kiranspradeep"
+    }
   }
 }
