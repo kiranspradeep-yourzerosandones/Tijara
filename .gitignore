@@ -69,7 +69,7 @@ temp/
 # -----------------------------
 # Firebase / Google
 # -----------------------------
-google-services.json
+
 GoogleService-Info.plist
 
 # -----------------------------
@@ -78,8 +78,7 @@ GoogleService-Info.plist
 *.keystore
 !debug.keystore
 *.jks
-android/app/google-services.json
-mobile-app/google-services.json
+
 
 # -----------------------------
 # iOS
