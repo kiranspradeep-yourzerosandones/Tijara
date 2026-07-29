@@ -32,18 +32,18 @@ import { fetchWithCache, invalidateCacheByPrefix } from '../../utils/apiCache';
 const { width } = Dimensions.get('window');
 
 const BANNER_HORIZONTAL_PADDING = 20;
-const BANNER_WIDTH = width - BANNER_HORIZONTAL_PADDING * 2;
-const BANNER_HEIGHT = 160;
-const CATEGORY_HEIGHT = 114;
-const PRODUCT_GAP = 10;
+const BANNER_WIDTH               = width - BANNER_HORIZONTAL_PADDING * 2;
+const BANNER_HEIGHT              = 160;
+const CATEGORY_HEIGHT            = 114;
+const PRODUCT_GAP                = 10;
 const PRODUCT_CARD_WIDTH =
   (width - SPACING.screenPadding * 2 - PRODUCT_GAP * 2) / 3;
 
-const PRODUCTS_CACHE_TTL = 5 * 60 * 1000;
+const PRODUCTS_CACHE_TTL   = 5 * 60 * 1000;
 const CATEGORIES_CACHE_TTL = 30 * 60 * 1000;
 
 const CATEGORY_IMAGES = {
-  wax: require('../../../assets/wax.jpg'),
+  wax:       require('../../../assets/wax.jpg'),
   chemicals: require('../../../assets/chemicals.jpg'),
 };
 
@@ -75,42 +75,32 @@ const BANNER_DATA = [
 ];
 
 const DEFAULT_CATEGORIES = [
-  { _id: 'wax', name: 'Wax Products', localImage: CATEGORY_IMAGES.wax },
-  {
-    _id: 'chemicals',
-    name: 'Chemical Products',
-    localImage: CATEGORY_IMAGES.chemicals,
-  },
+  { _id: 'wax',       name: 'Wax Products',      localImage: CATEGORY_IMAGES.wax },
+  { _id: 'chemicals', name: 'Chemical Products',  localImage: CATEGORY_IMAGES.chemicals },
 ];
 
 const HomeScreen = ({ navigation }) => {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [products,           setProducts]           = useState([]);
+  const [categories,         setCategories]         = useState([]);
+  const [isLoading,          setIsLoading]          = useState(true);
+  const [isRefreshing,       setIsRefreshing]       = useState(false);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
-  // ✅ FIX 1 — floatingCartScale declared here
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim         = useRef(new Animated.Value(1)).current;
   const floatingCartScale = useRef(new Animated.Value(0)).current;
+  const addingRef        = useRef({});
 
-  // ✅ Spam guard for add to cart
-  const addingRef = useRef({});
-
-  // Toast
   const { toast, showToast } = useToast();
 
-  // ✅ FIX 3 — Granular store selectors (prevent full re-renders)
-  const user = useAuthStore((state) => state.user);
-  const addToCart = useCartStore((state) => state.addToCart);
-  const getItemQuantity = useCartStore((state) => state.getItemQuantity);
-  const fetchCart = useCartStore((state) => state.fetchCart);
-  const totalItems = useCartStore((state) => state.totalItems);
-  const cartItems = useCartStore((state) => state.items);
+  const user             = useAuthStore((state) => state.user);
+  const addToCart        = useCartStore((state) => state.addToCart);
+  const getItemQuantity  = useCartStore((state) => state.getItemQuantity);
+  const fetchCart        = useCartStore((state) => state.fetchCart);
+  const totalItems       = useCartStore((state) => state.totalItems);
+  const cartItems        = useCartStore((state) => state.items);
   const { fetchUnreadCount } = useNotificationStore();
-  const unreadCount = useNotificationStore((state) => state.unreadCount);
+  const unreadCount      = useNotificationStore((state) => state.unreadCount);
 
-  // Search hook
   const {
     query: searchQuery,
     suggestions,
@@ -130,41 +120,37 @@ const HomeScreen = ({ navigation }) => {
     removeRecentSearch,
     clearRecentSearches,
   } = useSearch({
-    debounceMs: 300,
-    minQueryLength: 2,
-    maxSuggestions: 8,
+    debounceMs:          300,
+    minQueryLength:      2,
+    maxSuggestions:      8,
     enableBackendSearch: true,
-    localProducts: products,
-    categories: categories,
+    localProducts:       products,
+    categories,
   });
 
-  // ============================================================
-  // FLOATING CART ANIMATION
-  // ============================================================
+  // ── Floating cart animation ───────────────────────────────
   useEffect(() => {
     Animated.spring(floatingCartScale, {
-      toValue: totalItems > 0 ? 1 : 0,
+      toValue:        totalItems > 0 ? 1 : 0,
       useNativeDriver: true,
-      friction: 6,
-      tension: 40,
+      friction:       6,
+      tension:        40,
     }).start();
   }, [totalItems]);
 
-  // ============================================================
-  // ✅ FIX 5 — Banner auto-change stops when screen unfocused
-  // ============================================================
+  // ── Banner auto-rotate (pauses when screen unfocused) ─────
   useFocusEffect(
     useCallback(() => {
       const interval = setInterval(() => {
         Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 300,
+          toValue:         0,
+          duration:        300,
           useNativeDriver: true,
         }).start(() => {
           setCurrentBannerIndex((prev) => (prev + 1) % BANNER_DATA.length);
           Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 300,
+            toValue:         1,
+            duration:        300,
             useNativeDriver: true,
           }).start();
         });
@@ -174,9 +160,7 @@ const HomeScreen = ({ navigation }) => {
     }, [fadeAnim])
   );
 
-  // ============================================================
-  // DATA LOADING
-  // ============================================================
+  // ── Data loading ──────────────────────────────────────────
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -187,12 +171,11 @@ const HomeScreen = ({ navigation }) => {
       await Promise.all([
         loadProducts(),
         loadCategories(),
-        // ✅ FIX 2 — Only fetch cart if empty
         cartItems.length === 0 ? fetchCart() : Promise.resolve(),
         fetchUnreadCount(),
       ]);
-    } catch (error) {
-      console.error('Load initial data error:', error);
+    } catch {
+      // Non-critical — UI shows whatever loaded
     } finally {
       setIsLoading(false);
     }
@@ -206,8 +189,8 @@ const HomeScreen = ({ navigation }) => {
         PRODUCTS_CACHE_TTL
       );
       setProducts(response.data?.products || []);
-    } catch (error) {
-      console.error('Load products error:', error);
+    } catch {
+      // Keep existing products on error
     }
   };
 
@@ -219,8 +202,8 @@ const HomeScreen = ({ navigation }) => {
         CATEGORIES_CACHE_TTL
       );
       setCategories(response.categories || []);
-    } catch (error) {
-      console.error('Load categories error:', error);
+    } catch {
+      // Keep default categories on error
     }
   };
 
@@ -230,16 +213,14 @@ const HomeScreen = ({ navigation }) => {
       invalidateCacheByPrefix('products:');
       invalidateCacheByPrefix('categories:');
       await loadInitialData();
-    } catch (error) {
-      console.error('Refresh error:', error);
+    } catch {
+      // Silently fail
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  // ============================================================
-  // NAVIGATION HANDLERS
-  // ============================================================
+  // ── Navigation handlers ───────────────────────────────────
   const handleSearch = useCallback(() => {
     if (searchQuery.trim()) {
       hideSuggestions();
@@ -247,7 +228,7 @@ const HomeScreen = ({ navigation }) => {
       addToRecentSearches(searchQuery.trim());
       navigation.navigate('ProductList', {
         searchQuery: searchQuery.trim(),
-        title: `Search: ${searchQuery.trim()}`,
+        title:       `Search: ${searchQuery.trim()}`,
       });
     }
   }, [searchQuery, hideSuggestions, addToRecentSearches, navigation]);
@@ -270,7 +251,7 @@ const HomeScreen = ({ navigation }) => {
     Keyboard.dismiss();
     navigation.navigate('ProductList', {
       searchQuery: searchQuery.trim(),
-      title: `Search: ${searchQuery.trim()}`,
+      title:       `Search: ${searchQuery.trim()}`,
     });
   }, [hideSuggestions, searchQuery, navigation]);
 
@@ -279,27 +260,21 @@ const HomeScreen = ({ navigation }) => {
       hideSuggestions();
       Keyboard.dismiss();
       navigation.navigate('ProductList', {
-        category:
-          typeof category === 'string' ? category : category.name,
-        title:
-          typeof category === 'string' ? category : category.name,
+        category: typeof category === 'string' ? category : category.name,
+        title:    typeof category === 'string' ? category : category.name,
       });
     },
     [hideSuggestions, navigation]
   );
 
-  
-
   const handleGoToCart = useCallback(() => {
     navigation.navigate('Cart');
   }, [navigation]);
 
-  // ✅ FIX 6 — Spam guard on add to cart
   const handleAddToCart = useCallback(
     async (product) => {
       if (addingRef.current[product._id]) return;
       addingRef.current[product._id] = true;
-
       try {
         await addToCart(product._id, 1);
         showToast(`${product.title} added to cart`, 'cart');
@@ -321,19 +296,13 @@ const HomeScreen = ({ navigation }) => {
         Keyboard.dismiss();
         navigation.navigate('ProductList', {
           searchQuery: suggestion,
-          title: `Search: ${suggestion}`,
+          title:       `Search: ${suggestion}`,
         });
       } else {
         selectSuggestion(suggestion);
       }
     },
-    [
-      setSearchQuery,
-      addToRecentSearches,
-      hideSuggestions,
-      selectSuggestion,
-      navigation,
-    ]
+    [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion, navigation]
   );
 
   const handleSelectProductSuggestion = useCallback(
@@ -355,30 +324,26 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const handleFillSearch = useCallback(
-    (text) => {
-      fillSearch(text);
-    },
+    (text) => fillSearch(text),
     [fillSearch]
   );
 
   const handleRemoveRecentSearch = useCallback(
-    (searchTerm) => {
-      removeRecentSearch(searchTerm);
-    },
+    (searchTerm) => removeRecentSearch(searchTerm),
     [removeRecentSearch]
   );
 
   const handleDotPress = useCallback(
     (index) => {
       Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
+        toValue:         0,
+        duration:        200,
         useNativeDriver: true,
       }).start(() => {
         setCurrentBannerIndex(index);
         Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 200,
+          toValue:         1,
+          duration:        200,
           useNativeDriver: true,
         }).start();
       });
@@ -386,46 +351,38 @@ const HomeScreen = ({ navigation }) => {
     [fadeAnim]
   );
 
-  // ============================================================
-  // RENDERS
-  // ============================================================
+  // ── Renders ───────────────────────────────────────────────
 
   const renderHeader = () => (
-  <View style={styles.header}>
-    <View style={styles.headerLeft}>
-      <View style={styles.logoContainer}>
-        <TijaraLogo width={28} height={28} />
-      </View>
-      <View style={styles.headerTextContainer}>
-        <Text style={styles.welcomeText}>Welcome Back,</Text>
-        <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
-      </View>
-    </View>
-
-    {/* ✅ Bell icon with unread badge — replaces headset */}
-    <TouchableOpacity
-      style={styles.notificationButton}
-      onPress={() => navigation.navigate('Notifications')}
-      activeOpacity={0.7}
-    >
-      <Ionicons
-        name="notifications-outline"
-        size={22}
-        color={COLORS.textPrimary}
-      />
-      {unreadCount > 0 && (
-        <View style={styles.notificationBadge}>
-          <Text style={styles.notificationBadgeText}>
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </Text>
+    <View style={styles.header}>
+      <View style={styles.headerLeft}>
+        <View style={styles.logoContainer}>
+          <TijaraLogo width={28} height={28} />
         </View>
-      )}
-    </TouchableOpacity>
-  </View>
-);
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.welcomeText}>Welcome Back,</Text>
+          <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={styles.notificationButton}
+        onPress={() => navigation.navigate('Notifications')}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+        {unreadCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
 
   const renderSearchBar = () => (
-    // ✅ FIX 4 — Added elevation for Android zIndex
     <View style={styles.searchWrapper}>
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={18} color={COLORS.gray} />
@@ -497,10 +454,7 @@ const HomeScreen = ({ navigation }) => {
           <Animated.View
             style={[
               styles.bannerCard,
-              {
-                backgroundColor: currentBanner.backgroundColor,
-                opacity: fadeAnim,
-              },
+              { backgroundColor: currentBanner.backgroundColor, opacity: fadeAnim },
             ]}
           >
             <View style={styles.bannerPattern}>
@@ -517,20 +471,12 @@ const HomeScreen = ({ navigation }) => {
                 </Text>
                 <View style={styles.shopNowButton}>
                   <Text style={styles.shopNowText}>Shop Now</Text>
-                  <Ionicons
-                    name="arrow-forward"
-                    size={14}
-                    color={COLORS.black}
-                  />
+                  <Ionicons name="arrow-forward" size={14} color={COLORS.black} />
                 </View>
               </View>
               <View style={styles.bannerImageSection}>
                 <View style={styles.bannerIconContainer}>
-                  <Ionicons
-                    name="cube"
-                    size={40}
-                    color="rgba(255,255,255,0.3)"
-                  />
+                  <Ionicons name="cube" size={40} color="rgba(255,255,255,0.3)" />
                 </View>
               </View>
             </View>
@@ -562,30 +508,23 @@ const HomeScreen = ({ navigation }) => {
 
     const getCategoryWithImage = (category, index) => {
       const lower = category.name?.toLowerCase() || '';
-      if (lower.includes('wax'))
-        return { ...category, localImage: CATEGORY_IMAGES.wax };
-      if (lower.includes('chemical'))
-        return { ...category, localImage: CATEGORY_IMAGES.chemicals };
-      if (index === 0) return { ...category, localImage: CATEGORY_IMAGES.wax };
-      if (index === 1)
-        return { ...category, localImage: CATEGORY_IMAGES.chemicals };
+      if (lower.includes('wax'))      return { ...category, localImage: CATEGORY_IMAGES.wax };
+      if (lower.includes('chemical')) return { ...category, localImage: CATEGORY_IMAGES.chemicals };
+      if (index === 0)                return { ...category, localImage: CATEGORY_IMAGES.wax };
+      if (index === 1)                return { ...category, localImage: CATEGORY_IMAGES.chemicals };
       return category;
     };
 
     const displayCategories =
       categories.length > 0
-        ? categories
-            .slice(0, 2)
-            .map((cat, idx) => getCategoryWithImage(cat, idx))
+        ? categories.slice(0, 2).map((cat, idx) => getCategoryWithImage(cat, idx))
         : DEFAULT_CATEGORIES;
 
     return (
       <View style={styles.categoriesSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Categories</Text>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Categories')}
-          >
+          <TouchableOpacity onPress={() => navigation.navigate('Categories')}>
             <Text style={styles.seeAllText}>See all →</Text>
           </TouchableOpacity>
         </View>
@@ -616,9 +555,7 @@ const HomeScreen = ({ navigation }) => {
   const renderCompactProductCard = (product, index) => {
     const quantity = getItemQuantity(product._id);
     const discount = calculateDiscount(product.compareAtPrice, product.price);
-    const imageUrl = product.images?.[0]
-      ? getImageUrl(product.images[0])
-      : null;
+    const imageUrl = product.images?.[0] ? getImageUrl(product.images[0]) : null;
 
     return (
       <TouchableOpacity
@@ -661,9 +598,7 @@ const HomeScreen = ({ navigation }) => {
             {product.title}
           </Text>
           <View style={styles.compactPriceRow}>
-            <Text style={styles.compactPrice}>
-              {formatCurrency(product.price)}
-            </Text>
+            <Text style={styles.compactPrice}>{formatCurrency(product.price)}</Text>
             {product.inStock && (
               <TouchableOpacity
                 style={[
@@ -687,8 +622,8 @@ const HomeScreen = ({ navigation }) => {
 
   const renderProducts = () => {
     const displayProducts = isSearching ? filteredProducts : products;
-    const maxProducts = isSearching ? 12 : 9;
-    const sectionTitle = isSearching ? 'Search Results' : 'Our Products';
+    const maxProducts     = isSearching ? 12 : 9;
+    const sectionTitle    = isSearching ? 'Search Results' : 'Our Products';
 
     return (
       <View style={styles.productsSection}>
@@ -713,10 +648,7 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.noResultsText}>
               Try searching with different keywords
             </Text>
-            <TouchableOpacity
-              style={styles.clearSearchButton}
-              onPress={clearSearch}
-            >
+            <TouchableOpacity style={styles.clearSearchButton} onPress={clearSearch}>
               <Text style={styles.clearSearchButtonText}>Clear Search</Text>
             </TouchableOpacity>
           </View>
@@ -726,39 +658,23 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.productsGrid}>
             {displayProducts
               .slice(0, maxProducts)
-              .map((product, index) =>
-                renderCompactProductCard(product, index)
-              )}
+              .map((product, index) => renderCompactProductCard(product, index))}
           </View>
         )}
 
         {!isSearching && products.length > 9 && (
-          <TouchableOpacity
-            style={styles.viewMoreButton}
-            onPress={handleViewAllProducts}
-          >
+          <TouchableOpacity style={styles.viewMoreButton} onPress={handleViewAllProducts}>
             <Text style={styles.viewMoreText}>View More Products</Text>
-            <Ionicons
-              name="arrow-forward"
-              size={16}
-              color={COLORS.primary}
-            />
+            <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
           </TouchableOpacity>
         )}
 
         {isSearching && filteredProducts.length > maxProducts && (
-          <TouchableOpacity
-            style={styles.viewMoreButton}
-            onPress={handleViewAllSearchResults}
-          >
+          <TouchableOpacity style={styles.viewMoreButton} onPress={handleViewAllSearchResults}>
             <Text style={styles.viewMoreText}>
               View All {filteredProducts.length} Results
             </Text>
-            <Ionicons
-              name="arrow-forward"
-              size={16}
-              color={COLORS.primary}
-            />
+            <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -767,15 +683,11 @@ const HomeScreen = ({ navigation }) => {
 
   const renderFloatingCart = () => {
     if (totalItems === 0) return null;
-
     return (
       <Animated.View
         style={[
           styles.floatingCartContainer,
-          {
-            transform: [{ scale: floatingCartScale }],
-            opacity: floatingCartScale,
-          },
+          { transform: [{ scale: floatingCartScale }], opacity: floatingCartScale },
         ]}
       >
         <TouchableOpacity
@@ -794,9 +706,6 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ============================================================
-  // LOADING STATE
-  // ============================================================
   if (isLoading) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
@@ -808,9 +717,6 @@ const HomeScreen = ({ navigation }) => {
     );
   }
 
-  // ============================================================
-  // MAIN RENDER
-  // ============================================================
   return (
     <Screen backgroundColor={COLORS.backgroundLight}>
       <ScrollView
@@ -847,486 +753,342 @@ const HomeScreen = ({ navigation }) => {
   );
 };
 
-// ============================================================
-// STYLES
-// ============================================================
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
+  scrollView: { flex: 1 },
 
-  // Header
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection:     'row',
+    justifyContent:    'space-between',
+    alignItems:        'center',
     paddingHorizontal: SPACING.screenPadding,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.sm,
+    paddingTop:        SPACING.sm,
+    paddingBottom:     SPACING.sm,
   },
   headerLeft: {
     flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+    alignItems:    'center',
+    flex:          1,
   },
   logoContainer: {
-    width: 40,
-    height: 40,
-    backgroundColor: COLORS.white,
-    borderRadius: 10,
-    marginRight: SPACING.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    width:            40,
+    height:           40,
+    backgroundColor:  COLORS.white,
+    borderRadius:     10,
+    marginRight:      SPACING.sm,
+    alignItems:       'center',
+    justifyContent:   'center',
+    shadowColor:      '#000',
+    shadowOffset:     { width: 0, height: 2 },
+    shadowOpacity:    0.08,
+    shadowRadius:     4,
+    elevation:        2,
   },
-  headerTextContainer: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 12,
-    color: COLORS.gray,
-  },
-  userName: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    fontWeight: '600',
-  },
-  notificationButton: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: COLORS.card,
-  alignItems: 'center',
-  justifyContent: 'center',
-  position: 'relative',
-},
-notificationBadge: {
-  position: 'absolute',
-  top: -2,
-  right: -2,
-  minWidth: 18,
-  height: 18,
-  borderRadius: 9,
-  backgroundColor: COLORS.error,
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingHorizontal: 3,
-  borderWidth: 1.5,
-  borderColor: COLORS.white,
-},
-notificationBadgeText: {
-  fontSize: 9,
-  fontWeight: '700',
-  color: COLORS.white,
-},
+  headerTextContainer: { flex: 1 },
+  welcomeText: { fontSize: 12, color: COLORS.gray },
+  userName:    { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
 
-  // ✅ FIX 4 — elevation added for Android
+  notificationButton: {
+    width:           40,
+    height:          40,
+    borderRadius:    20,
+    backgroundColor: COLORS.card,
+    alignItems:      'center',
+    justifyContent:  'center',
+    position:        'relative',
+  },
+  notificationBadge: {
+    position:        'absolute',
+    top:             -2,
+    right:           -2,
+    minWidth:        18,
+    height:          18,
+    borderRadius:    9,
+    backgroundColor: COLORS.error,
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingHorizontal: 3,
+    borderWidth:     1.5,
+    borderColor:     COLORS.white,
+  },
+  notificationBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
+
   searchWrapper: {
     marginHorizontal: SPACING.screenPadding,
-    marginBottom: SPACING.md,
-    zIndex: 1000,
-    elevation: 1000,
+    marginBottom:     SPACING.md,
+    zIndex:           1000,
+    elevation:        1000,
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection:    'row',
+    alignItems:       'center',
     paddingHorizontal: SPACING.md,
-    height: 44,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
+    height:           44,
+    backgroundColor:  '#F5F5F5',
+    borderRadius:     12,
   },
   searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.textPrimary,
+    flex:      1,
+    fontSize:  14,
+    color:     COLORS.textPrimary,
     marginLeft: SPACING.sm,
   },
-  clearButton: {
-    padding: 4,
-  },
+  clearButton: { padding: 4 },
 
   searchResultsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection:    'row',
+    justifyContent:   'space-between',
+    alignItems:       'center',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.card,
+    paddingVertical:  SPACING.sm,
+    backgroundColor:  COLORS.card,
     marginHorizontal: SPACING.screenPadding,
-    marginBottom: SPACING.md,
-    borderRadius: 8,
+    marginBottom:     SPACING.md,
+    borderRadius:     8,
   },
-  searchResultsInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  searchResultsText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  clearSearchText: {
-    fontSize: 13,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
+  searchResultsInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  searchResultsText:  { fontSize: 13, color: COLORS.textSecondary },
+  clearSearchText:    { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
 
   noResultsContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
     paddingVertical: SPACING.xxxl,
   },
   noResultsTitle: {
-    fontSize: 16,
+    fontSize:   16,
     fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginTop: SPACING.md,
+    color:      COLORS.textPrimary,
+    marginTop:  SPACING.md,
   },
   noResultsText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    textAlign: 'center',
+    fontSize:   14,
+    color:      COLORS.textSecondary,
+    marginTop:  SPACING.xs,
+    textAlign:  'center',
   },
   clearSearchButton: {
-    marginTop: SPACING.lg,
+    marginTop:        SPACING.lg,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
+    paddingVertical:  SPACING.sm,
+    backgroundColor:  COLORS.primary,
+    borderRadius:     20,
   },
-  clearSearchButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.black,
-  },
+  clearSearchButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.black },
 
-  // Banner
   bannerWrapper: {
-    marginBottom: SPACING.lg,
+    marginBottom:     SPACING.lg,
     paddingHorizontal: BANNER_HORIZONTAL_PADDING,
   },
   bannerContainer: {
-    width: BANNER_WIDTH,
-    height: BANNER_HEIGHT,
+    width:        BANNER_WIDTH,
+    height:       BANNER_HEIGHT,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow:     'hidden',
   },
   bannerCard: {
-    width: '100%',
-    height: '100%',
+    width:        '100%',
+    height:       '100%',
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow:     'hidden',
   },
-  bannerPattern: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
+  bannerPattern: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   patternCircle: {
-    position: 'absolute',
-    borderRadius: 1000,
+    position:        'absolute',
+    borderRadius:    1000,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  patternCircle1: {
-    width: 180,
-    height: 180,
-    top: -60,
-    right: -40,
-  },
-  patternCircle2: {
-    width: 120,
-    height: 120,
-    bottom: -40,
-    right: 60,
-  },
-  bannerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    padding: SPACING.md,
-  },
-  bannerTextSection: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingRight: SPACING.sm,
-  },
-  bannerImageSection: {
-    width: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  patternCircle1: { width: 180, height: 180, top: -60,  right: -40 },
+  patternCircle2: { width: 120, height: 120, bottom: -40, right: 60 },
+
+  bannerContent:     { flex: 1, flexDirection: 'row', padding: SPACING.md },
+  bannerTextSection: { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
+  bannerImageSection:{ width: 90, alignItems: 'center', justifyContent: 'center' },
   bannerIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width:           70,
+    height:          70,
+    borderRadius:    35,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  bannerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: 6,
-  },
+  bannerTitle:    { fontSize: 18, fontWeight: '700', color: COLORS.white, marginBottom: 6 },
   bannerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
+    fontSize:     12,
+    color:        'rgba(255,255,255,0.85)',
     marginBottom: SPACING.sm,
-    lineHeight: 17,
+    lineHeight:   17,
   },
   shopNowButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    flexDirection:    'row',
+    alignItems:       'center',
+    backgroundColor:  COLORS.primary,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    gap: 4,
+    paddingVertical:  8,
+    borderRadius:     16,
+    alignSelf:        'flex-start',
+    gap:              4,
   },
-  shopNowText: {
-    fontSize: 12,
-    color: COLORS.black,
-    fontWeight: '700',
-  },
+  shopNowText: { fontSize: 12, color: COLORS.black, fontWeight: '700' },
+
   dotsContainer: {
-    flexDirection: 'row',
+    flexDirection:  'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: SPACING.sm,
+    alignItems:     'center',
+    marginTop:      SPACING.sm,
   },
-  dotTouchable: {
-    padding: 4,
-  },
+  dotTouchable: { padding: 4 },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width:           8,
+    height:          8,
+    borderRadius:    4,
     backgroundColor: '#D9D9D9',
     marginHorizontal: 3,
   },
   dotActive: {
-    width: 24,
-    height: 8,
-    borderRadius: 4,
+    width:           24,
+    height:          8,
+    borderRadius:    4,
     backgroundColor: COLORS.primary,
   },
 
-  // Categories
-  categoriesSection: {
-    marginBottom: SPACING.lg,
-    paddingHorizontal: SPACING.screenPadding,
-  },
+  categoriesSection: { marginBottom: SPACING.lg, paddingHorizontal: SPACING.screenPadding },
   sectionHeader: {
-    flexDirection: 'row',
+    flexDirection:  'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
+    alignItems:     'center',
+    marginBottom:   SPACING.sm,
   },
-  sectionTitle: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    fontWeight: '600',
-  },
-  seeAllText: {
-    fontSize: 13,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  sectionTitle: { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
+  seeAllText:   { fontSize: 13, color: COLORS.primary, fontWeight: '500' },
+
+  categoryGrid: { flexDirection: 'row', gap: 10 },
   categoryCard: {
-    flex: 1,
-    height: CATEGORY_HEIGHT,
+    flex:         1,
+    height:       CATEGORY_HEIGHT,
     borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow:     'hidden',
+    shadowColor:  '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12,
     shadowRadius: 6,
-    elevation: 4,
+    elevation:    4,
   },
-  categoryImage: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'flex-end',
-  },
-  categoryImageStyle: {
-    borderRadius: 12,
-  },
-  categoryOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    padding: SPACING.sm,
-  },
-  categoryText: {
-    fontSize: 13,
-    color: COLORS.white,
-    fontWeight: '700',
-  },
+  categoryImage:      { width: '100%', height: '100%', justifyContent: 'flex-end' },
+  categoryImageStyle: { borderRadius: 12 },
+  categoryOverlay:    { backgroundColor: 'rgba(0,0,0,0.35)', padding: SPACING.sm },
+  categoryText:       { fontSize: 13, color: COLORS.white, fontWeight: '700' },
 
-  // Products
-  productsSection: {
-    paddingHorizontal: SPACING.screenPadding,
-  },
-  productsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  viewMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  productsSection: { paddingHorizontal: SPACING.screenPadding },
+  productsGrid:    { flexDirection: 'row', flexWrap: 'wrap' },
+  viewMoreButton:  {
+    flexDirection:  'row',
+    alignItems:     'center',
     justifyContent: 'center',
     paddingVertical: SPACING.md,
-    gap: 4,
+    gap:            4,
   },
-  viewMoreText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
+  viewMoreText: { fontSize: 14, color: COLORS.primary, fontWeight: '500' },
 
-  // Compact Product Card
   compactProductCard: {
-    width: PRODUCT_CARD_WIDTH,
+    width:           PRODUCT_CARD_WIDTH,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginBottom: PRODUCT_GAP,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius:    12,
+    marginBottom:    PRODUCT_GAP,
+    overflow:        'hidden',
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.08,
+    shadowRadius:    4,
+    elevation:       3,
   },
   compactImageContainer: {
-    width: '100%',
-    aspectRatio: 1,
+    width:           '100%',
+    aspectRatio:     1,
     backgroundColor: '#F8F8F8',
-    position: 'relative',
+    position:        'relative',
   },
-  compactImage: {
-    width: '100%',
-    height: '100%',
-  },
-  compactPlaceholder: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  compactImage:       { width: '100%', height: '100%' },
+  compactPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   compactSaleBadge: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    backgroundColor: '#0D9488',
+    position:         'absolute',
+    top:              6,
+    left:             6,
+    backgroundColor:  '#0D9488',
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingVertical:  2,
+    borderRadius:     10,
   },
-  compactSaleText: {
-    color: COLORS.white,
-    fontSize: 9,
-    fontWeight: '700',
-  },
+  compactSaleText: { color: COLORS.white, fontSize: 9, fontWeight: '700' },
   compactOutOfStock: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: COLORS.error,
+    position:         'absolute',
+    top:              6,
+    right:            6,
+    backgroundColor:  COLORS.error,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingVertical:  2,
+    borderRadius:     10,
   },
-  compactOutOfStockText: {
-    color: COLORS.white,
-    fontSize: 9,
-    fontWeight: '600',
-  },
-  compactContent: {
-    padding: 8,
-  },
+  compactOutOfStockText: { color: COLORS.white, fontSize: 9, fontWeight: '600' },
+  compactContent:    { padding: 8 },
   compactTitle: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: COLORS.textPrimary,
+    fontSize:    11,
+    fontWeight:  '500',
+    color:       COLORS.textPrimary,
     marginBottom: 6,
-    lineHeight: 14,
-    height: 28,
+    lineHeight:  14,
+    height:      28,
   },
   compactPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection:  'row',
+    alignItems:     'center',
     justifyContent: 'space-between',
   },
-  compactPrice: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
+  compactPrice:     { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
   compactAddButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width:           24,
+    height:          24,
+    borderRadius:    12,
     backgroundColor: '#0D9488',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  compactAddButtonActive: {
-    backgroundColor: '#0D9488',
-  },
-  compactQuantityText: {
-    fontSize: 10,
-    color: COLORS.white,
-    fontWeight: '700',
-  },
+  compactAddButtonActive: { backgroundColor: '#0D9488' },
+  compactQuantityText:    { fontSize: 10, color: COLORS.white, fontWeight: '700' },
 
-  // Floating Cart
   floatingCartContainer: {
     position: 'absolute',
-    bottom: SPACING.tabBarHeight + SPACING.lg,
-    right: SPACING.screenPadding,
-    zIndex: 1000,
+    bottom:   SPACING.tabBarHeight + SPACING.lg,
+    right:    SPACING.screenPadding,
+    zIndex:   1000,
   },
   floatingCartButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width:           56,
+    height:          56,
+    borderRadius:    28,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
     ...SHADOWS.large,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.4,
+    shadowColor:     COLORS.primary,
+    shadowOpacity:   0.4,
   },
   floatingCartBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position:         'absolute',
+    top:              -2,
+    right:            -2,
+    minWidth:         20,
+    height:           20,
+    borderRadius:     10,
+    backgroundColor:  COLORS.white,
+    alignItems:       'center',
+    justifyContent:   'center',
     paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderWidth:      2,
+    borderColor:      COLORS.primary,
   },
-  floatingCartBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.black,
-  },
+  floatingCartBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.black },
 
-  bottomSpacing: {
-    height: SPACING.tabBarHeight + SPACING.lg,
-  },
+  bottomSpacing: { height: SPACING.tabBarHeight + SPACING.lg },
 });
 
 export default HomeScreen;

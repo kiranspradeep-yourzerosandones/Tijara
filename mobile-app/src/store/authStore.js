@@ -8,34 +8,41 @@ import * as authAPI from '../api/auth';
 export const useAuthStore = create(
   persist(
     (set, get) => {
-      // Register unauthorized callback ONCE
       tokenManager.setUnauthorizedCallback(() => {
-        console.log('🚨 Unauthorized - Auto logout');
         get().logout();
       });
+
+      const extractMessage = (error) =>
+        error?.data?.message ||
+        error?.message ||
+        'Something went wrong';
 
       return {
         // ─── State ───────────────────────────────────────────
         user: null,
         isAuthenticated: false,
-        isLoading: true,       // ✅ Start true — loading until session restored
-        isSessionRestored: false, // ✅ NEW — prevents double restore
+        isLoading: true,
+        isSessionRestored: false,
         error: null,
 
-        // Registration flow
         registrationPhone: null,
         isPhoneVerified: false,
 
-        // ─── Basic actions ────────────────────────────────────
+        // ─── Basic actions ───────────────────────────────────
         setLoading: (loading) => set({ isLoading: loading }),
         setError: (error) => set({ error }),
         clearError: () => set({ error: null }),
         setRegistrationPhone: (phone) => set({ registrationPhone: phone }),
         setPhoneVerified: (verified) => set({ isPhoneVerified: verified }),
 
-        // ─── Login with password ──────────────────────────────
+        // ─── Login with password ─────────────────────────────
+        //
+        // ⚠️  Do NOT set isLoading:true here.
+        // The navigator watches isLoading — flipping it causes
+        // LoginScreen to remount, wiping local error state.
+        // The screen manages its own loading spinner via useState.
         login: async (phone, password) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
           try {
             const response = await authAPI.login(phone, password);
             const { user, token } = response.data;
@@ -51,16 +58,14 @@ export const useAuthStore = create(
 
             return response;
           } catch (error) {
-            const errorMessage =
-              error.response?.data?.message || error.message;
-            set({ isLoading: false, error: errorMessage });
+            set({ error: extractMessage(error) });
             throw error;
           }
         },
 
-        // ─── Login with OTP ───────────────────────────────────
+        // ─── Login with OTP ──────────────────────────────────
         loginWithOtp: async (phone, otp) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
           try {
             const response = await authAPI.verifyLoginOtp(phone, otp);
             const { user, token } = response.data;
@@ -76,16 +81,14 @@ export const useAuthStore = create(
 
             return response;
           } catch (error) {
-            const errorMessage =
-              error.response?.data?.message || error.message;
-            set({ isLoading: false, error: errorMessage });
+            set({ error: extractMessage(error) });
             throw error;
           }
         },
 
-        // ─── Complete registration ────────────────────────────
+        // ─── Complete registration ───────────────────────────
         completeRegistration: async (data) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
           try {
             const response = await authAPI.completeRegistration(data);
             const { user, token } = response.data;
@@ -103,24 +106,23 @@ export const useAuthStore = create(
 
             return response;
           } catch (error) {
-            const errorMessage =
-              error.response?.data?.message || error.message;
-            set({ isLoading: false, error: errorMessage });
+            set({ error: extractMessage(error) });
             throw error;
           }
         },
 
-        // ─── Logout ───────────────────────────────────────────
+        // ─── Logout ──────────────────────────────────────────
         logout: async () => {
           try {
             await tokenManager.clearAll();
-          } catch (error) {
-            console.error('Error clearing token:', error);
+          } catch {
+            // Non-critical — continue with state reset
           }
           set({
             user: null,
             isAuthenticated: false,
             isSessionRestored: false,
+            isLoading: false,
             error: null,
             registrationPhone: null,
             isPhoneVerified: false,
@@ -128,22 +130,21 @@ export const useAuthStore = create(
         },
 
         // ─── Restore session (called ONCE on app start) ───────
+        //
+        // The ONLY place where isLoading:true is correct.
+        // Runs during splash before any screen is mounted.
         restoreSession: async () => {
-          // ✅ Guard — never run twice
           if (get().isSessionRestored) {
-            console.log('⚡ Session already restored — skipping');
             set({ isLoading: false });
             return get().isAuthenticated;
           }
 
-          console.log('🔄 Restoring session...');
           set({ isLoading: true });
 
           try {
             const token = await tokenManager.getToken();
 
             if (!token) {
-              console.log('❌ No token found — guest mode');
               set({
                 isAuthenticated: false,
                 isLoading: false,
@@ -152,25 +153,20 @@ export const useAuthStore = create(
               return false;
             }
 
-            // Token exists — fetch profile to validate
             const response = await authAPI.getProfile();
             const userData = response.data?.user;
 
-            if (userData) {
-              console.log('✅ Session restored for:', userData.phone);
-              set({
-                user: userData,
-                isAuthenticated: true,
-                isLoading: false,
-                isSessionRestored: true,
-              });
-              return true;
-            }
+            if (!userData) throw new Error('Invalid profile response');
 
-            // Invalid response
-            throw new Error('Invalid profile response');
-          } catch (error) {
-            console.warn('⚠️ Session restore failed:', error.message);
+            set({
+              user: userData,
+              isAuthenticated: true,
+              isLoading: false,
+              isSessionRestored: true,
+            });
+            return true;
+
+          } catch {
             await tokenManager.clearAll();
             set({
               user: null,
@@ -182,7 +178,7 @@ export const useAuthStore = create(
           }
         },
 
-        // ─── Refresh user silently ────────────────────────────
+        // ─── Refresh user data silently ──────────────────────
         refreshUser: async () => {
           try {
             const response = await authAPI.getProfile();
@@ -191,28 +187,25 @@ export const useAuthStore = create(
               return response.data.user;
             }
             return null;
-          } catch (error) {
-            console.error('Refresh user error:', error.message);
+          } catch {
             return null;
           }
         },
 
-        // ─── Update profile ───────────────────────────────────
+        // ─── Update profile ──────────────────────────────────
         updateProfile: async (data) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
           try {
             const response = await authAPI.updateProfile(data);
-            set({ user: response.data.user, isLoading: false });
+            set({ user: response.data.user });
             return response;
           } catch (error) {
-            const errorMessage =
-              error.response?.data?.message || error.message;
-            set({ isLoading: false, error: errorMessage });
+            set({ error: extractMessage(error) });
             throw error;
           }
         },
 
-        // ─── Update local user data ───────────────────────────
+        // ─── Merge partial user data locally ─────────────────
         updateUser: (userData) => {
           const currentUser = get().user;
           set({ user: { ...currentUser, ...userData } });
@@ -222,7 +215,9 @@ export const useAuthStore = create(
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // ✅ Only persist these — token lives in SecureStore
+      // Only persist user data and auth flag.
+      // Token lives in SecureStore via tokenManager.
+      // isLoading / isSessionRestored reset on every boot.
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,

@@ -19,7 +19,7 @@ const addClient = (adminId, res) => {
     clients.set(adminId, new Set());
   }
   clients.get(adminId).add(res);
-  console.log(`📡 SSE client connected: admin=${adminId}, total connections=${getTotalConnections()}`);
+  // console.log(`📡 SSE client connected: admin=${adminId}, total connections=${getTotalConnections()}`);
 };
 
 /**
@@ -35,7 +35,7 @@ const removeClient = (adminId, res) => {
       clients.delete(adminId);
     }
   }
-  console.log(`📡 SSE client disconnected: admin=${adminId}, total connections=${getTotalConnections()}`);
+  // console.log(`📡 SSE client disconnected: admin=${adminId}, total connections=${getTotalConnections()}`);
 };
 
 /**

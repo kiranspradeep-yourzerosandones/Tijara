@@ -1,3 +1,4 @@
+// App.js
 import React, { useEffect, useState, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -18,10 +19,9 @@ export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const navigationRef = useRef(null);
-  const appStateRef = useRef(AppState.currentState);
+  const appStateRef   = useRef(AppState.currentState);
 
-  // ✅ Granular selectors
-  const restoreSession = useAuthStore((state) => state.restoreSession);
+  const restoreSession  = useAuthStore((state) => state.restoreSession);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
 
@@ -32,8 +32,8 @@ export default function App() {
     const init = async () => {
       try {
         await restoreSession();
-      } catch (error) {
-        console.error('Init error:', error);
+      } catch {
+        // Session restore failure is non-fatal — app continues as guest
       } finally {
         setIsAppReady(true);
       }
@@ -47,20 +47,20 @@ export default function App() {
     };
   }, []);
 
-  // ── App state change — clear badge when app comes to foreground
+  // ── Clear badge / refresh count when app comes to foreground
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (
         appStateRef.current.match(/inactive|background/) &&
         nextState === 'active'
       ) {
-        console.log('📱 App resumed from background');
         notificationService.clearBadge();
 
         if (isAuthenticated) {
           fetchUnreadCount().catch(() => {});
         }
       }
+
       appStateRef.current = nextState;
     });
 
@@ -75,71 +75,47 @@ export default function App() {
   }, [isAuthenticated]);
 
   const setupPushNotifications = async () => {
-    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) {
-      console.log('🔔 Push notifications disabled');
-      return;
-    }
+    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) return;
 
     try {
-      // Set navigation ref for deep linking
       if (navigationRef.current) {
         notificationService.setNavigationRef(navigationRef.current);
       }
 
-      // Register and get token
       const token = await notificationService.registerForPushNotifications();
 
       if (token) {
         try {
           await updatePushToken(token);
-          console.log('✅ Push token sent to backend');
-        } catch (err) {
-          console.warn('⚠️ Push token update failed:', err.message);
+        } catch {
+          // Non-critical — push token sync failure doesn't affect app
         }
       }
 
-      // ── Start listening ──────────────────────────────────
       notificationService.startListening(
-        // Foreground notification received
         (notification) => {
-          const data = notification.request.content.data;
-
-          if (ENV.DEBUG) {
-            console.log('🔔 Foreground:', notification.request.content.title);
-            console.log('🔔 Data:', data);
-          }
-
-          // ✅ Refresh unread count
+          // Foreground notification received — refresh unread count
           fetchUnreadCount().catch(() => {});
-
-          // Order detail screen will auto-refresh on focus — nothing extra needed
         },
-        // User tapped notification (background/killed state)
-        (response) => {
-          if (ENV.DEBUG) {
-            console.log('🔔 Tapped notification');
-          }
-          // handleNotificationResponse is called inside startListening already
+        () => {
+          // User tapped notification — handled inside startListening
         }
       );
 
-      // ── Handle notification that opened the app from killed state
-      const lastResponse = await notificationService.getLastNotificationResponse();
+      const lastResponse =
+        await notificationService.getLastNotificationResponse();
+
       if (lastResponse) {
-        console.log('🔔 App opened from notification');
         setTimeout(() => {
           notificationService.handleNotificationResponse(lastResponse);
         }, 1000);
       }
-
-    } catch (error) {
-      console.warn('⚠️ Push notification setup failed:', error.message);
+    } catch {
+      // Push notification setup failure is non-critical
     }
   };
 
-  const handleSplashFinish = () => {
-    setShowSplash(false);
-  };
+  const handleSplashFinish = () => setShowSplash(false);
 
   if (showSplash) {
     return (

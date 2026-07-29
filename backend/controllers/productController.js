@@ -158,7 +158,7 @@ exports.getAllProducts = async (req, res) => {
 
     const total = await Product.countDocuments(query);
 
-    console.log(`Found ${products.length} products`);
+    // console.log(`Found ${products.length} products`);
 
     res.json({
       success: true,
@@ -236,8 +236,8 @@ exports.getProductBySlug = async (req, res) => {
 // UPDATE PRODUCT
 exports.updateProduct = async (req, res) => {
   try {
-    console.log("Update Request Body:", req.body);
-    console.log("Update Files:", req.files);
+    // console.log("Update Request Body:", req.body);
+    // console.log("Update Files:", req.files);
 
     const { 
       title, 
@@ -356,7 +356,7 @@ exports.updateProduct = async (req, res) => {
 
     await product.save();
 
-    console.log("Product Updated:", product.title);
+  
 
     res.json({
       success: true,

@@ -60,7 +60,7 @@ const mcValidateOtp = async ({
     });
 
     console.log("✅ Response status:", resp.status);
-    console.log("📥 Response data:", JSON.stringify(resp.data, null, 2));
+    // console.log("📥 Response data:", JSON.stringify(resp.data, null, 2));
 
     if (resp.status !== 200) {
       throw new Error("mcValidateOtp failed");
@@ -70,7 +70,7 @@ const mcValidateOtp = async ({
 
   } catch (error) {
     console.error("❌ mcValidateOtp error:", error.message);
-    console.error("❌ Response data:", error.response?.data);
+    // console.error("❌ Response data:", error.response?.data);
     console.error("❌ Response status:", error.response?.status);
     throw error;
   }

@@ -97,9 +97,9 @@ router.get("/", async (req, res) => {
 
     // ── 9. Cleanup on client disconnect ─────────────────────
     req.on("close", () => {
-      console.log(
-        `📡 SSE close event fired for admin=${adminId}, reason: client disconnected`
-      );
+      // console.log(
+      //   `📡 SSE close event fired for admin=${adminId}, reason: client disconnected`
+      // );
       clearInterval(heartbeat);
       removeClient(adminId, res);
     });

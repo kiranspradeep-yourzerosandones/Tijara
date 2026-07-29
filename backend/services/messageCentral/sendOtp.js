@@ -53,8 +53,8 @@ const mcSendOtp = async ({
       timeout: 10000,
     });
 
-    console.log("✅ Response status:", resp.status);
-    console.log("📥 Response data:", JSON.stringify(resp.data, null, 2));
+    // console.log("✅ Response status:", resp.status);
+    // console.log("📥 Response data:", JSON.stringify(resp.data, null, 2));
 
     if (resp.status !== 200) {
       throw new Error("mcSendOtp failed");
