@@ -2,3 +2,4 @@
 export { default as ProfileScreen } from './ProfileScreen';
 export { default as EditProfileScreen } from './EditProfileScreen';
 export { default as NotificationPreferencesScreen } from './NotificationPreferencesScreen';
+export { default as ChangePasswordScreen } from './ChangePasswordScreen';

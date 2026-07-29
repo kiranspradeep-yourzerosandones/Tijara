@@ -31,7 +31,7 @@ export const AdminAuthProvider = ({ children }) => {
         if (storedToken && storedAdmin) {
           try {
             const parsedAdmin = JSON.parse(storedAdmin);
-            console.log("Found auth data:", parsedAdmin?.email);
+            // console.log("Found auth data:", parsedAdmin?.email);
             setToken(storedToken);
             setAdmin(parsedAdmin);
           } catch (parseError) {
@@ -87,7 +87,7 @@ export const AdminAuthProvider = ({ children }) => {
       const data = await response.json();
 
       console.log("Response status:", response.status);
-      console.log("Response data:", data);
+      // console.log("Response data:", data);
 
       if (data.success && data.data) {
         const { token: newToken, admin: adminData } = data.data;

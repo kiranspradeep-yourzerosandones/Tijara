@@ -1,3 +1,4 @@
+// src/screens/auth/RegisterScreen.js
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -8,19 +9,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   TextInput,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { sendRegistrationOtp } from '../../api/auth';
+import { mapAuthError } from '../../api/client';
 import { useAuthStore } from '../../store';
 import { validatePhone, validateEmail, validateName } from '../../utils/validation';
-import GoogleLogo from '../../components/common/GoogleLogo';
 
 const { height } = Dimensions.get('window');
 
+/* ─── Reusable Input ─────────────────────────────────────── */
 const FormInput = ({
   icon,
   placeholder,
@@ -33,20 +34,22 @@ const FormInput = ({
   keyboardType = 'default',
   autoCapitalize = 'none',
   maxLength,
+  editable = true,
 }) => (
   <View style={styles.inputContainer}>
     <View
       style={[
         styles.inputWrapper,
-        focused && styles.inputWrapperFocused,
-        error && styles.inputWrapperError,
+        focused   && styles.inputWrapperFocused,
+        error     && styles.inputWrapperError,
+        !editable && styles.inputWrapperDisabled,
       ]}
     >
       <View style={styles.inputIconContainer}>
         <Ionicons
           name={icon}
           size={20}
-          color={focused ? '#F5C518' : '#666'}
+          color={error ? '#FF4444' : focused ? '#F5C518' : '#666'}
         />
       </View>
       <TextInput
@@ -54,56 +57,115 @@ const FormInput = ({
         placeholder={placeholder}
         value={value}
         onChangeText={onChange}
-        placeholderTextColor="#666"
+        placeholderTextColor="#555"
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
         maxLength={maxLength}
         onFocus={onFocus}
         onBlur={onBlur}
+        editable={editable}
       />
     </View>
-    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    {error ? (
+      <View style={styles.errorRow}>
+        <Ionicons name="alert-circle-outline" size={13} color="#FF4444" />
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    ) : null}
   </View>
 );
 
-const SocialButtons = () => (
-  <>
-    <View style={styles.divider}>
-      <View style={styles.dividerLine} />
-      <Text style={styles.dividerText}>Or sign with</Text>
-      <View style={styles.dividerLine} />
+/* ─── Error Banner ───────────────────────────────────────── */
+const ErrorBanner = ({ message, onDismiss }) => {
+  if (!message) return null;
+  return (
+    <View style={styles.apiBanner}>
+      <Ionicons
+        name="warning-outline"
+        size={16}
+        color="#FF4444"
+        style={{ marginRight: 8, flexShrink: 0 }}
+      />
+      <Text style={styles.apiBannerText}>{message}</Text>
+      {onDismiss ? (
+        <TouchableOpacity
+          onPress={onDismiss}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="close-outline" size={18} color="#FF6B6B" />
+        </TouchableOpacity>
+      ) : null}
     </View>
+  );
+};
 
-    <View style={styles.socialButtons}>
-      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-        <GoogleLogo size={24} />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-        <Ionicons name="logo-apple" size={26} color="#000" />
-      </TouchableOpacity>
-    </View>
-  </>
+/* ─── Divider ────────────────────────────────────────────── */
+const Divider = () => (
+  <View style={styles.divider}>
+    <View style={styles.dividerLine} />
+    <Text style={styles.dividerText}>Or</Text>
+    <View style={styles.dividerLine} />
+  </View>
 );
 
+/* ─── Main Screen ────────────────────────────────────────── */
 const RegisterScreen = ({ navigation }) => {
-  const [name, setName] = useState('');
+  const [name,  setName]  = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [errors, setErrors] = useState({});
+  const [errors,    setErrors]    = useState({});
+  const [apiError,  setApiError]  = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
 
-  const setRegistrationPhone = useAuthStore((state) => state.setRegistrationPhone);
+  const setRegistrationPhone = useAuthStore((s) => s.setRegistrationPhone);
+
+  /* ── Clear field error as user types ── */
+  const handleNameChange = useCallback((v) => {
+    setName(v);
+    if (errors.name) setErrors((e) => ({ ...e, name: '' }));
+    if (apiError)    setApiError('');
+  }, [errors.name, apiError]);
+
+  const handlePhoneChange = useCallback((v) => {
+    setPhone(v);
+    if (errors.phone) setErrors((e) => ({ ...e, phone: '' }));
+    if (apiError)     setApiError('');
+  }, [errors.phone, apiError]);
+
+  const handleEmailChange = useCallback((v) => {
+    setEmail(v);
+    if (errors.email) setErrors((e) => ({ ...e, email: '' }));
+    if (apiError)     setApiError('');
+  }, [errors.email, apiError]);
+
+  /* ── Route mapped error to correct state setter ── */
+  const applyMappedError = useCallback((mapped) => {
+    switch (mapped.field) {
+      case 'name':
+        setErrors((e) => ({ ...e, name: mapped.message }));
+        break;
+      case 'phone':
+        setErrors((e) => ({ ...e, phone: mapped.message }));
+        break;
+      case 'email':
+        setErrors((e) => ({ ...e, email: mapped.message }));
+        break;
+      default:
+        setApiError(mapped.message);
+    }
+  }, []);
 
   const handleGenerateOtp = useCallback(async () => {
-    const nameValidation = validateName(name);
-    const phoneValidation = validatePhone(phone);
-    const emailValidation = email ? validateEmail(email) : { isValid: true };
+    /* ── Client-side validation ── */
+    const nameV  = validateName(name);
+    const phoneV = validatePhone(phone);
+    const emailV = email ? validateEmail(email) : { isValid: true };
 
     const newErrors = {};
-    if (!nameValidation.isValid) newErrors.name = nameValidation.message;
-    if (!phoneValidation.isValid) newErrors.phone = phoneValidation.message;
-    if (!emailValidation.isValid) newErrors.email = emailValidation.message;
+    if (!nameV.isValid)  newErrors.name  = nameV.message;
+    if (!phoneV.isValid) newErrors.phone = phoneV.message;
+    if (!emailV.isValid) newErrors.email = emailV.message;
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -111,6 +173,7 @@ const RegisterScreen = ({ navigation }) => {
     }
 
     setErrors({});
+    setApiError('');
     setIsLoading(true);
 
     try {
@@ -123,14 +186,15 @@ const RegisterScreen = ({ navigation }) => {
         type: 'register',
       });
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to send OTP');
+      const mapped = mapAuthError(err);
+      applyMappedError(mapped);
     } finally {
       setIsLoading(false);
     }
-  }, [name, phone, email, navigation, setRegistrationPhone]);
+  }, [name, phone, email, navigation, setRegistrationPhone, applyMappedError]);
 
   const handleFocus = useCallback((field) => () => setFocusedInput(field), []);
-  const handleBlur = useCallback(() => setFocusedInput(null), []);
+  const handleBlur  = useCallback(() => setFocusedInput(null), []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -146,25 +210,30 @@ const RegisterScreen = ({ navigation }) => {
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           bounces={false}
         >
-          {/* Top Section */}
+          {/* ── Hero ── */}
           <View style={styles.topSection}>
             <View style={styles.shape1} />
             <View style={styles.shape2} />
-
             <View style={styles.header}>
               <Text style={styles.welcomeText}>Create Your</Text>
               <Text style={styles.welcomeText}>Account</Text>
             </View>
           </View>
 
-          {/* Bottom Fill */}
+          {/* ── Form Card ── */}
           <View style={styles.bottomSection}>
             <View style={styles.card}>
+
+              <ErrorBanner
+                message={apiError}
+                onDismiss={() => setApiError('')}
+              />
+
               <FormInput
                 icon="person-outline"
                 placeholder="Full Name"
                 value={name}
-                onChange={setName}
+                onChange={handleNameChange}
                 error={errors.name}
                 focused={focusedInput === 'name'}
                 onFocus={handleFocus('name')}
@@ -176,7 +245,7 @@ const RegisterScreen = ({ navigation }) => {
                 icon="call-outline"
                 placeholder="Phone Number"
                 value={phone}
-                onChange={setPhone}
+                onChange={handlePhoneChange}
                 error={errors.phone}
                 focused={focusedInput === 'phone'}
                 onFocus={handleFocus('phone')}
@@ -189,7 +258,7 @@ const RegisterScreen = ({ navigation }) => {
                 icon="mail-outline"
                 placeholder="Email (Optional)"
                 value={email}
-                onChange={setEmail}
+                onChange={handleEmailChange}
                 error={errors.email}
                 focused={focusedInput === 'email'}
                 onFocus={handleFocus('email')}
@@ -215,7 +284,7 @@ const RegisterScreen = ({ navigation }) => {
                 )}
               </TouchableOpacity>
 
-              <SocialButtons />
+              <Divider />
 
               <View style={styles.loginLink}>
                 <Text style={styles.loginText}>Already have an account? </Text>
@@ -223,6 +292,7 @@ const RegisterScreen = ({ navigation }) => {
                   <Text style={styles.loginLinkText}>Login here</Text>
                 </TouchableOpacity>
               </View>
+
             </View>
           </View>
         </ScrollView>
@@ -231,6 +301,7 @@ const RegisterScreen = ({ navigation }) => {
   );
 };
 
+/* ─── Styles ─────────────────────────────────────────────── */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -240,7 +311,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   topSection: {
-    height: height * 0.45,
+    height: height * 0.38,
     backgroundColor: '#F5C518',
     justifyContent: 'center',
     paddingHorizontal: 24,
@@ -257,7 +328,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 30,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     transform: [{ rotate: '-55deg' }],
   },
   shape2: {
@@ -267,7 +338,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 30,
-    backgroundColor: 'rgba(0, 0, 0, 0.10)',
+    backgroundColor: 'rgba(0,0,0,0.10)',
     transform: [{ rotate: '-53deg' }],
   },
   header: {
@@ -285,9 +356,27 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 35,
     paddingHorizontal: 24,
     paddingTop: 35,
-    paddingBottom: 20,
+    paddingBottom: 24,
     marginTop: -35,
     flexGrow: 1,
+  },
+  apiBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,68,68,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,68,68,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 20,
+  },
+  apiBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#FF6B6B',
+    fontWeight: '500',
+    lineHeight: 18,
   },
   inputContainer: {
     marginBottom: 18,
@@ -310,6 +399,9 @@ const styles = StyleSheet.create({
     borderColor: '#FF4444',
     backgroundColor: '#1A1515',
   },
+  inputWrapperDisabled: {
+    opacity: 0.5,
+  },
   inputIconContainer: {
     width: 30,
   },
@@ -319,11 +411,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     paddingVertical: 0,
   },
-  errorText: {
-    fontSize: 12,
-    color: '#FF6B6B',
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginTop: 6,
     marginLeft: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FF4444',
+    flex: 1,
   },
   otpButton: {
     height: 56,
@@ -332,7 +430,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 4,
     shadowColor: '#F5C518',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
@@ -340,7 +438,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.65,
   },
   otpButtonText: {
     fontSize: 17,
@@ -359,46 +457,32 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 32,
+    marginVertical: 28,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#333',
+    backgroundColor: '#2A2A2A',
   },
   dividerText: {
     fontSize: 12,
-    color: '#666',
+    color: '#555',
     marginHorizontal: 12,
-    fontWeight: '400',
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  socialButton: {
-    width: 80,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   loginLink: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 32,
+    marginTop: 8,
     paddingBottom: 10,
   },
   loginText: {
     fontSize: 14,
-    color: '#777',
+    color: '#666',
   },
   loginLinkText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5C518',
   },
 });
 

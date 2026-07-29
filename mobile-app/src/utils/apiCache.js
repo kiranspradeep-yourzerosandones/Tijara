@@ -74,12 +74,12 @@ export const fetchWithCache = async (key, fetchFn, ttl = DEFAULT_TTL) => {
   // Return cached if available
   const cached = getCached(key);
   if (cached !== null) {
-    console.log(`⚡ Cache hit: ${key}`);
+    // console.log(`⚡ Cache hit: ${key}`);
     return cached;
   }
 
   // Fetch fresh data
-  console.log(`🌐 Cache miss: ${key} — fetching...`);
+  // console.log(`🌐 Cache miss: ${key} — fetching...`);
   const data = await fetchFn();
   setCached(key, data, ttl);
   return data;

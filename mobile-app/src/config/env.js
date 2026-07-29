@@ -23,8 +23,8 @@ const ENV = getEnv();
 
 // ✅ Log environment on startup (dev only)
 if (ENV.DEBUG) {
-  console.log('🌍 Environment:', ENV.ENVIRONMENT);
-  console.log('📡 API URL:', ENV.API_URL);
+  // console.log('🌍 Environment:', ENV.ENVIRONMENT);
+  // console.log('📡 API URL:', ENV.API_URL);
 }
 
 export default ENV;

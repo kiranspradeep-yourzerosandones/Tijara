@@ -10,7 +10,6 @@ const hpp = require("hpp");
 const mongoose = require("mongoose");
 require("dotenv").config();
 
-
 const connectDB = require("./config/db");
 
 const app = express();
@@ -21,17 +20,17 @@ const app = express();
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
+
 app.use((req, res, next) => {
-  // Skip compression for SSE — compression buffers responses
-  // which prevents SSE events from being flushed immediately
   if (req.path === "/api/admin/sse" || req.originalUrl.startsWith("/api/admin/sse")) {
     return next();
   }
   return compression()(req, res, next);
 });
+
 app.use(mongoSanitize());
+
 app.use((req, res, next) => {
-  // Skip hpp for SSE — it interferes with long-lived connections
   if (req.path === "/api/admin/sse" || req.originalUrl.startsWith("/api/admin/sse")) {
     return next();
   }
@@ -39,15 +38,12 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// CORS — MUST BE BEFORE ROUTES AND RATE LIMITERS
+// CORS
 // ============================================================
 const getAllowedOrigins = () => {
   if (process.env.NODE_ENV === "development") {
-    // ✅ Allow everything in development
     return true;
   }
-
-  // ✅ Production — only allow your real domains
   return [
     "https://yourdomain.com",
     "https://admin.yourdomain.com",
@@ -67,36 +63,43 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
-// ── Handle preflight for ALL routes ──────────────────────────
 app.options(/.*/, cors());
 
-app.use("/api/admin/sse",                require("./routes/adminSseRoutes"));
+// SSE route — before any rate limiters
+app.use("/api/admin/sse", require("./routes/adminSseRoutes"));
+
 // ============================================================
 // RATE LIMITERS
 // ============================================================
+
+// Global limiter — generous, just stops floods
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
+  windowMs: 15 * 60 * 1000,  // 15 min
+  max: 500,                   // 500 per window
   message: { success: false, message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  // ✅ Skip SSE route — long-lived connections are not compatible with rate limiting
-  skip: (req) => req.path === "/api/admin/sse" || req.originalUrl.startsWith("/api/admin/sse"),
+  skip: (req) =>
+    req.path === "/api/admin/sse" ||
+    req.originalUrl.startsWith("/api/admin/sse"),
 });
 app.use("/api", globalLimiter);
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { success: false, message: "Too many auth attempts. Please try again in 15 minutes." },
+// OTP limiter — tight limit on actual OTP sends (costs money)
+const otpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 5,                     // 5 OTP sends per hour per IP
+  message: { success: false, message: "Too many OTP requests. Please try again in 1 hour." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-const otpLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 5,
-  message: { success: false, message: "Too many OTP requests. Please try again in 1 hour." },
+// Auth limiter — only for sensitive non-OTP auth endpoints
+// (password login, token refresh etc.)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 min
+  max: 50,                    // 50 attempts — enough for normal use + retries
+  message: { success: false, message: "Too many auth attempts. Please try again in 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -113,13 +116,18 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ============================================================
-// ROUTES
+// ROUTES — OTP limiters BEFORE auth routes so they take effect
 // ============================================================
-app.use("/api/auth", authLimiter, require("./routes/authRoutes"));
-app.use("/api/auth/register/send-otp", otpLimiter);
-app.use("/api/auth/login/send-otp", otpLimiter);
+
+// ── OTP routes — tight limit (applied first, before authLimiter) ──
+app.use("/api/auth/register/send-otp",      otpLimiter);
+app.use("/api/auth/login/send-otp",         otpLimiter);
 app.use("/api/auth/forgot-password/send-otp", otpLimiter);
 
+// ── All other auth routes — moderate limit ──
+app.use("/api/auth", authLimiter, require("./routes/authRoutes"));
+
+// ── Public routes ──
 app.use("/api/products",       require("./routes/productRoutes"));
 app.use("/api/categories",     require("./routes/categoryRoutes"));
 app.use("/api/locations",      require("./routes/locationRoutes"));
@@ -128,17 +136,16 @@ app.use("/api/orders",         require("./routes/orderRoutes"));
 app.use("/api/payments",       require("./routes/paymentRoutes"));
 app.use("/api/notifications",  require("./routes/notificationRoutes"));
 
-// Admin routes
-app.use("/api/admin",                    require("./routes/adminRoutes"));
-app.use("/api/admin/admins",             require("./routes/adminManagementRoutes"));
-app.use("/api/admin/customers",          require("./routes/adminCustomerRoutes"));
-app.use("/api/admin/orders",             require("./routes/adminOrderRoutes"));
-app.use("/api/admin/payments",           require("./routes/adminPaymentRoutes"));
-app.use("/api/admin/dashboard",          require("./routes/adminDashboardRoutes"));
-app.use("/api/admin/carts",              require("./routes/adminCartRoutes"));
-app.use("/api/admin/notifications",      require("./routes/adminNotificationRoutes"));
-app.use("/api/admin/images",             require("./routes/adminImageRoutes"));
-
+// ── Admin routes ──
+app.use("/api/admin",                   require("./routes/adminRoutes"));
+app.use("/api/admin/admins",            require("./routes/adminManagementRoutes"));
+app.use("/api/admin/customers",         require("./routes/adminCustomerRoutes"));
+app.use("/api/admin/orders",            require("./routes/adminOrderRoutes"));
+app.use("/api/admin/payments",          require("./routes/adminPaymentRoutes"));
+app.use("/api/admin/dashboard",         require("./routes/adminDashboardRoutes"));
+app.use("/api/admin/carts",             require("./routes/adminCartRoutes"));
+app.use("/api/admin/notifications",     require("./routes/adminNotificationRoutes"));
+app.use("/api/admin/images",            require("./routes/adminImageRoutes"));
 
 // ============================================================
 // HEALTH CHECK
@@ -148,7 +155,7 @@ app.get("/api/health", (req, res) => {
     success: true,
     message: "API Running",
     environment: process.env.NODE_ENV,
-    mongoState: mongoose.connection.readyState, // 1 = connected
+    mongoState: mongoose.connection.readyState,
     timestamp: new Date().toISOString(),
   });
 });
@@ -197,10 +204,10 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// START SERVER — Listen on 0.0.0.0 for network access
+// START SERVER
 // ============================================================
 const PORT = process.env.PORT || 5000;
-const HOST = "0.0.0.0"; // ✅ Accept connections from all network interfaces
+const HOST = "0.0.0.0";
 
 connectDB()
   .then(() => {
@@ -232,7 +239,6 @@ process.on("uncaughtException", (err) => {
   console.error("⚠️  Uncaught Exception:", err.message);
 });
 
-// ── MongoDB auto-reconnect ────────────────────────────────────
 mongoose.connection.on("disconnected", () => {
   console.log("🔄 MongoDB disconnected — reconnecting in 5s...");
   setTimeout(() => {

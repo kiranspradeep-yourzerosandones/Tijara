@@ -86,7 +86,7 @@ export default function Navbar() {
         {/* Right side - Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Quick actions */}
-          <div className="hidden sm:flex items-center gap-1">
+          {/* <div className="hidden sm:flex items-center gap-1">
             <Link
               href="/admin/products/add-product"
               className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 
@@ -97,10 +97,10 @@ export default function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </Link>
-          </div>
+          </div> */}
 
           {/* Notifications */}
-          <div ref={notifRef} className="relative">
+          {/* <div ref={notifRef} className="relative">
             <button
               onClick={() => {
                 setShowNotifications(!showNotifications);
@@ -115,7 +115,7 @@ export default function Navbar() {
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
             </button>
 
-            {/* ✅ FIX 3: Use z-[9999] and add shadow for visual hierarchy */}
+            
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl 
                             border border-gray-200 overflow-hidden z-[9999] animate-in 
@@ -138,7 +138,7 @@ export default function Navbar() {
                 </div>
               </div>
             )}
-          </div>
+          </div> */}
 
           {/* Profile */}
           <div ref={profileRef} className="relative">

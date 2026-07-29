@@ -1,3 +1,4 @@
+// src/screens/auth/LoginScreen.js
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -8,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   TextInput,
   ActivityIndicator,
   Dimensions,
@@ -17,15 +17,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store';
 import { sendLoginOtp } from '../../api/auth';
+import { mapAuthError } from '../../api/client';
 import { validatePhone, validatePassword } from '../../utils/validation';
-import GoogleLogo from '../../components/common/GoogleLogo';
 
 const { height } = Dimensions.get('window');
 
 const GRADIENT_COLORS = ['#000000', '#0a0a0a', '#1a1500'];
-const GRADIENT_START = { x: 0, y: 0 };
-const GRADIENT_END = { x: 1, y: 1 };
+const GRADIENT_START  = { x: 0, y: 0 };
+const GRADIENT_END    = { x: 1, y: 1 };
 
+/* ─── Method Toggle ──────────────────────────────────────── */
 const MethodToggle = ({ loginMethod, onSelect }) => (
   <View style={styles.methodToggle}>
     {['password', 'otp'].map((method) => (
@@ -57,20 +58,21 @@ const MethodToggle = ({ loginMethod, onSelect }) => (
   </View>
 );
 
+/* ─── Phone Input ────────────────────────────────────────── */
 const PhoneInput = ({ value, onChange, error, focused, onFocus, onBlur }) => (
   <View style={styles.inputContainer}>
     <View
       style={[
         styles.inputWrapper,
         focused && styles.inputWrapperFocused,
-        error && styles.inputWrapperError,
+        error  && styles.inputWrapperError,
       ]}
     >
       <View style={styles.inputIconContainer}>
         <Ionicons
           name="call-outline"
           size={20}
-          color={focused ? '#F5C518' : '#888'}
+          color={error ? '#FF4444' : focused ? '#F5C518' : '#888'}
         />
       </View>
       <TextInput
@@ -78,17 +80,23 @@ const PhoneInput = ({ value, onChange, error, focused, onFocus, onBlur }) => (
         placeholder="Phone Number"
         value={value}
         onChangeText={onChange}
-        placeholderTextColor="#888"
+        placeholderTextColor="#666"
         keyboardType="phone-pad"
         maxLength={10}
         onFocus={onFocus}
         onBlur={onBlur}
       />
     </View>
-    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    {error ? (
+      <View style={styles.errorRow}>
+        <Ionicons name="alert-circle-outline" size={13} color="#FF4444" />
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    ) : null}
   </View>
 );
 
+/* ─── Password Input ─────────────────────────────────────── */
 const PasswordInput = ({
   value,
   onChange,
@@ -104,14 +112,14 @@ const PasswordInput = ({
       style={[
         styles.inputWrapper,
         focused && styles.inputWrapperFocused,
-        error && styles.inputWrapperError,
+        error  && styles.inputWrapperError,
       ]}
     >
       <View style={styles.inputIconContainer}>
         <Ionicons
           name="lock-closed-outline"
           size={20}
-          color={focused ? '#F5C518' : '#888'}
+          color={error ? '#FF4444' : focused ? '#F5C518' : '#888'}
         />
       </View>
       <TextInput
@@ -119,7 +127,7 @@ const PasswordInput = ({
         placeholder="Password"
         value={value}
         onChangeText={onChange}
-        placeholderTextColor="#888"
+        placeholderTextColor="#666"
         secureTextEntry={!showPassword}
         onFocus={onFocus}
         onBlur={onBlur}
@@ -132,98 +140,171 @@ const PasswordInput = ({
         />
       </TouchableOpacity>
     </View>
-    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    {error ? (
+      <View style={styles.errorRow}>
+        <Ionicons name="alert-circle-outline" size={13} color="#FF4444" />
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    ) : null}
   </View>
 );
 
-const SocialButtons = () => (
-  <>
-    <View style={styles.divider}>
-      <View style={styles.dividerLine} />
-      <Text style={styles.dividerText}>Or sign with</Text>
-      <View style={styles.dividerLine} />
+/* ─── Error / Warning Banner ─────────────────────────────── */
+const ErrorBanner = ({ message, variant = 'error', onDismiss }) => {
+  if (!message) return null;
+  const isWarning = variant === 'warning';
+  return (
+    <View
+      style={[
+        styles.apiBanner,
+        isWarning ? styles.warningBanner : styles.errorBanner,
+      ]}
+    >
+      <Ionicons
+        name={isWarning ? 'information-circle-outline' : 'warning-outline'}
+        size={16}
+        color={isWarning ? '#B45309' : '#CC2222'}
+        style={{ marginRight: 8, flexShrink: 0 }}
+      />
+      <Text
+        style={[
+          styles.apiBannerText,
+          isWarning ? styles.warningBannerText : styles.errorBannerText,
+        ]}
+      >
+        {message}
+      </Text>
+      {onDismiss ? (
+        <TouchableOpacity onPress={onDismiss}>
+          <Ionicons
+            name="close-outline"
+            size={18}
+            color={isWarning ? '#B45309' : '#CC2222'}
+          />
+        </TouchableOpacity>
+      ) : null}
     </View>
+  );
+};
 
-    <View style={styles.socialButtons}>
-      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-        <GoogleLogo size={24} />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-        <Ionicons name="logo-apple" size={26} color="#000" />
-      </TouchableOpacity>
-    </View>
-  </>
-);
-
+/* ─── Main Screen ────────────────────────────────────────── */
 const LoginScreen = ({ navigation }) => {
-  const [phone, setPhone] = useState('');
+  const [phone,    setPhone]    = useState('');
   const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState({});
-  const [loginMethod, setLoginMethod] = useState('password');
-  const [isLoading, setIsLoading] = useState(false);
+  const [errors,   setErrors]   = useState({});
+  const [apiError,        setApiError]        = useState('');
+  const [credentialError, setCredentialError] = useState('');
+  const [loginMethod,  setLoginMethod]  = useState('password');
+  const [isLoading,    setIsLoading]    = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
 
   const login = useAuthStore((state) => state.login);
 
+  /* ── Clear all errors ── */
+  const clearAllErrors = useCallback(() => {
+    setErrors({});
+    setApiError('');
+    setCredentialError('');
+  }, []);
+
+  /* ── Clear field error as user types ── */
+  const handlePhoneChange = useCallback((v) => {
+    setPhone(v);
+    setErrors((e) => ({ ...e, phone: '' }));
+    setApiError('');
+    setCredentialError('');
+  }, []);
+
+  const handlePasswordChange = useCallback((v) => {
+    setPassword(v);
+    setErrors((e) => ({ ...e, password: '' }));
+    setApiError('');
+    setCredentialError('');
+  }, []);
+
+  /* ── Route mapped error to correct state setter ── */
+  const applyMappedError = useCallback((mapped) => {
+    switch (mapped.field) {
+      case 'phone':
+        setErrors((e) => ({ ...e, phone: mapped.message }));
+        break;
+      case 'password':
+        setErrors((e) => ({ ...e, password: mapped.message }));
+        break;
+      case 'credentials':
+        setCredentialError(mapped.message);
+        break;
+      case 'otp':
+        setApiError(mapped.message);
+        break;
+      default:
+        setApiError(mapped.message);
+    }
+  }, []);
+
+  /* ── Password login ── */
   const handleLogin = useCallback(async () => {
-    const phoneValidation = validatePhone(phone);
+    const phoneValidation    = validatePhone(phone);
     const passwordValidation = validatePassword(password);
 
-    if (!phoneValidation.isValid || !passwordValidation.isValid) {
-      setErrors({
-        phone: phoneValidation.message,
-        password: passwordValidation.message,
-      });
+    const newErrors = {};
+    if (!phoneValidation.isValid)    newErrors.phone    = phoneValidation.message;
+    if (!passwordValidation.isValid) newErrors.password = passwordValidation.message;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setApiError('');
+      setCredentialError('');
       return;
     }
 
-    setErrors({});
+    clearAllErrors();
     setIsLoading(true);
 
     try {
       await login(phone, password);
     } catch (err) {
-      Alert.alert('Login Failed', err.message || 'Invalid credentials');
+      const mapped = mapAuthError(err);
+      applyMappedError(mapped);
     } finally {
       setIsLoading(false);
     }
-  }, [phone, password, login]);
+  }, [phone, password, login, clearAllErrors, applyMappedError]);
 
+  /* ── OTP login ── */
   const handleOtpLogin = useCallback(async () => {
     const phoneValidation = validatePhone(phone);
 
     if (!phoneValidation.isValid) {
       setErrors({ phone: phoneValidation.message });
+      setApiError('');
+      setCredentialError('');
       return;
     }
 
-    setErrors({});
+    clearAllErrors();
     setIsLoading(true);
 
     try {
       await sendLoginOtp(phone);
-      navigation.navigate('OTPVerification', {
-        phone,
-        type: 'login',
-      });
+      navigation.navigate('OTPVerification', { phone, type: 'login' });
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to send OTP');
+      const mapped = mapAuthError(err);
+      applyMappedError(mapped);
     } finally {
       setIsLoading(false);
     }
-  }, [phone, navigation]);
+  }, [phone, navigation, clearAllErrors, applyMappedError]);
 
   const handleMethodSelect = useCallback((method) => {
     setLoginMethod(method);
-    setErrors({});
-  }, []);
+    clearAllErrors();
+  }, [clearAllErrors]);
 
-  const handleFocus = useCallback((field) => () => setFocusedInput(field), []);
-  const handleBlur = useCallback(() => setFocusedInput(null), []);
-  const togglePassword = useCallback(() => {
-    setShowPassword((prev) => !prev);
-  }, []);
+  const handleFocus    = useCallback((field) => () => setFocusedInput(field), []);
+  const handleBlur     = useCallback(() => setFocusedInput(null), []);
+  const togglePassword = useCallback(() => setShowPassword((prev) => !prev), []);
 
   const isPasswordMode = loginMethod === 'password';
 
@@ -241,7 +322,7 @@ const LoginScreen = ({ navigation }) => {
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           bounces={false}
         >
-          {/* Top Section */}
+          {/* ── Hero ── */}
           <LinearGradient
             colors={GRADIENT_COLORS}
             style={styles.topSection}
@@ -250,24 +331,38 @@ const LoginScreen = ({ navigation }) => {
           >
             <View style={styles.shape1} />
             <View style={styles.shape2} />
-
             <View style={styles.header}>
               <Text style={styles.welcomeText}>Hello</Text>
               <Text style={styles.welcomeText}>Sign In !</Text>
             </View>
           </LinearGradient>
 
-          {/* Bottom Fill */}
+          {/* ── Form Card ── */}
           <View style={styles.bottomSection}>
             <View style={styles.card}>
+
               <MethodToggle
                 loginMethod={loginMethod}
                 onSelect={handleMethodSelect}
               />
 
+              {/* Server / network error banner */}
+              <ErrorBanner
+                message={apiError}
+                variant="error"
+                onDismiss={() => setApiError('')}
+              />
+
+              {/* Credential mismatch banner (amber) */}
+              <ErrorBanner
+                message={credentialError}
+                variant="warning"
+                onDismiss={() => setCredentialError('')}
+              />
+
               <PhoneInput
                 value={phone}
-                onChange={setPhone}
+                onChange={handlePhoneChange}
                 error={errors.phone}
                 focused={focusedInput === 'phone'}
                 onFocus={handleFocus('phone')}
@@ -277,7 +372,7 @@ const LoginScreen = ({ navigation }) => {
               {isPasswordMode && (
                 <PasswordInput
                   value={password}
-                  onChange={setPassword}
+                  onChange={handlePasswordChange}
                   error={errors.password}
                   focused={focusedInput === 'password'}
                   onFocus={handleFocus('password')}
@@ -316,7 +411,11 @@ const LoginScreen = ({ navigation }) => {
                 )}
               </TouchableOpacity>
 
-              <SocialButtons />
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>Or</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
               <View style={styles.signupLink}>
                 <Text style={styles.signupText}>You don't have an account? </Text>
@@ -324,6 +423,7 @@ const LoginScreen = ({ navigation }) => {
                   <Text style={styles.signupLinkText}>Signup here</Text>
                 </TouchableOpacity>
               </View>
+
             </View>
           </View>
         </ScrollView>
@@ -332,6 +432,7 @@ const LoginScreen = ({ navigation }) => {
   );
 };
 
+/* ─── Styles ─────────────────────────────────────────────── */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -399,7 +500,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEEEEE',
     borderRadius: 30,
     padding: 5,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   methodButton: {
     flex: 1,
@@ -428,6 +529,36 @@ const styles = StyleSheet.create({
   methodButtonTextActive: {
     color: '#000',
     fontWeight: '600',
+  },
+  apiBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 14,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(255,68,68,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,68,68,0.25)',
+  },
+  warningBanner: {
+    backgroundColor: 'rgba(245,197,24,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(180,83,9,0.25)',
+  },
+  apiBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  errorBannerText: {
+    color: '#CC2222',
+  },
+  warningBannerText: {
+    color: '#92400E',
   },
   inputContainer: {
     marginBottom: 18,
@@ -462,11 +593,17 @@ const styles = StyleSheet.create({
   eyeButton: {
     padding: 8,
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    marginLeft: 4,
+  },
   errorText: {
     fontSize: 12,
     color: '#FF4444',
-    marginTop: 6,
-    marginLeft: 4,
+    flex: 1,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
@@ -524,25 +661,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     fontWeight: '400',
   },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  socialButton: {
-    width: 80,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E8E8E8',
-  },
   signupLink: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 28,
+    marginTop: 8,
     paddingBottom: 10,
   },
   signupText: {

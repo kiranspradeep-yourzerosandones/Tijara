@@ -69,7 +69,7 @@ function sseConnect() {
   if (!sse) return;
 
   if (sse.es && sse.es.readyState !== EventSource.CLOSED) {
-    console.log("📡 AdminSSE: Already connected, skipping");
+    // console.log("📡 AdminSSE: Already connected, skipping");
     return;
   }
 
@@ -80,14 +80,14 @@ function sseConnect() {
   }
 
   const url = `${API_URL}/admin/sse?token=${encodeURIComponent(token)}`;
-  console.log("📡 AdminSSE: Connecting...");
+  // console.log("📡 AdminSSE: Connecting...");
 
   const es = new EventSource(url);
   sse.es = es;
 
   es.addEventListener("connected", (e) => {
     sse.connected = true;
-    console.log("✅ AdminSSE: Connected", JSON.parse(e.data));
+    // console.log("✅ AdminSSE: Connected", JSON.parse(e.data));
   });
 
   es.addEventListener("heartbeat", () => {

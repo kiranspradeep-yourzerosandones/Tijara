@@ -1,11 +1,6 @@
 // src/screens/splash/SplashScreen.js
-import React, { useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  Dimensions,
-  StatusBar,
-} from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, StatusBar } from 'react-native';
 
 import Animated, {
   useSharedValue,
@@ -14,13 +9,12 @@ import Animated, {
   withDelay,
   withSequence,
   withSpring,
+  cancelAnimation,
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
 
 import TijaraLogo from '../../components/common/TijaraLogo';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const LOGO_HEIGHT = 260;
 const HALF_LOGO = LOGO_HEIGHT / 2;
@@ -28,6 +22,14 @@ const HALF_LOGO = LOGO_HEIGHT / 2;
 // 🎯 FINAL LOCKED VALUES
 const FINAL_SCALE = 8;
 const FINAL_TRANSLATE_Y = -122;
+
+// Timing
+const MIN_DISPLAY_MS = 1800; // how long to show the splash once "ready"
+const FADE_OUT_MS = 400;
+// Absolute ceiling: navigate away even if `isReady` never becomes true
+// (e.g. a stalled init call, a rejected promise nobody caught, etc).
+// This is the thing that guarantees the app never gets stuck here.
+const MAX_WAIT_MS = 6000;
 
 const SplashScreen = ({ isReady, onFinish }) => {
   // Base animation
@@ -41,76 +43,101 @@ const SplashScreen = ({ isReady, onFinish }) => {
 
   const screenOpacity = useSharedValue(1);
 
+  // Guards against onFinish firing twice (once from the timing callback,
+  // once from a fallback timer) and against calling it after unmount.
+  const hasFinishedRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  const finish = () => {
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+    if (isMountedRef.current && onFinish) {
+      onFinish();
+    }
+  };
+
+  // Intro animation — runs once, independent of `isReady`.
   useEffect(() => {
-    // 1️⃣ Fade in
     logoOpacity.value = withTiming(1, { duration: 500 });
 
-    // 2️⃣ Intro bounce
     logoScale.value = withSequence(
-      withTiming(1.1, {
-        duration: 500,
-        easing: Easing.out(Easing.exp),
-      }),
-      withSpring(1, {
-        damping: 12,
-        stiffness: 100,
-      })
+      withTiming(1.1, { duration: 500, easing: Easing.out(Easing.exp) }),
+      withSpring(1, { damping: 12, stiffness: 100 })
     );
 
-    // 3️⃣ Reset position
     logoTranslateY.value = withTiming(0, { duration: 500 });
 
-    // 4️⃣ FINAL TRANSFORMATION
     finalScale.value = withDelay(
       900,
-      withTiming(FINAL_SCALE, {
-        duration: 900,
-        easing: Easing.out(Easing.cubic),
-      })
+      withTiming(FINAL_SCALE, { duration: 900, easing: Easing.out(Easing.cubic) })
     );
 
     finalTranslateY.value = withDelay(
       900,
-      withTiming(FINAL_TRANSLATE_Y, {
-        duration: 900,
-        easing: Easing.out(Easing.cubic),
-      })
+      withTiming(FINAL_TRANSLATE_Y, { duration: 900, easing: Easing.out(Easing.cubic) })
     );
 
+    return () => {
+      isMountedRef.current = false;
+      cancelAnimation(logoOpacity);
+      cancelAnimation(logoScale);
+      cancelAnimation(logoTranslateY);
+      cancelAnimation(finalScale);
+      cancelAnimation(finalTranslateY);
+      cancelAnimation(screenOpacity);
+    };
   }, []);
 
+  // Normal path: wait for `isReady`, show splash a minimum amount of time,
+  // then fade out and finish.
   useEffect(() => {
-    if (isReady) {
-      const timeout = setTimeout(() => {
-        screenOpacity.value = withTiming(0, {
-          duration: 400,
-          easing: Easing.in(Easing.quad),
-        }, (finished) => {
-          if (finished && onFinish) {
-            runOnJS(onFinish)();
-          }
-        });
-      }, 1800);
+    if (!isReady) return undefined;
 
-      return () => clearTimeout(timeout);
-    }
+    const showTimer = setTimeout(() => {
+      // Fallback in case the withTiming callback never fires
+      // (interrupted animation, dropped frames, etc).
+      const fadeFallback = setTimeout(finish, FADE_OUT_MS + 300);
+
+      screenOpacity.value = withTiming(
+        0,
+        { duration: FADE_OUT_MS, easing: Easing.in(Easing.quad) },
+        (finished) => {
+          // Call finish regardless of `finished` — an interrupted fade
+          // should still navigate forward, never leave the user stuck.
+          runOnJS(finish)();
+        }
+      );
+
+      return () => clearTimeout(fadeFallback);
+    }, MIN_DISPLAY_MS);
+
+    return () => clearTimeout(showTimer);
   }, [isReady]);
+
+  // Absolute ceiling: if `isReady` never becomes true, force navigation
+  // anyway once MAX_WAIT_MS has passed. This is what prevents the app
+  // from ever being permanently stuck on the splash screen.
+  useEffect(() => {
+    const hardTimeout = setTimeout(() => {
+      screenOpacity.value = withTiming(0, {
+        duration: FADE_OUT_MS,
+        easing: Easing.in(Easing.quad),
+      });
+      finish();
+    }, MAX_WAIT_MS);
+
+    return () => clearTimeout(hardTimeout);
+  }, []);
 
   // 🔥 TOP-ANCHOR SCALE FIX
   const logoStyle = useAnimatedStyle(() => ({
     opacity: logoOpacity.value,
     transform: [
       { translateY: logoTranslateY.value },
-
-      // Anchor scaling to top
-      { translateY: -HALF_LOGO },
-
+      { translateY: -HALF_LOGO }, // anchor scaling to top
       { scale: logoScale.value * finalScale.value },
-
       { translateY: HALF_LOGO },
-
-      // Final positioning
-      { translateY: finalTranslateY.value },
+      { translateY: finalTranslateY.value }, // final positioning
     ],
   }));
 
@@ -122,7 +149,6 @@ const SplashScreen = ({ isReady, onFinish }) => {
     <Animated.View style={[styles.container, screenStyle]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Clipping container */}
       <View style={styles.logoClip}>
         <Animated.View style={logoStyle}>
           <TijaraLogo width={200} height={350} />
@@ -137,7 +163,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-
   logoClip: {
     position: 'absolute',
     top: 0,
