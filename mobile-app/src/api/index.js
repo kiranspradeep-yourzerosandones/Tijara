@@ -46,3 +46,9 @@ export const paymentsAPI = payments;
 // ============================================================
 import * as notifications from './notifications';
 export const notificationsAPI = notifications;
+
+// ============================================================
+// BANNERS API
+// ============================================================
+import * as banners from './banners';
+export const bannersAPI = banners;
