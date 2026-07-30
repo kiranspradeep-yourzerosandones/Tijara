@@ -95,10 +95,9 @@ const otpLimiter = rateLimit({
 });
 
 // Auth limiter — only for sensitive non-OTP auth endpoints
-// (password login, token refresh etc.)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 min
-  max: 50,                    // 50 attempts — enough for normal use + retries
+  max: 50,
   message: { success: false, message: "Too many auth attempts. Please try again in 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -116,36 +115,39 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ============================================================
-// ROUTES — OTP limiters BEFORE auth routes so they take effect
+// ROUTES
 // ============================================================
 
-// ── OTP routes — tight limit (applied first, before authLimiter) ──
-app.use("/api/auth/register/send-otp",      otpLimiter);
-app.use("/api/auth/login/send-otp",         otpLimiter);
+// ── OTP routes — tight limit ──────────────────────────────────
+app.use("/api/auth/register/send-otp",        otpLimiter);
+app.use("/api/auth/login/send-otp",           otpLimiter);
 app.use("/api/auth/forgot-password/send-otp", otpLimiter);
 
-// ── All other auth routes — moderate limit ──
+// ── Auth routes ───────────────────────────────────────────────
 app.use("/api/auth", authLimiter, require("./routes/authRoutes"));
 
-// ── Public routes ──
-app.use("/api/products",       require("./routes/productRoutes"));
-app.use("/api/categories",     require("./routes/categoryRoutes"));
-app.use("/api/locations",      require("./routes/locationRoutes"));
-app.use("/api/cart",           require("./routes/cartRoutes"));
-app.use("/api/orders",         require("./routes/orderRoutes"));
-app.use("/api/payments",       require("./routes/paymentRoutes"));
-app.use("/api/notifications",  require("./routes/notificationRoutes"));
+// ── Public routes ─────────────────────────────────────────────
+app.use("/api/products",      require("./routes/productRoutes"));
+app.use("/api/categories",    require("./routes/categoryRoutes"));
+app.use("/api/locations",     require("./routes/locationRoutes"));
+app.use("/api/cart",          require("./routes/cartRoutes"));
+app.use("/api/orders",        require("./routes/orderRoutes"));
+app.use("/api/payments",      require("./routes/paymentRoutes"));
+app.use("/api/notifications", require("./routes/notificationRoutes"));
 
-// ── Admin routes ──
-app.use("/api/admin",                   require("./routes/adminRoutes"));
-app.use("/api/admin/admins",            require("./routes/adminManagementRoutes"));
-app.use("/api/admin/customers",         require("./routes/adminCustomerRoutes"));
-app.use("/api/admin/orders",            require("./routes/adminOrderRoutes"));
-app.use("/api/admin/payments",          require("./routes/adminPaymentRoutes"));
-app.use("/api/admin/dashboard",         require("./routes/adminDashboardRoutes"));
-app.use("/api/admin/carts",             require("./routes/adminCartRoutes"));
-app.use("/api/admin/notifications",     require("./routes/adminNotificationRoutes"));
-app.use("/api/admin/images",            require("./routes/adminImageRoutes"));
+// ── Banners (public GET + admin CRUD) ─────────────────────────
+app.use("/api/banners",       require("./routes/bannerRoutes"));
+
+// ── Admin routes ──────────────────────────────────────────────
+app.use("/api/admin",                       require("./routes/adminRoutes"));
+app.use("/api/admin/admins",                require("./routes/adminManagementRoutes"));
+app.use("/api/admin/customers",             require("./routes/adminCustomerRoutes"));
+app.use("/api/admin/orders",                require("./routes/adminOrderRoutes"));
+app.use("/api/admin/payments",              require("./routes/adminPaymentRoutes"));
+app.use("/api/admin/dashboard",             require("./routes/adminDashboardRoutes"));
+app.use("/api/admin/carts",                 require("./routes/adminCartRoutes"));
+app.use("/api/admin/notifications",         require("./routes/adminNotificationRoutes"));
+app.use("/api/admin/images",                require("./routes/adminImageRoutes"));
 
 // ============================================================
 // HEALTH CHECK

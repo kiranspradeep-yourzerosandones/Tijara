@@ -13,93 +13,93 @@ import {
   Dimensions,
   Animated,
   Keyboard,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
+import { COLORS, SPACING, SHADOWS } from '../../theme';
 import { Screen } from '../../components/common';
 import { HomeScreenSkeleton } from '../../components/common/Skeleton';
 import Toast from '../../components/common/Toast';
 import useToast from '../../hooks/useToast';
 import SearchSuggestions from '../../components/search/SearchSuggestions';
 import TijaraLogo from '../../components/common/TijaraLogo';
-import { productsAPI } from '../../api';
+import { productsAPI, bannersAPI } from '../../api';
 import { useAuthStore, useCartStore, useNotificationStore } from '../../store';
 import { useSearch } from '../../hooks';
 import { getImageUrl, formatCurrency, calculateDiscount } from '../../utils/helpers';
 import { fetchWithCache, invalidateCacheByPrefix } from '../../utils/apiCache';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const BANNER_HORIZONTAL_PADDING = 20;
-const BANNER_WIDTH               = width - BANNER_HORIZONTAL_PADDING * 2;
-const BANNER_HEIGHT              = 160;
-const CATEGORY_HEIGHT            = 114;
-const PRODUCT_GAP                = 10;
+// ── Banner dimensions ──────────────────────────────────────────
+const BANNER_SIDE_PADDING  = 16;
+const BANNER_CARD_GAP      = 10;
+const BANNER_CARD_WIDTH    = SCREEN_WIDTH - BANNER_SIDE_PADDING * 2;
+const BANNER_CARD_HEIGHT   = 160;
+const BANNER_SNAP_INTERVAL = BANNER_CARD_WIDTH + BANNER_CARD_GAP;
+
+const CATEGORY_HEIGHT    = 114;
+const PRODUCT_GAP        = 10;
 const PRODUCT_CARD_WIDTH =
-  (width - SPACING.screenPadding * 2 - PRODUCT_GAP * 2) / 3;
+  (SCREEN_WIDTH - SPACING.screenPadding * 2 - PRODUCT_GAP * 2) / 3;
 
 const PRODUCTS_CACHE_TTL   = 5 * 60 * 1000;
 const CATEGORIES_CACHE_TTL = 30 * 60 * 1000;
+const BANNERS_CACHE_TTL    = 10 * 60 * 1000;
+
+const FALLBACK_BANNER = {
+  _id:             'fallback',
+  title:           'Welcome to Tijara',
+  subtitle:        'Explore our wide range of industrial products',
+  backgroundColor: '#2D5A27',
+  image:           null,
+  actionType:      'none',
+};
 
 const CATEGORY_IMAGES = {
   wax:       require('../../../assets/wax.jpg'),
   chemicals: require('../../../assets/chemicals.jpg'),
 };
 
-const BANNER_DATA = [
-  {
-    id: '1',
-    title: 'Godrej Vegetable Wax',
-    subtitle: 'High-quality plant-based wax for industrial applications',
-    backgroundColor: '#2D5A27',
-  },
-  {
-    id: '2',
-    title: 'Premium Chemicals',
-    subtitle: 'Industrial grade chemicals for manufacturing',
-    backgroundColor: '#1a4a6e',
-  },
-  {
-    id: '3',
-    title: 'Special Offers',
-    subtitle: 'Up to 30% off on selected items',
-    backgroundColor: '#8B4513',
-  },
-  {
-    id: '4',
-    title: 'New Arrivals',
-    subtitle: 'Check out our latest products',
-    backgroundColor: '#4a1a6e',
-  },
-];
-
 const DEFAULT_CATEGORIES = [
-  { _id: 'wax',       name: 'Wax Products',      localImage: CATEGORY_IMAGES.wax },
-  { _id: 'chemicals', name: 'Chemical Products',  localImage: CATEGORY_IMAGES.chemicals },
+  { _id: 'wax',       name: 'Wax Products',     localImage: CATEGORY_IMAGES.wax },
+  { _id: 'chemicals', name: 'Chemical Products', localImage: CATEGORY_IMAGES.chemicals },
 ];
 
+// ─────────────────────────────────────────────────────────────
 const HomeScreen = ({ navigation }) => {
   const [products,           setProducts]           = useState([]);
   const [categories,         setCategories]         = useState([]);
+  const [banners,            setBanners]            = useState([]);
   const [isLoading,          setIsLoading]          = useState(true);
   const [isRefreshing,       setIsRefreshing]       = useState(false);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
-  const fadeAnim         = useRef(new Animated.Value(1)).current;
+  // ── Refs ──────────────────────────────────────────────────────
+  const bannerListRef   = useRef(null);
+  const autoPlayRef     = useRef(null);
+  const isUserScrolling = useRef(false);
+
+  // Two separate Animated.Values:
+  // scrollXNative → useNativeDriver:true  → scale + opacity on cards (transform only)
+  // scrollXJS     → useNativeDriver:false → width on dots (layout property)
+  const scrollXNative = useRef(new Animated.Value(0)).current;
+  const scrollXJS     = useRef(new Animated.Value(0)).current;
+
   const floatingCartScale = useRef(new Animated.Value(0)).current;
-  const addingRef        = useRef({});
+  const addingRef         = useRef({});
 
   const { toast, showToast } = useToast();
 
-  const user             = useAuthStore((state) => state.user);
-  const addToCart        = useCartStore((state) => state.addToCart);
-  const getItemQuantity  = useCartStore((state) => state.getItemQuantity);
-  const fetchCart        = useCartStore((state) => state.fetchCart);
-  const totalItems       = useCartStore((state) => state.totalItems);
-  const cartItems        = useCartStore((state) => state.items);
+  const user            = useAuthStore((s) => s.user);
+  const addToCart       = useCartStore((s) => s.addToCart);
+  const getItemQuantity = useCartStore((s) => s.getItemQuantity);
+  const fetchCart       = useCartStore((s) => s.fetchCart);
+  const totalItems      = useCartStore((s) => s.totalItems);
+  const cartItems       = useCartStore((s) => s.items);
   const { fetchUnreadCount } = useNotificationStore();
-  const unreadCount      = useNotificationStore((state) => state.unreadCount);
+  const unreadCount     = useNotificationStore((s) => s.unreadCount);
 
   const {
     query: searchQuery,
@@ -110,7 +110,7 @@ const HomeScreen = ({ navigation }) => {
     showSuggestions,
     recentSearches,
     trendingSearches,
-    setQuery: setSearchQuery,
+    setQuery:          setSearchQuery,
     fillSearch,
     clearSearch,
     hideSuggestions,
@@ -128,42 +128,54 @@ const HomeScreen = ({ navigation }) => {
     categories,
   });
 
-  // ── Floating cart animation ───────────────────────────────
+  const displayBanners = banners.length > 0 ? banners : [FALLBACK_BANNER];
+
+  // ── Floating cart animation ───────────────────────────────────
   useEffect(() => {
     Animated.spring(floatingCartScale, {
-      toValue:        totalItems > 0 ? 1 : 0,
+      toValue:         totalItems > 0 ? 1 : 0,
       useNativeDriver: true,
-      friction:       6,
-      tension:        40,
+      friction:        6,
+      tension:         40,
     }).start();
   }, [totalItems]);
 
-  // ── Banner auto-rotate (pauses when screen unfocused) ─────
+  // ── Reset on banner count change ──────────────────────────────
+  useEffect(() => {
+    setCurrentBannerIndex(0);
+    bannerListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    scrollXNative.setValue(0);
+    scrollXJS.setValue(0);
+  }, [banners.length]);
+
+  // ── Auto-play ─────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
-      const interval = setInterval(() => {
-        Animated.timing(fadeAnim, {
-          toValue:         0,
-          duration:        300,
-          useNativeDriver: true,
-        }).start(() => {
-          setCurrentBannerIndex((prev) => (prev + 1) % BANNER_DATA.length);
-          Animated.timing(fadeAnim, {
-            toValue:         1,
-            duration:        300,
-            useNativeDriver: true,
-          }).start();
-        });
-      }, 5000);
+      if (displayBanners.length <= 1) return;
 
-      return () => clearInterval(interval);
-    }, [fadeAnim])
+      autoPlayRef.current = setInterval(() => {
+        if (isUserScrolling.current) return;
+
+        setCurrentBannerIndex((prev) => {
+          const next   = (prev + 1) % displayBanners.length;
+          const offset = next * BANNER_SNAP_INTERVAL;
+
+          bannerListRef.current?.scrollToOffset({ offset, animated: true });
+          // Keep JS value in sync for dot animation
+          scrollXJS.setValue(offset);
+
+          return next;
+        });
+      }, 4000);
+
+      return () => {
+        if (autoPlayRef.current) clearInterval(autoPlayRef.current);
+      };
+    }, [displayBanners.length, scrollXJS])
   );
 
-  // ── Data loading ──────────────────────────────────────────
-  useEffect(() => {
-    loadInitialData();
-  }, []);
+  // ── Data loading ──────────────────────────────────────────────
+  useEffect(() => { loadInitialData(); }, []);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -171,40 +183,44 @@ const HomeScreen = ({ navigation }) => {
       await Promise.all([
         loadProducts(),
         loadCategories(),
+        loadBanners(),
         cartItems.length === 0 ? fetchCart() : Promise.resolve(),
         fetchUnreadCount(),
       ]);
-    } catch {
-      // Non-critical — UI shows whatever loaded
-    } finally {
-      setIsLoading(false);
-    }
+    } catch {} finally { setIsLoading(false); }
   };
 
   const loadProducts = async () => {
     try {
-      const response = await fetchWithCache(
+      const r = await fetchWithCache(
         'products:all',
         () => productsAPI.getProducts({ limit: 50 }),
         PRODUCTS_CACHE_TTL
       );
-      setProducts(response.data?.products || []);
-    } catch {
-      // Keep existing products on error
-    }
+      setProducts(r.data?.products || []);
+    } catch {}
   };
 
   const loadCategories = async () => {
     try {
-      const response = await fetchWithCache(
+      const r = await fetchWithCache(
         'categories:all',
         () => productsAPI.getCategories(),
         CATEGORIES_CACHE_TTL
       );
-      setCategories(response.categories || []);
-    } catch {
-      // Keep default categories on error
-    }
+      setCategories(r.categories || []);
+    } catch {}
+  };
+
+  const loadBanners = async () => {
+    try {
+      const r = await fetchWithCache(
+        'banners:active',
+        () => bannersAPI.getActiveBanners(),
+        BANNERS_CACHE_TTL
+      );
+      setBanners(r.banners || []);
+    } catch {}
   };
 
   const handleRefresh = async () => {
@@ -212,15 +228,40 @@ const HomeScreen = ({ navigation }) => {
     try {
       invalidateCacheByPrefix('products:');
       invalidateCacheByPrefix('categories:');
+      invalidateCacheByPrefix('banners:');
       await loadInitialData();
-    } catch {
-      // Silently fail
-    } finally {
-      setIsRefreshing(false);
-    }
+    } catch {} finally { setIsRefreshing(false); }
   };
 
-  // ── Navigation handlers ───────────────────────────────────
+  // ── Banner tap ────────────────────────────────────────────────
+  const handleBannerPress = useCallback((banner) => {
+    if (!banner || banner.actionType === 'none') return;
+    switch (banner.actionType) {
+      case 'product': {
+        const product = banner.actionProductId;
+        if (product) navigation.navigate('ProductDetail', { product });
+        break;
+      }
+      case 'category':
+        if (banner.actionCategory)
+          navigation.navigate('ProductList', {
+            category: banner.actionCategory,
+            title:    banner.actionCategory,
+          });
+        break;
+      case 'screen':
+        if (banner.actionScreen) navigation.navigate(banner.actionScreen);
+        break;
+      case 'url':
+        if (banner.actionUrl)
+          Linking.openURL(banner.actionUrl).catch(() =>
+            showToast('Could not open link', 'error')
+          );
+        break;
+    }
+  }, [navigation, showToast]);
+
+  // ── Navigation helpers ────────────────────────────────────────
   const handleSearch = useCallback(() => {
     if (searchQuery.trim()) {
       hideSuggestions();
@@ -233,14 +274,11 @@ const HomeScreen = ({ navigation }) => {
     }
   }, [searchQuery, hideSuggestions, addToRecentSearches, navigation]);
 
-  const handleProductPress = useCallback(
-    (product) => {
-      hideSuggestions();
-      Keyboard.dismiss();
-      navigation.navigate('ProductDetail', { product });
-    },
-    [hideSuggestions, navigation]
-  );
+  const handleProductPress = useCallback((product) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    navigation.navigate('ProductDetail', { product });
+  }, [hideSuggestions, navigation]);
 
   const handleViewAllProducts = useCallback(() => {
     navigation.navigate('ProductList', { title: 'All Products' });
@@ -255,103 +293,76 @@ const HomeScreen = ({ navigation }) => {
     });
   }, [hideSuggestions, searchQuery, navigation]);
 
-  const handleCategoryPress = useCallback(
-    (category) => {
-      hideSuggestions();
-      Keyboard.dismiss();
-      navigation.navigate('ProductList', {
-        category: typeof category === 'string' ? category : category.name,
-        title:    typeof category === 'string' ? category : category.name,
-      });
-    },
-    [hideSuggestions, navigation]
-  );
+  const handleCategoryPress = useCallback((category) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    navigation.navigate('ProductList', {
+      category: typeof category === 'string' ? category : category.name,
+      title:    typeof category === 'string' ? category : category.name,
+    });
+  }, [hideSuggestions, navigation]);
 
   const handleGoToCart = useCallback(() => {
     navigation.navigate('Cart');
   }, [navigation]);
 
-  const handleAddToCart = useCallback(
-    async (product) => {
-      if (addingRef.current[product._id]) return;
-      addingRef.current[product._id] = true;
-      try {
-        await addToCart(product._id, 1);
-        showToast(`${product.title} added to cart`, 'cart');
-      } catch (error) {
-        showToast(error.message || 'Failed to add to cart', 'error');
-      } finally {
-        addingRef.current[product._id] = false;
-      }
-    },
-    [addToCart, showToast]
-  );
+  const handleAddToCart = useCallback(async (product) => {
+    if (addingRef.current[product._id]) return;
+    addingRef.current[product._id] = true;
+    try {
+      await addToCart(product._id, 1);
+      showToast(`${product.title} added to cart`, 'cart');
+    } catch (error) {
+      showToast(error.message || 'Failed to add to cart', 'error');
+    } finally {
+      addingRef.current[product._id] = false;
+    }
+  }, [addToCart, showToast]);
 
-  const handleSelectSuggestion = useCallback(
-    (suggestion) => {
-      if (typeof suggestion === 'string') {
-        setSearchQuery(suggestion);
-        addToRecentSearches(suggestion);
-        hideSuggestions();
-        Keyboard.dismiss();
-        navigation.navigate('ProductList', {
-          searchQuery: suggestion,
-          title:       `Search: ${suggestion}`,
-        });
-      } else {
-        selectSuggestion(suggestion);
-      }
-    },
-    [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion, navigation]
-  );
-
-  const handleSelectProductSuggestion = useCallback(
-    (product) => {
+  const handleSelectSuggestion = useCallback((suggestion) => {
+    if (typeof suggestion === 'string') {
+      setSearchQuery(suggestion);
+      addToRecentSearches(suggestion);
       hideSuggestions();
       Keyboard.dismiss();
-      handleProductPress(product);
-    },
-    [hideSuggestions, handleProductPress]
-  );
+      navigation.navigate('ProductList', {
+        searchQuery: suggestion,
+        title:       `Search: ${suggestion}`,
+      });
+    } else {
+      selectSuggestion(suggestion);
+    }
+  }, [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion, navigation]);
 
-  const handleSelectCategorySuggestion = useCallback(
-    (categoryName) => {
-      hideSuggestions();
-      Keyboard.dismiss();
-      handleCategoryPress(categoryName);
-    },
-    [hideSuggestions, handleCategoryPress]
-  );
+  const handleSelectProductSuggestion = useCallback((product) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    handleProductPress(product);
+  }, [hideSuggestions, handleProductPress]);
+
+  const handleSelectCategorySuggestion = useCallback((categoryName) => {
+    hideSuggestions();
+    Keyboard.dismiss();
+    handleCategoryPress(categoryName);
+  }, [hideSuggestions, handleCategoryPress]);
 
   const handleFillSearch = useCallback(
-    (text) => fillSearch(text),
-    [fillSearch]
+    (text) => fillSearch(text), [fillSearch]
   );
-
   const handleRemoveRecentSearch = useCallback(
-    (searchTerm) => removeRecentSearch(searchTerm),
-    [removeRecentSearch]
+    (term) => removeRecentSearch(term), [removeRecentSearch]
   );
 
-  const handleDotPress = useCallback(
-    (index) => {
-      Animated.timing(fadeAnim, {
-        toValue:         0,
-        duration:        200,
-        useNativeDriver: true,
-      }).start(() => {
-        setCurrentBannerIndex(index);
-        Animated.timing(fadeAnim, {
-          toValue:         1,
-          duration:        200,
-          useNativeDriver: true,
-        }).start();
-      });
-    },
-    [fadeAnim]
-  );
+  const handleDotPress = useCallback((index) => {
+    const offset = index * BANNER_SNAP_INTERVAL;
+    bannerListRef.current?.scrollToOffset({ offset, animated: true });
+    scrollXJS.setValue(offset);
+    setCurrentBannerIndex(index);
+  }, [scrollXJS]);
 
-  // ── Renders ───────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // RENDERS
+  // ─────────────────────────────────────────────────────────────
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -440,69 +451,219 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  // ── Single banner card ─────────────────────────────────────────
+  const renderBannerCard = useCallback(({ item: banner, index }) => {
+    const hasImage     = !!banner.image;
+    const isActionable = banner.actionType && banner.actionType !== 'none';
+
+    const actionLabel = (() => {
+      switch (banner.actionType) {
+        case 'product':  return 'View Product';
+        case 'category': return 'Browse';
+        case 'screen':   return 'Go';
+        case 'url':      return 'Learn More';
+        default:         return null;
+      }
+    })();
+
+    const inputRange = [
+      (index - 1) * BANNER_SNAP_INTERVAL,
+      index       * BANNER_SNAP_INTERVAL,
+      (index + 1) * BANNER_SNAP_INTERVAL,
+    ];
+
+    // ✅ Only transform properties — safe for useNativeDriver: true
+    const animatedScale = scrollXNative.interpolate({
+      inputRange,
+      outputRange: [0.94, 1, 0.94],
+      extrapolate: 'clamp',
+    });
+
+    const animatedOpacity = scrollXNative.interpolate({
+      inputRange,
+      outputRange: [0.7, 1, 0.7],
+      extrapolate: 'clamp',
+    });
+
+    const cardContent = (
+      <>
+        {hasImage && <View style={styles.bannerImageOverlay} />}
+
+        {!hasImage && (
+          <View style={styles.bannerPattern}>
+            <View style={[styles.patternCircle, styles.patternCircle1]} />
+            <View style={[styles.patternCircle, styles.patternCircle2]} />
+          </View>
+        )}
+
+        <View style={styles.bannerContent}>
+          <View style={styles.bannerTextSection}>
+            <Text style={styles.bannerTitle} numberOfLines={1}>
+              {banner.title}
+            </Text>
+            {!!banner.subtitle && (
+              <Text style={styles.bannerSubtitle} numberOfLines={2}>
+                {banner.subtitle}
+              </Text>
+            )}
+            {isActionable && actionLabel && (
+              <View style={styles.shopNowButton}>
+                <Text style={styles.shopNowText}>{actionLabel}</Text>
+                <Ionicons name="arrow-forward" size={14} color={COLORS.black} />
+              </View>
+            )}
+          </View>
+
+          {!hasImage && (
+            <View style={styles.bannerImageSection}>
+              <View style={styles.bannerIconContainer}>
+                <Ionicons name="cube" size={40} color="rgba(255,255,255,0.3)" />
+              </View>
+            </View>
+          )}
+        </View>
+      </>
+    );
+
+    const cardInner = hasImage ? (
+      <ImageBackground
+        source={{ uri: getImageUrl(banner.image) }}
+        style={styles.bannerCardInner}
+        imageStyle={styles.bannerCardImageStyle}
+        resizeMode="cover"
+      >
+        {cardContent}
+      </ImageBackground>
+    ) : (
+      <View
+        style={[
+          styles.bannerCardInner,
+          { backgroundColor: banner.backgroundColor || '#2D5A27' },
+        ]}
+      >
+        {cardContent}
+      </View>
+    );
+
+    return (
+      <Animated.View
+        style={[
+          styles.bannerCardOuter,
+          {
+            transform: [{ scale: animatedScale }],
+            opacity:   animatedOpacity,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          activeOpacity={isActionable ? 0.9 : 1}
+          onPress={() => handleBannerPress(banner)}
+          style={styles.bannerCardTouchable}
+        >
+          {cardInner}
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }, [scrollXNative, handleBannerPress]);
+
+  // ── Banner carousel ────────────────────────────────────────────
   const renderBanner = () => {
     if (isSearching) return null;
-    const currentBanner = BANNER_DATA[currentBannerIndex];
 
     return (
       <View style={styles.bannerWrapper}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={handleViewAllProducts}
-          style={styles.bannerContainer}
-        >
-          <Animated.View
-            style={[
-              styles.bannerCard,
-              { backgroundColor: currentBanner.backgroundColor, opacity: fadeAnim },
-            ]}
-          >
-            <View style={styles.bannerPattern}>
-              <View style={[styles.patternCircle, styles.patternCircle1]} />
-              <View style={[styles.patternCircle, styles.patternCircle2]} />
-            </View>
-            <View style={styles.bannerContent}>
-              <View style={styles.bannerTextSection}>
-                <Text style={styles.bannerTitle} numberOfLines={1}>
-                  {currentBanner.title}
-                </Text>
-                <Text style={styles.bannerSubtitle} numberOfLines={2}>
-                  {currentBanner.subtitle}
-                </Text>
-                <View style={styles.shopNowButton}>
-                  <Text style={styles.shopNowText}>Shop Now</Text>
-                  <Ionicons name="arrow-forward" size={14} color={COLORS.black} />
-                </View>
-              </View>
-              <View style={styles.bannerImageSection}>
-                <View style={styles.bannerIconContainer}>
-                  <Ionicons name="cube" size={40} color="rgba(255,255,255,0.3)" />
-                </View>
-              </View>
-            </View>
-          </Animated.View>
-        </TouchableOpacity>
+        <Animated.FlatList
+          ref={bannerListRef}
+          data={displayBanners}
+          keyExtractor={(item) => item._id}
+          renderItem={renderBannerCard}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={BANNER_SNAP_INTERVAL}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          contentContainerStyle={styles.bannerListContent}
+          // ── Native driver: drives card scale + opacity ──────────
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollXNative } } }],
+            {
+              useNativeDriver: true,
+              // Simultaneously update JS value for dot width animation
+              listener: (event) => {
+                scrollXJS.setValue(event.nativeEvent.contentOffset.x);
+              },
+            }
+          )}
+          scrollEventThrottle={16}
+          onScrollBeginDrag={() => {
+            isUserScrolling.current = true;
+          }}
+          onMomentumScrollEnd={(e) => {
+            const page = Math.round(
+              e.nativeEvent.contentOffset.x / BANNER_SNAP_INTERVAL
+            );
+            setCurrentBannerIndex(
+              Math.max(0, Math.min(page, displayBanners.length - 1))
+            );
+            // Resume auto-play after 6 s of inactivity
+            setTimeout(() => { isUserScrolling.current = false; }, 6000);
+          }}
+          getItemLayout={(_, index) => ({
+            length: BANNER_SNAP_INTERVAL,
+            offset: BANNER_SNAP_INTERVAL * index,
+            index,
+          })}
+        />
 
-        <View style={styles.dotsContainer}>
-          {BANNER_DATA.map((_, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => handleDotPress(index)}
-              style={styles.dotTouchable}
-            >
-              <View
-                style={[
-                  styles.dot,
-                  index === currentBannerIndex && styles.dotActive,
-                ]}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* ── Animated dots — use scrollXJS (NO native driver) ─── */}
+        {displayBanners.length > 1 && (
+          <View style={styles.dotsContainer}>
+            {displayBanners.map((_, index) => {
+              const inputRange = [
+                (index - 1) * BANNER_SNAP_INTERVAL,
+                index       * BANNER_SNAP_INTERVAL,
+                (index + 1) * BANNER_SNAP_INTERVAL,
+              ];
+
+              // ✅ width via JS Animated — useNativeDriver: false
+              const dotWidth = scrollXJS.interpolate({
+                inputRange,
+                outputRange: [8, 24, 8],
+                extrapolate: 'clamp',
+              });
+
+              const dotOpacity = scrollXJS.interpolate({
+                inputRange,
+                outputRange: [0.35, 1, 0.35],
+                extrapolate: 'clamp',
+              });
+
+              return (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => handleDotPress(index)}
+                  style={styles.dotTouchable}
+                  activeOpacity={0.7}
+                >
+                  <Animated.View
+                    style={[
+                      styles.dot,
+                      {
+                        width:   dotWidth,   // layout prop — needs JS driver
+                        opacity: dotOpacity,
+                      },
+                    ]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </View>
     );
   };
 
+  // ── Categories ─────────────────────────────────────────────────
   const renderCategories = () => {
     if (isSearching) return null;
 
@@ -510,8 +671,8 @@ const HomeScreen = ({ navigation }) => {
       const lower = category.name?.toLowerCase() || '';
       if (lower.includes('wax'))      return { ...category, localImage: CATEGORY_IMAGES.wax };
       if (lower.includes('chemical')) return { ...category, localImage: CATEGORY_IMAGES.chemicals };
-      if (index === 0)                return { ...category, localImage: CATEGORY_IMAGES.wax };
-      if (index === 1)                return { ...category, localImage: CATEGORY_IMAGES.chemicals };
+      if (index === 0) return { ...category, localImage: CATEGORY_IMAGES.wax };
+      if (index === 1) return { ...category, localImage: CATEGORY_IMAGES.chemicals };
       return category;
     };
 
@@ -552,6 +713,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  // ── Product card ───────────────────────────────────────────────
   const renderCompactProductCard = (product, index) => {
     const quantity = getItemQuantity(product._id);
     const discount = calculateDiscount(product.compareAtPrice, product.price);
@@ -620,6 +782,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  // ── Products section ───────────────────────────────────────────
   const renderProducts = () => {
     const displayProducts = isSearching ? filteredProducts : products;
     const maxProducts     = isSearching ? 12 : 9;
@@ -681,6 +844,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  // ── Floating cart ──────────────────────────────────────────────
   const renderFloatingCart = () => {
     if (totalItems === 0) return null;
     return (
@@ -706,6 +870,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  // ── Loading skeleton ───────────────────────────────────────────
   if (isLoading) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
@@ -753,9 +918,11 @@ const HomeScreen = ({ navigation }) => {
   );
 };
 
+// ─────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   scrollView: { flex: 1 },
 
+  // ── Header ──────────────────────────────────────────────────
   header: {
     flexDirection:     'row',
     justifyContent:    'space-between',
@@ -770,22 +937,22 @@ const styles = StyleSheet.create({
     flex:          1,
   },
   logoContainer: {
-    width:            40,
-    height:           40,
-    backgroundColor:  COLORS.white,
-    borderRadius:     10,
-    marginRight:      SPACING.sm,
-    alignItems:       'center',
-    justifyContent:   'center',
-    shadowColor:      '#000',
-    shadowOffset:     { width: 0, height: 2 },
-    shadowOpacity:    0.08,
-    shadowRadius:     4,
-    elevation:        2,
+    width:           40,
+    height:          40,
+    backgroundColor: COLORS.white,
+    borderRadius:    10,
+    marginRight:     SPACING.sm,
+    alignItems:      'center',
+    justifyContent:  'center',
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.08,
+    shadowRadius:    4,
+    elevation:       2,
   },
   headerTextContainer: { flex: 1 },
-  welcomeText: { fontSize: 12, color: COLORS.gray },
-  userName:    { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
+  welcomeText:         { fontSize: 12, color: COLORS.gray },
+  userName:            { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
 
   notificationButton: {
     width:           40,
@@ -797,21 +964,22 @@ const styles = StyleSheet.create({
     position:        'relative',
   },
   notificationBadge: {
-    position:        'absolute',
-    top:             -2,
-    right:           -2,
-    minWidth:        18,
-    height:          18,
-    borderRadius:    9,
-    backgroundColor: COLORS.error,
-    alignItems:      'center',
-    justifyContent:  'center',
+    position:          'absolute',
+    top:               -2,
+    right:             -2,
+    minWidth:          18,
+    height:            18,
+    borderRadius:      9,
+    backgroundColor:   COLORS.error,
+    alignItems:        'center',
+    justifyContent:    'center',
     paddingHorizontal: 3,
-    borderWidth:     1.5,
-    borderColor:     COLORS.white,
+    borderWidth:       1.5,
+    borderColor:       COLORS.white,
   },
   notificationBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
 
+  // ── Search ──────────────────────────────────────────────────
   searchWrapper: {
     marginHorizontal: SPACING.screenPadding,
     marginBottom:     SPACING.md,
@@ -819,31 +987,31 @@ const styles = StyleSheet.create({
     elevation:        1000,
   },
   searchContainer: {
-    flexDirection:    'row',
-    alignItems:       'center',
+    flexDirection:     'row',
+    alignItems:        'center',
     paddingHorizontal: SPACING.md,
-    height:           44,
-    backgroundColor:  '#F5F5F5',
-    borderRadius:     12,
+    height:            44,
+    backgroundColor:   '#F5F5F5',
+    borderRadius:      12,
   },
   searchInput: {
-    flex:      1,
-    fontSize:  14,
-    color:     COLORS.textPrimary,
+    flex:       1,
+    fontSize:   14,
+    color:      COLORS.textPrimary,
     marginLeft: SPACING.sm,
   },
   clearButton: { padding: 4 },
 
   searchResultsHeader: {
-    flexDirection:    'row',
-    justifyContent:   'space-between',
-    alignItems:       'center',
+    flexDirection:     'row',
+    justifyContent:    'space-between',
+    alignItems:        'center',
     paddingHorizontal: SPACING.md,
-    paddingVertical:  SPACING.sm,
-    backgroundColor:  COLORS.card,
-    marginHorizontal: SPACING.screenPadding,
-    marginBottom:     SPACING.md,
-    borderRadius:     8,
+    paddingVertical:   SPACING.sm,
+    backgroundColor:   COLORS.card,
+    marginHorizontal:  SPACING.screenPadding,
+    marginBottom:      SPACING.md,
+    borderRadius:      8,
   },
   searchResultsInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   searchResultsText:  { fontSize: 13, color: COLORS.textSecondary },
@@ -861,48 +1029,78 @@ const styles = StyleSheet.create({
     marginTop:  SPACING.md,
   },
   noResultsText: {
-    fontSize:   14,
-    color:      COLORS.textSecondary,
-    marginTop:  SPACING.xs,
-    textAlign:  'center',
+    fontSize:  14,
+    color:     COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
   clearSearchButton: {
-    marginTop:        SPACING.lg,
+    marginTop:         SPACING.lg,
     paddingHorizontal: SPACING.lg,
-    paddingVertical:  SPACING.sm,
-    backgroundColor:  COLORS.primary,
-    borderRadius:     20,
+    paddingVertical:   SPACING.sm,
+    backgroundColor:   COLORS.primary,
+    borderRadius:      20,
   },
   clearSearchButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.black },
 
+  // ── Banner carousel ─────────────────────────────────────────
   bannerWrapper: {
-    marginBottom:     SPACING.lg,
-    paddingHorizontal: BANNER_HORIZONTAL_PADDING,
+    marginBottom: SPACING.lg,
   },
-  bannerContainer: {
-    width:        BANNER_WIDTH,
-    height:       BANNER_HEIGHT,
+
+  bannerListContent: {
+    // Padding so the first card starts at BANNER_SIDE_PADDING
+    // and the last card ends with the same gap on the right.
+    paddingHorizontal: BANNER_SIDE_PADDING,
+  },
+
+  // Outer Animated.View — handles scale + opacity
+  bannerCardOuter: {
+    width:       BANNER_CARD_WIDTH,
+    height:      BANNER_CARD_HEIGHT,
+    marginRight: BANNER_CARD_GAP,
+  },
+
+  // TouchableOpacity fills the animated wrapper
+  bannerCardTouchable: {
+    flex:         1,
+    borderRadius: 16,
+    overflow:     'hidden',
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius:  14,
+    elevation:     10,
+  },
+
+  // Inner card — colour bg or ImageBackground
+  bannerCardInner: {
+    flex:         1,
     borderRadius: 16,
     overflow:     'hidden',
   },
-  bannerCard: {
-    width:        '100%',
-    height:       '100%',
+
+  bannerCardImageStyle: {
     borderRadius: 16,
-    overflow:     'hidden',
   },
+
+  bannerImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+
   bannerPattern: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   patternCircle: {
     position:        'absolute',
     borderRadius:    1000,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  patternCircle1: { width: 180, height: 180, top: -60,  right: -40 },
-  patternCircle2: { width: 120, height: 120, bottom: -40, right: 60 },
+  patternCircle1: { width: 180, height: 180, top: -60,    right: -40 },
+  patternCircle2: { width: 120, height: 120, bottom: -40, right: 60  },
 
-  bannerContent:     { flex: 1, flexDirection: 'row', padding: SPACING.md },
-  bannerTextSection: { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
-  bannerImageSection:{ width: 90, alignItems: 'center', justifyContent: 'center' },
+  bannerContent:      { flex: 1, flexDirection: 'row', padding: SPACING.md },
+  bannerTextSection:  { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
+  bannerImageSection: { width: 90, alignItems: 'center', justifyContent: 'center' },
   bannerIconContainer: {
     width:           70,
     height:          70,
@@ -911,7 +1109,12 @@ const styles = StyleSheet.create({
     alignItems:      'center',
     justifyContent:  'center',
   },
-  bannerTitle:    { fontSize: 18, fontWeight: '700', color: COLORS.white, marginBottom: 6 },
+  bannerTitle: {
+    fontSize:     18,
+    fontWeight:   '700',
+    color:        COLORS.white,
+    marginBottom: 6,
+  },
   bannerSubtitle: {
     fontSize:     12,
     color:        'rgba(255,255,255,0.85)',
@@ -919,17 +1122,18 @@ const styles = StyleSheet.create({
     lineHeight:   17,
   },
   shopNowButton: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    backgroundColor:  COLORS.primary,
+    flexDirection:     'row',
+    alignItems:        'center',
+    backgroundColor:   COLORS.primary,
     paddingHorizontal: 14,
-    paddingVertical:  8,
-    borderRadius:     16,
-    alignSelf:        'flex-start',
-    gap:              4,
+    paddingVertical:   8,
+    borderRadius:      16,
+    alignSelf:         'flex-start',
+    gap:               4,
   },
   shopNowText: { fontSize: 12, color: COLORS.black, fontWeight: '700' },
 
+  // ── Dots ────────────────────────────────────────────────────
   dotsContainer: {
     flexDirection:  'row',
     justifyContent: 'center',
@@ -938,20 +1142,18 @@ const styles = StyleSheet.create({
   },
   dotTouchable: { padding: 4 },
   dot: {
-    width:           8,
-    height:          8,
-    borderRadius:    4,
-    backgroundColor: '#D9D9D9',
+    // width is animated via scrollXJS (JS driver — no native driver)
+    height:           8,
+    borderRadius:     4,
+    backgroundColor:  COLORS.primary,
     marginHorizontal: 3,
   },
-  dotActive: {
-    width:           24,
-    height:          8,
-    borderRadius:    4,
-    backgroundColor: COLORS.primary,
-  },
 
-  categoriesSection: { marginBottom: SPACING.lg, paddingHorizontal: SPACING.screenPadding },
+  // ── Categories ──────────────────────────────────────────────
+  categoriesSection: {
+    marginBottom:     SPACING.lg,
+    paddingHorizontal: SPACING.screenPadding,
+  },
   sectionHeader: {
     flexDirection:  'row',
     justifyContent: 'space-between',
@@ -959,25 +1161,26 @@ const styles = StyleSheet.create({
     marginBottom:   SPACING.sm,
   },
   sectionTitle: { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
-  seeAllText:   { fontSize: 13, color: COLORS.primary, fontWeight: '500' },
+  seeAllText:   { fontSize: 13, color: COLORS.primary,     fontWeight: '500' },
 
   categoryGrid: { flexDirection: 'row', gap: 10 },
   categoryCard: {
-    flex:         1,
-    height:       CATEGORY_HEIGHT,
-    borderRadius: 12,
-    overflow:     'hidden',
-    shadowColor:  '#000',
-    shadowOffset: { width: 0, height: 3 },
+    flex:          1,
+    height:        CATEGORY_HEIGHT,
+    borderRadius:  12,
+    overflow:      'hidden',
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: 3 },
     shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation:    4,
+    shadowRadius:  6,
+    elevation:     4,
   },
   categoryImage:      { width: '100%', height: '100%', justifyContent: 'flex-end' },
   categoryImageStyle: { borderRadius: 12 },
   categoryOverlay:    { backgroundColor: 'rgba(0,0,0,0.35)', padding: SPACING.sm },
   categoryText:       { fontSize: 13, color: COLORS.white, fontWeight: '700' },
 
+  // ── Products ─────────────────────────────────────────────────
   productsSection: { paddingHorizontal: SPACING.screenPadding },
   productsGrid:    { flexDirection: 'row', flexWrap: 'wrap' },
   viewMoreButton:  {
@@ -1008,35 +1211,40 @@ const styles = StyleSheet.create({
     position:        'relative',
   },
   compactImage:       { width: '100%', height: '100%' },
-  compactPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  compactPlaceholder: {
+    width:          '100%',
+    height:         '100%',
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
   compactSaleBadge: {
-    position:         'absolute',
-    top:              6,
-    left:             6,
-    backgroundColor:  '#0D9488',
+    position:          'absolute',
+    top:               6,
+    left:              6,
+    backgroundColor:   '#0D9488',
     paddingHorizontal: 6,
-    paddingVertical:  2,
-    borderRadius:     10,
+    paddingVertical:   2,
+    borderRadius:      10,
   },
   compactSaleText: { color: COLORS.white, fontSize: 9, fontWeight: '700' },
   compactOutOfStock: {
-    position:         'absolute',
-    top:              6,
-    right:            6,
-    backgroundColor:  COLORS.error,
+    position:          'absolute',
+    top:               6,
+    right:             6,
+    backgroundColor:   COLORS.error,
     paddingHorizontal: 6,
-    paddingVertical:  2,
-    borderRadius:     10,
+    paddingVertical:   2,
+    borderRadius:      10,
   },
   compactOutOfStockText: { color: COLORS.white, fontSize: 9, fontWeight: '600' },
-  compactContent:    { padding: 8 },
+  compactContent:        { padding: 8 },
   compactTitle: {
-    fontSize:    11,
-    fontWeight:  '500',
-    color:       COLORS.textPrimary,
+    fontSize:     11,
+    fontWeight:   '500',
+    color:        COLORS.textPrimary,
     marginBottom: 6,
-    lineHeight:  14,
-    height:      28,
+    lineHeight:   14,
+    height:       28,
   },
   compactPriceRow: {
     flexDirection:  'row',
@@ -1052,9 +1260,10 @@ const styles = StyleSheet.create({
     alignItems:      'center',
     justifyContent:  'center',
   },
-  compactAddButtonActive: { backgroundColor: '#0D9488' },
-  compactQuantityText:    { fontSize: 10, color: COLORS.white, fontWeight: '700' },
+  compactAddButtonActive:  { backgroundColor: '#0D9488' },
+  compactQuantityText:     { fontSize: 10, color: COLORS.white, fontWeight: '700' },
 
+  // ── Floating cart ─────────────────────────────────────────────
   floatingCartContainer: {
     position: 'absolute',
     bottom:   SPACING.tabBarHeight + SPACING.lg,
@@ -1073,18 +1282,18 @@ const styles = StyleSheet.create({
     shadowOpacity:   0.4,
   },
   floatingCartBadge: {
-    position:         'absolute',
-    top:              -2,
-    right:            -2,
-    minWidth:         20,
-    height:           20,
-    borderRadius:     10,
-    backgroundColor:  COLORS.white,
-    alignItems:       'center',
-    justifyContent:   'center',
+    position:          'absolute',
+    top:               -2,
+    right:             -2,
+    minWidth:          20,
+    height:            20,
+    borderRadius:      10,
+    backgroundColor:   COLORS.white,
+    alignItems:        'center',
+    justifyContent:    'center',
     paddingHorizontal: 4,
-    borderWidth:      2,
-    borderColor:      COLORS.primary,
+    borderWidth:       2,
+    borderColor:       COLORS.primary,
   },
   floatingCartBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.black },
 

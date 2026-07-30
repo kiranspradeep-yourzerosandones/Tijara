@@ -27,23 +27,60 @@ Notifications.setNotificationHandler({
   },
 });
 
+// ── How many times to retry on transient errors ───────────────
+const MAX_TOKEN_RETRIES  = 3;
+const RETRY_DELAY_MS     = 30_000; // 30 seconds between retries
+
+// ── Errors we consider transient (safe to retry silently) ─────
+const isTransientError = (error) => {
+  const msg = error?.message || '';
+  return (
+    msg.includes('503')                  ||
+    msg.includes('SERVICE_UNAVAILABLE')  ||
+    msg.includes('temporarily unavailable') ||
+    msg.includes('high load')            ||
+    msg.includes('Try again')            ||
+    msg.includes('isTransient')
+  );
+};
+
+// ── Errors we should never log (expected / harmless) ──────────
+const isSilentError = (error) => {
+  const msg = error?.message || '';
+  return (
+    msg.includes('projectId') ||
+    msg.includes('simulat')   ||
+    isTransientError(error)     // transient = log at DEBUG level only, not as ERROR
+  );
+};
+
 class NotificationService {
   constructor() {
     this.expoPushToken        = null;
     this.notificationListener = null;
     this.responseListener     = null;
     this.navigationRef        = null;
+    this._retryTimeout        = null; // holds the retry timer so we can cancel it
+    this._retryCount          = 0;
   }
 
   setNavigationRef(ref) {
     this.navigationRef = ref;
   }
 
+  // ── Public entry point ─────────────────────────────────────
   async registerForPushNotifications() {
     if (!ENV.FEATURES.PUSH_NOTIFICATIONS) return null;
-    if (!Device.isDevice) return null;
+    if (!Device.isDevice)                 return null;
 
+    this._retryCount = 0;
+    return this._attemptRegistration();
+  }
+
+  // ── Internal: single attempt + retry scheduling ────────────
+  async _attemptRegistration() {
     try {
+      // ── 1. Permissions ──────────────────────────────────────
       const { status: existingStatus } =
         await Notifications.getPermissionsAsync();
 
@@ -56,53 +93,12 @@ class NotificationService {
 
       if (finalStatus !== 'granted') return null;
 
+      // ── 2. Android notification channels ────────────────────
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name:             'General',
-          importance:       Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor:       '#F5C518',
-          sound:            'default',
-          enableVibrate:    true,
-          showBadge:        true,
-          lockscreenVisibility:
-            Notifications.AndroidNotificationVisibility?.PUBLIC,
-        });
-
-        await Notifications.setNotificationChannelAsync('orders', {
-          name:             'Order Updates',
-          description:      'Notifications about your orders',
-          importance:       Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor:       '#F5C518',
-          sound:            'default',
-          enableVibrate:    true,
-          showBadge:        true,
-          lockscreenVisibility:
-            Notifications.AndroidNotificationVisibility?.PUBLIC,
-        });
-
-        await Notifications.setNotificationChannelAsync('payments', {
-          name:          'Payment Reminders',
-          description:   'Payment due and reminder notifications',
-          importance:    Notifications.AndroidImportance.HIGH,
-          sound:         'default',
-          enableVibrate: true,
-          showBadge:     true,
-          lockscreenVisibility:
-            Notifications.AndroidNotificationVisibility?.PUBLIC,
-        });
-
-        await Notifications.setNotificationChannelAsync('promotions', {
-          name:          'Offers & Promotions',
-          description:   'Special offers and promotions',
-          importance:    Notifications.AndroidImportance.DEFAULT,
-          sound:         'default',
-          enableVibrate: false,
-          showBadge:     true,
-        });
+        await this._setupAndroidChannels();
       }
 
+      // ── 3. Fetch push token ──────────────────────────────────
       const projectId =
         Constants.expoConfig?.extra?.eas?.projectId ||
         Constants.easConfig?.projectId             ||
@@ -112,20 +108,103 @@ class NotificationService {
       const tokenData    = await Notifications.getExpoPushTokenAsync(tokenOptions);
 
       this.expoPushToken = tokenData.data;
+      this._retryCount   = 0; // success — reset counter
 
       return this.expoPushToken;
 
     } catch (error) {
-      if (
-        !error.message?.includes('projectId') &&
-        !error.message?.includes('simulat')
-      ) {
+      if (isTransientError(error)) {
+        // ── Transient: schedule a quiet retry ──────────────────
+        if (this._retryCount < MAX_TOKEN_RETRIES) {
+          this._retryCount++;
+          const delay = RETRY_DELAY_MS * this._retryCount; // 30s, 60s, 90s
+
+          if (__DEV__) {
+            console.debug(
+              `[NotificationService] Expo token fetch failed (transient). ` +
+              `Retry ${this._retryCount}/${MAX_TOKEN_RETRIES} in ${delay / 1000}s.`
+            );
+          }
+
+          // Clear any existing retry timer before scheduling a new one
+          if (this._retryTimeout) clearTimeout(this._retryTimeout);
+
+          this._retryTimeout = setTimeout(() => {
+            this._attemptRegistration();
+          }, delay);
+
+        } else {
+          // Gave up after MAX retries — log quietly in dev only
+          if (__DEV__) {
+            console.debug(
+              '[NotificationService] Expo push token unavailable after ' +
+              `${MAX_TOKEN_RETRIES} retries (Expo server busy). ` +
+              'Push notifications will not work this session.'
+            );
+          }
+        }
+
+        return null; // Don't propagate — not our bug
+      }
+
+      // ── Non-transient, non-silent: log properly ────────────
+      if (!isSilentError(error)) {
         logError('NotificationService.register', error);
       }
+
       return null;
     }
   }
 
+  // ── Android channels ───────────────────────────────────────
+  async _setupAndroidChannels() {
+    await Notifications.setNotificationChannelAsync('default', {
+      name:             'General',
+      importance:       Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor:       '#F5C518',
+      sound:            'default',
+      enableVibrate:    true,
+      showBadge:        true,
+      lockscreenVisibility:
+        Notifications.AndroidNotificationVisibility?.PUBLIC,
+    });
+
+    await Notifications.setNotificationChannelAsync('orders', {
+      name:             'Order Updates',
+      description:      'Notifications about your orders',
+      importance:       Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor:       '#F5C518',
+      sound:            'default',
+      enableVibrate:    true,
+      showBadge:        true,
+      lockscreenVisibility:
+        Notifications.AndroidNotificationVisibility?.PUBLIC,
+    });
+
+    await Notifications.setNotificationChannelAsync('payments', {
+      name:          'Payment Reminders',
+      description:   'Payment due and reminder notifications',
+      importance:    Notifications.AndroidImportance.HIGH,
+      sound:         'default',
+      enableVibrate: true,
+      showBadge:     true,
+      lockscreenVisibility:
+        Notifications.AndroidNotificationVisibility?.PUBLIC,
+    });
+
+    await Notifications.setNotificationChannelAsync('promotions', {
+      name:          'Offers & Promotions',
+      description:   'Special offers and promotions',
+      importance:    Notifications.AndroidImportance.DEFAULT,
+      sound:         'default',
+      enableVibrate: false,
+      showBadge:     true,
+    });
+  }
+
+  // ── Listeners ──────────────────────────────────────────────
   startListening(onNotification, onResponse) {
     this.notificationListener =
       Notifications.addNotificationReceivedListener((notification) => {
@@ -207,6 +286,7 @@ class NotificationService {
     setTimeout(navigate, 800);
   }
 
+  // ── Badge ──────────────────────────────────────────────────
   async updateBadgeCount() {
     try {
       const current = await Notifications.getBadgeCountAsync();
@@ -224,6 +304,7 @@ class NotificationService {
     }
   }
 
+  // ── Cleanup ────────────────────────────────────────────────
   stopListening() {
     if (this.notificationListener) {
       Notifications.removeNotificationSubscription(this.notificationListener);
@@ -233,8 +314,15 @@ class NotificationService {
       Notifications.removeNotificationSubscription(this.responseListener);
       this.responseListener = null;
     }
+
+    // Cancel any pending retry timer
+    if (this._retryTimeout) {
+      clearTimeout(this._retryTimeout);
+      this._retryTimeout = null;
+    }
   }
 
+  // ── Helpers ────────────────────────────────────────────────
   async getLastNotificationResponse() {
     try {
       return await Notifications.getLastNotificationResponseAsync();

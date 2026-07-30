@@ -1,4 +1,3 @@
-// frontend/components/admin/Sidebar.js
 "use client";
 
 import { useState, useEffect } from "react";
@@ -39,12 +38,10 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
   }, [admin]);
 
   useAdminSse("new_order", () => {
-    // Increment pending orders badge immediately without waiting for API call
     setBadges((prev) => ({
       ...prev,
       pendingOrders: (prev.pendingOrders || 0) + 1,
     }));
-    // Also refresh from API to get accurate count
     if (hasPermission("manageOrders") || hasPermission("viewReports")) {
       fetchBadgeCounts();
     }
@@ -176,6 +173,24 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
             </svg>
           ),
         },
+
+        // ── Banners ──────────────────────────────────────────────
+        {
+          title: "Banners",
+          href: "/admin/banners",
+          permission: "manageProducts",
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M4 5a1 1 0 011-1h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+            </svg>
+          ),
+        },
+
         {
           title: "Customers",
           href: "/admin/users",
@@ -190,7 +205,6 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
             </svg>
           ),
         },
-        // ✅ NEW — Notifications
         {
           title: "Notifications",
           href: "/admin/notifications",
@@ -251,18 +265,6 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
             </svg>
           ),
         },
-        // {
-        //   title: "Image Storage",
-        //   href: "/admin/settings/images",
-        //   permission: "manageProducts",
-        //   icon: (
-        //     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        //       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        //         d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14
-        //            m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        //     </svg>
-        //   ),
-        // },
         {
           title: "Settings",
           href: "/admin/settings",
@@ -281,7 +283,7 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
     },
   };
 
-  // ── Filter navigation by permissions ──────────────────────
+  // ── Filter navigation by permissions ────────────────────────
   const getFilteredNav = () => {
     const filtered = {};
     Object.entries(allNavigation).forEach(([key, section]) => {
@@ -461,7 +463,7 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
   };
 
   // ════════════════════════════════════════
-  // PERMISSION BADGES  ✅ UPDATED
+  // PERMISSION BADGES
   // ════════════════════════════════════════
   const getPermissionBadges = () => {
     if (!admin || admin.role === "superadmin") return null;
@@ -472,7 +474,7 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
       manageCustomers:     { label: "Customers",     color: "bg-purple-100 text-purple-700" },
       managePayments:      { label: "Payments",      color: "bg-orange-100 text-orange-700" },
       viewReports:         { label: "Reports",       color: "bg-cyan-100 text-cyan-700" },
-      manageNotifications: { label: "Notifications", color: "bg-pink-100 text-pink-700" }, // ✅ NEW
+      manageNotifications: { label: "Notifications", color: "bg-pink-100 text-pink-700" },
     };
 
     const activePermissions = Object.entries(admin.permissions || {})
@@ -506,8 +508,8 @@ export default function Sidebar({ isCollapsed: externalCollapsed, setIsCollapsed
   // ════════════════════════════════════════
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-     
-            {/* Logo */}
+
+      {/* Logo */}
       <div
         className={`flex items-center border-b border-gray-100 ${
           isCollapsed ? "px-3 py-4 justify-center" : "px-5 py-5 gap-3"
