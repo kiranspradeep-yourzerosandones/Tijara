@@ -4,7 +4,7 @@
     "slug": "tijara-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/tijarawhite.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.tijaramobile",
+      "bundleIdentifier": "com.yourzerosandones.tijara",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
@@ -29,7 +29,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.yourcompany.tijaramobile",
+      "package": "com.yourzerosandones.tijara",
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
