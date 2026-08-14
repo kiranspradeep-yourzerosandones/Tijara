@@ -149,8 +149,13 @@ class NotificationService {
 
       // ── Non-transient, non-silent: log properly ────────────
       if (!isSilentError(error)) {
-        logError('NotificationService.register', error);
-      }
+  console.error('❌ [NotificationService.register] FULL ERROR:', error);
+  console.error('❌ Error message:', error?.message);
+  console.error('❌ Error code:', error?.code);
+  console.error('❌ Error stack:', error?.stack);
+
+  logError('NotificationService.register', error);
+}
 
       return null;
     }
@@ -306,21 +311,22 @@ class NotificationService {
 
   // ── Cleanup ────────────────────────────────────────────────
   stopListening() {
-    if (this.notificationListener) {
-      Notifications.removeNotificationSubscription(this.notificationListener);
-      this.notificationListener = null;
-    }
-    if (this.responseListener) {
-      Notifications.removeNotificationSubscription(this.responseListener);
-      this.responseListener = null;
-    }
-
-    // Cancel any pending retry timer
-    if (this._retryTimeout) {
-      clearTimeout(this._retryTimeout);
-      this._retryTimeout = null;
-    }
+  if (this.notificationListener) {
+    // ✅ New API: call .remove() on the subscription object directly
+    this.notificationListener.remove();
+    this.notificationListener = null;
   }
+  if (this.responseListener) {
+    this.responseListener.remove();
+    this.responseListener = null;
+  }
+
+  // Cancel any pending retry timer
+  if (this._retryTimeout) {
+    clearTimeout(this._retryTimeout);
+    this._retryTimeout = null;
+  }
+}
 
   // ── Helpers ────────────────────────────────────────────────
   async getLastNotificationResponse() {

@@ -1,5 +1,4 @@
-// D:\kiran\yzo_ongoing_projects\
-
+// backend/models/Category.js
 const mongoose = require("mongoose");
 
 const categorySchema = new mongoose.Schema({
@@ -11,14 +10,22 @@ const categorySchema = new mongoose.Schema({
   slug: {
     type: String
   },
+  image: {
+    type: String,
+    default: null
+  },
   description: String,
   isActive: {
     type: Boolean,
     default: true
+  },
+  // ✅ manual drag-order position
+  sortOrder: {
+    type: Number,
+    default: 0
   }
 }, { timestamps: true });
 
-// Auto-generate slug
 categorySchema.pre('save', async function() {
   if (this.isModified('name') || !this.slug) {
     this.slug = this.name

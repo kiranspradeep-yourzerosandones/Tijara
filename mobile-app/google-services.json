@@ -16,6 +16,31 @@
       "api_key": [
         {
           "current_key": "AIzaSyBk7rE7sg9QWbsvgydxAmibZB_vBGPnnEU"
+        },
+        {
+          "current_key": "AIzaSyASRrDwzXnPUo2HHzx4OvvuQWR-jYl2P2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:573502979404:android:289607266338d44c1aa3e9",
+        "android_client_info": {
+          "package_name": "com.yourzerosandones.tijara"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBk7rE7sg9QWbsvgydxAmibZB_vBGPnnEU"
+        },
+        {
+          "current_key": "AIzaSyASRrDwzXnPUo2HHzx4OvvuQWR-jYl2P2Y"
         }
       ],
       "services": {
