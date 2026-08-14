@@ -15,7 +15,6 @@ import { NotificationSkeleton } from '../../components/common/Skeleton';
 import { useNotificationStore } from '../../store';
 import { getRelativeTime } from '../../utils/helpers';
 
-// ── Notification type → icon mapping ──────────────────────────
 const NOTIFICATION_ICONS = {
   order_update:     'receipt-outline',
   payment_reminder: 'card-outline',
@@ -29,12 +28,12 @@ const NOTIFICATION_ICONS = {
 };
 
 const NotificationScreen = ({ navigation }) => {
-  const notifications    = useNotificationStore((s) => s.notifications);
-  const isLoading        = useNotificationStore((s) => s.isLoading);
-  const hasMore          = useNotificationStore((s) => s.hasMore);
+  const notifications      = useNotificationStore((s) => s.notifications);
+  const isLoading          = useNotificationStore((s) => s.isLoading);
+  const hasMore            = useNotificationStore((s) => s.hasMore);
   const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
-  const markAsRead       = useNotificationStore((s) => s.markAsRead);
-  const markAllAsRead    = useNotificationStore((s) => s.markAllAsRead);
+  const markAsRead         = useNotificationStore((s) => s.markAsRead);
+  const markAllAsRead      = useNotificationStore((s) => s.markAllAsRead);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -54,79 +53,117 @@ const NotificationScreen = ({ navigation }) => {
     }
   };
 
-  // ── Notification tap → deep link navigation ────────────────
+  // ── Smart navigator ────────────────────────────────────────
+  // NotificationScreen lives inside HomeStack or ProfileStack.
+  // Some screens (OrderDetail, CreditSummary, PaymentHistory,
+  // ProductDetail) are registered at the ROOT AppNavigator level.
+  // We must navigate to those via the root navigator, not the
+  // nested stack navigator.
+  //
+  // navigation.getParent()  → TabNavigator
+  // navigation.getParent()?.getParent()  → AppNavigator (root)
+  const navigateToRoot = (screenName, params = {}) => {
+    // Try root navigator first (AppNavigator has OrderDetail etc.)
+    const rootNav = navigation.getParent()?.getParent();
+    if (rootNav) {
+      rootNav.navigate(screenName, params);
+    } else {
+      // Fallback — try current navigator
+      navigation.navigate(screenName, params);
+    }
+  };
+
+  // Navigate to a tab + optionally a screen inside that tab
+  const navigateToTab = (tabName, screenName, params = {}) => {
+    navigation.navigate(tabName, {
+      screen: screenName,
+      params,
+    });
+  };
+
+  // ── Notification tap handler ───────────────────────────────
   const handleNotificationPress = (notification) => {
-  if (!notification.isRead) {
-    markAsRead(notification._id);
-  }
-
-  // ── Order update ──────────────────────────────────────────
-  if (notification.type === 'order_update') {
-    // Try actionUrl first (stored in DB)
-    if (notification.actionUrl?.startsWith('order:')) {
-      const orderId = notification.actionUrl.replace('order:', '');
-      navigation.navigate('OrderDetail', { orderId });
-      return;
+    // Mark as read first
+    if (!notification.isRead) {
+      markAsRead(notification._id);
     }
-    // Try data.orderId (from push payload, not in DB list)
-    if (notification.data?.orderId) {
-      navigation.navigate('OrderDetail', {
-        orderId: notification.data.orderId,
-      });
-      return;
-    }
-    // Fallback — go to orders list
-    navigation.navigate('Orders');
-    return;
-  }
 
-  // ── Payment reminder → CreditSummary ──────────────────────
-  if (notification.type === 'payment_reminder') {
-    navigation.navigate('CreditSummary');
-    return;
-  }
-
-  // ── Payment received → PaymentHistory ─────────────────────
-  if (notification.type === 'payment_received') {
-    navigation.navigate('PaymentHistory');
-    return;
-  }
-
-  // ── New product → ProductList ──────────────────────────────
-  if (notification.type === 'new_product') {
-    navigation.navigate('ProductList', { title: 'New Products' });
-    return;
-  }
-
-  // ── Generic actionUrl deep link ────────────────────────────
-    // ── Generic actionUrl deep link ────────────────────────────
-  if (notification.actionUrl) {
-    if (notification.actionUrl.startsWith('order:')) {
-      const orderId = notification.actionUrl.replace('order:', '');
-      navigation.navigate('OrderDetail', { orderId });
-      return;
-    }
-    // ✅ ADD THIS
-    if (notification.actionUrl.startsWith('product:')) {
-      const productId = notification.actionUrl.replace('product:', '');
-      navigation.navigate('ProductDetail', { productId });
-      return;
-    }
-    if (notification.actionUrl.startsWith('screen:')) {
-      const screen = notification.actionUrl.replace('screen:', '');
-      try {
-        navigation.navigate(screen);
-      } catch (e) {
-        console.warn('🔔 Unknown screen:', screen);
+    // ── Order update ──────────────────────────────────────────
+    if (notification.type === 'order_update') {
+      if (notification.actionUrl?.startsWith('order:')) {
+        const orderId = notification.actionUrl.replace('order:', '');
+        navigateToRoot('OrderDetail', { orderId });
+        return;
       }
+      if (notification.data?.orderId) {
+        navigateToRoot('OrderDetail', { orderId: notification.data.orderId });
+        return;
+      }
+      // Fallback → switch to Orders tab
+      navigation.navigate('Orders');
       return;
     }
-  }
-};
+
+    // ── Payment reminder → CreditSummary ──────────────────────
+    if (notification.type === 'payment_reminder') {
+      navigateToRoot('CreditSummary');
+      return;
+    }
+
+    // ── Payment received → PaymentHistory ─────────────────────
+    if (notification.type === 'payment_received') {
+      navigateToRoot('PaymentHistory');
+      return;
+    }
+
+    // ── New product → ProductList ──────────────────────────────
+    if (notification.type === 'new_product') {
+      navigateToRoot('ProductList', { title: 'New Products' });
+      return;
+    }
+
+    // ── Promotional → ProductList ──────────────────────────────
+    if (notification.type === 'promotional') {
+      navigateToRoot('ProductList', { title: 'Offers' });
+      return;
+    }
+
+    // ── Generic actionUrl deep link ────────────────────────────
+    if (notification.actionUrl) {
+      if (notification.actionUrl.startsWith('order:')) {
+        const orderId = notification.actionUrl.replace('order:', '');
+        navigateToRoot('OrderDetail', { orderId });
+        return;
+      }
+
+      if (notification.actionUrl.startsWith('product:')) {
+        const productId = notification.actionUrl.replace('product:', '');
+        navigateToRoot('ProductDetail', { productId });
+        return;
+      }
+
+      if (notification.actionUrl.startsWith('screen:')) {
+        const screen = notification.actionUrl.replace('screen:', '');
+        try {
+          navigateToRoot(screen);
+        } catch (e) {
+          console.warn('🔔 Unknown screen:', screen);
+        }
+        return;
+      }
+
+      // Tab navigation — e.g. actionUrl: "tab:Orders"
+      if (notification.actionUrl.startsWith('tab:')) {
+        const tab = notification.actionUrl.replace('tab:', '');
+        navigation.navigate(tab);
+        return;
+      }
+    }
+  };
 
   const hasUnread = notifications.some((n) => !n.isRead);
 
-  // ── Skeleton while initial load ────────────────────────────
+  // ── Loading skeleton ───────────────────────────────────────
   if (isLoading && notifications.length === 0) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
@@ -266,22 +303,22 @@ const NotificationScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: SPACING.screenPadding,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.white,
+    paddingVertical:   SPACING.md,
+    backgroundColor:   COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width:           40,
+    height:          40,
+    borderRadius:    20,
     backgroundColor: COLORS.card,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
   title:       { ...FONTS.h4, color: COLORS.textPrimary },
   headerRight: { width: 80 },
@@ -298,7 +335,7 @@ const styles = StyleSheet.create({
     paddingTop:      8,
     backgroundColor: COLORS.white,
   },
-  listContent: { paddingBottom: SPACING.xxxl, flexGrow: 1 },
+  listContent:   { paddingBottom: SPACING.xxxl, flexGrow: 1 },
   notificationItem: {
     flexDirection:   'row',
     alignItems:      'flex-start',
@@ -335,15 +372,16 @@ const styles = StyleSheet.create({
   },
   notificationTime: { ...FONTS.caption, color: COLORS.gray },
   unreadDot: {
-    width:        10,
-    height:       10,
-    borderRadius: 5,
+    width:           10,
+    height:          10,
+    borderRadius:    5,
     backgroundColor: COLORS.primary,
-    marginLeft:   SPACING.sm,
-    marginTop:    SPACING.xs,
+    marginLeft:      SPACING.sm,
+    marginTop:       SPACING.xs,
   },
   separator:    { height: 1, backgroundColor: COLORS.borderLight },
   footerLoader: { paddingVertical: SPACING.md },
 });
 
 export default NotificationScreen;
+export { NotificationScreen };

@@ -22,9 +22,11 @@ const {
   updateProfile,
   changePassword,
   updatePushToken,
-  // ✅ ADD THESE TWO
+  // Notification preferences
   getNotificationPreferences,
   updateNotificationPreferences,
+  // ✅ Preferred category
+  updatePreferredCategory,
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/auth");
@@ -54,7 +56,10 @@ router.put("/profile", protect, updateProfile);
 router.put("/change-password", protect, changePassword);
 router.put("/push-token", protect, updatePushToken);
 
-// ✅ Notification preferences
+// ✅ Preferred category — must be before any wildcard routes
+router.put("/preferred-category", protect, updatePreferredCategory);
+
+// ============ Notification Preferences ============
 router.get("/notification-preferences", protect, getNotificationPreferences);
 router.put("/notification-preferences", protect, updateNotificationPreferences);
 

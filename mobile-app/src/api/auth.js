@@ -123,3 +123,11 @@ export const updateNotificationPreferences = async (preferences) => {
   const response = await apiClient.put('/auth/notification-preferences', preferences);
   return handleApiResponse(response);
 };
+
+export const updatePreferredCategory = async (categoryName) => {
+  console.log('📤 updatePreferredCategory called with:', categoryName);
+  const response = await apiClient.put('/auth/preferred-category', {
+    preferredCategory: categoryName || null
+  });
+  return handleApiResponse(response);
+};

@@ -1,5 +1,6 @@
+//.slice(0, 9) cahe this to increase rows in products of your choice
 // src/screens/home/HomeScreen.js
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -14,6 +15,10 @@ import {
   Animated,
   Keyboard,
   Linking,
+  FlatList,
+  ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,13 +29,13 @@ import Toast from '../../components/common/Toast';
 import useToast from '../../hooks/useToast';
 import SearchSuggestions from '../../components/search/SearchSuggestions';
 import TijaraLogo from '../../components/common/TijaraLogo';
-import { productsAPI, bannersAPI } from '../../api';
+import { productsAPI, bannersAPI, authAPI } from '../../api';
 import { useAuthStore, useCartStore, useNotificationStore } from '../../store';
 import { useSearch } from '../../hooks';
 import { getImageUrl, formatCurrency, calculateDiscount } from '../../utils/helpers';
 import { fetchWithCache, invalidateCacheByPrefix } from '../../utils/apiCache';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ── Banner dimensions ──────────────────────────────────────────
 const BANNER_SIDE_PADDING  = 16;
@@ -57,33 +62,535 @@ const FALLBACK_BANNER = {
   actionType:      'none',
 };
 
-const CATEGORY_IMAGES = {
-  wax:       require('../../../assets/wax.jpg'),
-  chemicals: require('../../../assets/chemicals.jpg'),
-};
+const CATEGORY_FALLBACK_IMAGE = require('../../../assets/wax.jpg');
 
 const DEFAULT_CATEGORIES = [
-  { _id: 'wax',       name: 'Wax Products',     localImage: CATEGORY_IMAGES.wax },
-  { _id: 'chemicals', name: 'Chemical Products', localImage: CATEGORY_IMAGES.chemicals },
+  { _id: 'wax',       name: 'Wax Products'     },
+  { _id: 'chemicals', name: 'Chemical Products' },
 ];
 
 // ─────────────────────────────────────────────────────────────
-const HomeScreen = ({ navigation }) => {
-  const [products,           setProducts]           = useState([]);
-  const [categories,         setCategories]         = useState([]);
-  const [banners,            setBanners]            = useState([]);
-  const [isLoading,          setIsLoading]          = useState(true);
-  const [isRefreshing,       setIsRefreshing]       = useState(false);
-  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+// ── Industry Selector Modal ───────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+function IndustryModal({ visible, categories, selectedCategoryName, onSelect, onClose, saving }) {
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
-  // ── Refs ──────────────────────────────────────────────────────
+  const allCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
+
+  // Slide up when visible
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue:         0,
+        useNativeDriver: true,
+        friction:        10,
+        tension:         60,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue:         SCREEN_HEIGHT,
+        duration:        250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleSelect = (category) => {
+    onSelect(category);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      {/* Backdrop */}
+      <Pressable style={modalStyles.backdrop} onPress={onClose}>
+        <Animated.View
+          style={[
+            modalStyles.sheet,
+            { transform: [{ translateY: slideAnim }] },
+          ]}
+        >
+          {/* Stop touch propagation so tapping sheet doesn't close */}
+          <Pressable onPress={(e) => e.stopPropagation()}>
+
+            {/* ── Handle bar ── */}
+            <View style={modalStyles.handleBar} />
+
+            {/* ── Header ── */}
+            <View style={modalStyles.header}>
+              <View style={modalStyles.headerLeft}>
+                <View style={modalStyles.headerIconBg}>
+                  <Ionicons name="business" size={18} color={COLORS.primary} />
+                </View>
+                <View>
+                  <Text style={modalStyles.headerTitle}>Industries We Serve</Text>
+                  <Text style={modalStyles.headerSub}>
+                    Select your industry for personalised products
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={onClose}
+                style={modalStyles.closeBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Divider ── */}
+            <View style={modalStyles.divider} />
+
+            {/* ── "No preference" option ── */}
+            <TouchableOpacity
+              style={[
+                modalStyles.item,
+                !selectedCategoryName && modalStyles.itemSelected,
+              ]}
+              onPress={() => handleSelect(null)}
+              activeOpacity={0.7}
+            >
+              <View style={[modalStyles.itemThumb, modalStyles.clearThumb]}>
+                <Ionicons
+                  name="apps-outline"
+                  size={20}
+                  color={!selectedCategoryName ? COLORS.primary : COLORS.gray}
+                />
+              </View>
+              <View style={modalStyles.itemContent}>
+                <Text
+                  style={[
+                    modalStyles.itemName,
+                    !selectedCategoryName && modalStyles.itemNameSelected,
+                  ]}
+                >
+                  All Industries
+                </Text>
+                <Text style={modalStyles.itemDesc}>Show products from all categories</Text>
+              </View>
+              {!selectedCategoryName && (
+                <View style={modalStyles.checkCircle}>
+                  <Ionicons name="checkmark" size={14} color={COLORS.white} />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={modalStyles.divider} />
+
+            {/* ── Category list ── */}
+            <FlatList
+              data={allCategories}
+              keyExtractor={(item) => item._id}
+              style={modalStyles.list}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: SPACING.xl }}
+              renderItem={({ item, index }) => {
+                const isSelected  = item.name === selectedCategoryName;
+                const imageSource = item.image
+                  ? { uri: getImageUrl(item.image) }
+                  : CATEGORY_FALLBACK_IMAGE;
+                const isLast      = index === allCategories.length - 1;
+
+                return (
+                  <TouchableOpacity
+                    style={[
+                      modalStyles.item,
+                      isSelected && modalStyles.itemSelected,
+                      !isLast && modalStyles.itemBorder,
+                    ]}
+                    onPress={() => handleSelect(item)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Thumbnail */}
+                    <View style={modalStyles.itemThumb}>
+                      <Image
+                        source={imageSource}
+                        style={modalStyles.itemThumbImg}
+                        resizeMode="cover"
+                      />
+                    </View>
+
+                    {/* Text */}
+                    <View style={modalStyles.itemContent}>
+                      <Text
+                        style={[
+                          modalStyles.itemName,
+                          isSelected && modalStyles.itemNameSelected,
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                      {item.slug ? (
+                        <Text style={modalStyles.itemDesc}>/{item.slug}</Text>
+                      ) : (
+                        <Text style={modalStyles.itemDesc}>Browse products</Text>
+                      )}
+                    </View>
+
+                    {/* Selected indicator OR arrow */}
+                    {isSelected ? (
+                      <View style={modalStyles.checkCircle}>
+                        <Ionicons name="checkmark" size={14} color={COLORS.white} />
+                      </View>
+                    ) : (
+                      <Ionicons
+                        name="chevron-forward"
+                        size={16}
+                        color={COLORS.lightGray}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+
+            {/* ── Saving indicator ── */}
+            {saving && (
+              <View style={modalStyles.savingRow}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={modalStyles.savingText}>Saving preference…</Text>
+              </View>
+            )}
+
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const modalStyles = StyleSheet.create({
+  backdrop: {
+    flex:            1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent:  'flex-end',
+  },
+  sheet: {
+    backgroundColor:    COLORS.white,
+    borderTopLeftRadius:  24,
+    borderTopRightRadius: 24,
+    // Max height — leaves some space at top so user can see backdrop
+    maxHeight: SCREEN_HEIGHT * 0.75,
+    // Shadow for iOS
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius:  16,
+    elevation:     20,
+  },
+
+  // ── Handle ──────────────────────────────────────────────
+  handleBar: {
+    width:           40,
+    height:          4,
+    borderRadius:    2,
+    backgroundColor: COLORS.lightGray,
+    alignSelf:       'center',
+    marginTop:       12,
+    marginBottom:    4,
+  },
+
+  // ── Header ──────────────────────────────────────────────
+  header: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: SPACING.screenPadding,
+    paddingVertical:   SPACING.md,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           12,
+    flex:          1,
+  },
+  headerIconBg: {
+    width:           40,
+    height:          40,
+    borderRadius:    12,
+    backgroundColor: COLORS.primary + '18',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  headerTitle: {
+    fontSize:   16,
+    fontWeight: '700',
+    color:      COLORS.textPrimary,
+  },
+  headerSub: {
+    fontSize:  12,
+    color:     COLORS.textSecondary,
+    marginTop: 1,
+  },
+  closeBtn: {
+    width:           34,
+    height:          34,
+    borderRadius:    17,
+    backgroundColor: '#F5F5F5',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+
+  divider: {
+    height:          1,
+    backgroundColor: COLORS.borderLight,
+  },
+
+  // ── List ────────────────────────────────────────────────
+  list: {
+    maxHeight: SCREEN_HEIGHT * 0.45,
+  },
+
+  // ── Item ────────────────────────────────────────────────
+  item: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingVertical:   14,
+    paddingHorizontal: SPACING.screenPadding,
+    gap:               14,
+    backgroundColor:   COLORS.white,
+  },
+  itemSelected: {
+    backgroundColor: COLORS.primary + '0A',
+  },
+  itemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  itemThumb: {
+    width:           48,
+    height:          48,
+    borderRadius:    12,
+    overflow:        'hidden',
+    backgroundColor: '#F5F5F5',
+    flexShrink:      0,
+  },
+  clearThumb: {
+    alignItems:     'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary + '10',
+  },
+  itemThumbImg: {
+    width:  '100%',
+    height: '100%',
+  },
+  itemContent: { flex: 1 },
+  itemName: {
+    fontSize:   14,
+    fontWeight: '600',
+    color:      COLORS.textPrimary,
+  },
+  itemNameSelected: {
+    color: COLORS.primary,
+  },
+  itemDesc: {
+    fontSize:  12,
+    color:     COLORS.textSecondary,
+    marginTop: 2,
+  },
+  checkCircle: {
+    width:           24,
+    height:          24,
+    borderRadius:    12,
+    backgroundColor: COLORS.primary,
+    alignItems:      'center',
+    justifyContent:  'center',
+    flexShrink:      0,
+  },
+
+  // ── Saving ──────────────────────────────────────────────
+  savingRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  savingText: {
+    fontSize: 13,
+    color:    COLORS.textSecondary,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────
+// ── Industry Trigger Button (shown above carousel) ────────────
+// ─────────────────────────────────────────────────────────────
+function IndustryTrigger({ selectedCategoryName, categories, onPress }) {
+  const allCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
+  const selectedCat   = allCategories.find((c) => c.name === selectedCategoryName);
+  const hasSelection  = !!selectedCategoryName;
+
+  return (
+    <TouchableOpacity
+      style={[triggerStyles.container, hasSelection && triggerStyles.containerSelected]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      {/* Left: icon / image */}
+      <View style={triggerStyles.iconWrap}>
+        {hasSelection && selectedCat?.image ? (
+          <Image
+            source={{ uri: getImageUrl(selectedCat.image) }}
+            style={triggerStyles.thumbImg}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[triggerStyles.iconBg, hasSelection && triggerStyles.iconBgSelected]}>
+            <Ionicons
+              name="business-outline"
+              size={18}
+              color={hasSelection ? COLORS.primary : COLORS.textSecondary}
+            />
+          </View>
+        )}
+      </View>
+
+      {/* Center text */}
+      <View style={triggerStyles.textWrap}>
+        {hasSelection ? (
+          <>
+            <Text style={triggerStyles.label} numberOfLines={1}>
+              {selectedCategoryName}
+            </Text>
+            <Text style={triggerStyles.sub}>Your selected industry · tap to change</Text>
+          </>
+        ) : (
+          <>
+            <Text style={triggerStyles.labelDefault}>Industries We Serve</Text>
+            <Text style={triggerStyles.sub}>
+              {allCategories.length} industr{allCategories.length === 1 ? 'y' : 'ies'} · tap to select yours
+            </Text>
+          </>
+        )}
+      </View>
+
+      {/* Right: chevron */}
+      <View style={[triggerStyles.chevronWrap, hasSelection && triggerStyles.chevronWrapSelected]}>
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color={hasSelection ? COLORS.primary : COLORS.textSecondary}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const triggerStyles = StyleSheet.create({
+  container: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    marginHorizontal:  SPACING.screenPadding,
+    marginBottom:      SPACING.md,
+    backgroundColor:   COLORS.white,
+    borderRadius:      16,
+    paddingVertical:   12,
+    paddingHorizontal: 14,
+    borderWidth:       1.5,
+    borderColor:       COLORS.borderLight,
+    shadowColor:       '#000',
+    shadowOffset:      { width: 0, height: 2 },
+    shadowOpacity:     0.06,
+    shadowRadius:      8,
+    elevation:         3,
+    gap:               12,
+  },
+  containerSelected: {
+    borderColor:     COLORS.primary + '60',
+    backgroundColor: COLORS.primary + '04',
+  },
+
+  // ── Icon / thumb ─────────────────────────────────────────
+  iconWrap: {
+    width:        44,
+    height:       44,
+    borderRadius: 12,
+    overflow:     'hidden',
+    flexShrink:   0,
+  },
+  iconBg: {
+    width:           '100%',
+    height:          '100%',
+    borderRadius:    12,
+    backgroundColor: '#F5F5F5',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  iconBgSelected: {
+    backgroundColor: COLORS.primary + '15',
+  },
+  thumbImg: {
+    width:  '100%',
+    height: '100%',
+  },
+
+  // ── Text ─────────────────────────────────────────────────
+  textWrap: { flex: 1 },
+  labelDefault: {
+    fontSize:   14,
+    fontWeight: '700',
+    color:      COLORS.textPrimary,
+    letterSpacing: 0.1,
+  },
+  label: {
+    fontSize:   14,
+    fontWeight: '700',
+    color:      COLORS.primary,
+  },
+  sub: {
+    fontSize:  11,
+    color:     COLORS.textSecondary,
+    marginTop: 2,
+  },
+
+  // ── Chevron ──────────────────────────────────────────────
+  chevronWrap: {
+    width:           28,
+    height:          28,
+    borderRadius:    14,
+    backgroundColor: '#F5F5F5',
+    alignItems:      'center',
+    justifyContent:  'center',
+    flexShrink:      0,
+  },
+  chevronWrapSelected: {
+    backgroundColor: COLORS.primary + '15',
+  },
+});
+
+// ─────────────────────────────────────────────────────────────
+// ── Main Screen ───────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+const HomeScreen = ({ navigation }) => {
+  const [products,             setProducts]             = useState([]);
+  const [categories,           setCategories]           = useState([]);
+  const [banners,              setBanners]              = useState([]);
+  const [isLoading,            setIsLoading]            = useState(true);
+  const [isRefreshing,         setIsRefreshing]         = useState(false);
+  const [currentBannerIndex,   setCurrentBannerIndex]   = useState(0);
+
+  // ── Preferred-category products ────────────────────────────
+  const [preferredProducts,    setPreferredProducts]    = useState([]);
+  const [isLoadingPreferred,   setIsLoadingPreferred]   = useState(false);
+
+  // ── Preferred-category save state ──────────────────────────
+  const [savingPreference,     setSavingPreference]     = useState(false);
+
+  // ── Industry modal ─────────────────────────────────────────
+  const [showIndustryModal,    setShowIndustryModal]    = useState(false);
+
+  // ── Refs ───────────────────────────────────────────────────
   const bannerListRef   = useRef(null);
   const autoPlayRef     = useRef(null);
   const isUserScrolling = useRef(false);
 
-  // Two separate Animated.Values:
-  // scrollXNative → useNativeDriver:true  → scale + opacity on cards (transform only)
-  // scrollXJS     → useNativeDriver:false → width on dots (layout property)
   const scrollXNative = useRef(new Animated.Value(0)).current;
   const scrollXJS     = useRef(new Animated.Value(0)).current;
 
@@ -92,14 +599,19 @@ const HomeScreen = ({ navigation }) => {
 
   const { toast, showToast } = useToast();
 
-  const user            = useAuthStore((s) => s.user);
+  // ── Store ──────────────────────────────────────────────────
+  const user                 = useAuthStore((s) => s.user);
+  const setPreferredCategory = useAuthStore((s) => s.setPreferredCategory);
+  const preferredCategory    = useAuthStore((s) => s.preferredCategory);
+
   const addToCart       = useCartStore((s) => s.addToCart);
   const getItemQuantity = useCartStore((s) => s.getItemQuantity);
   const fetchCart       = useCartStore((s) => s.fetchCart);
   const totalItems      = useCartStore((s) => s.totalItems);
   const cartItems       = useCartStore((s) => s.items);
+
   const { fetchUnreadCount } = useNotificationStore();
-  const unreadCount     = useNotificationStore((s) => s.unreadCount);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   const {
     query: searchQuery,
@@ -130,7 +642,7 @@ const HomeScreen = ({ navigation }) => {
 
   const displayBanners = banners.length > 0 ? banners : [FALLBACK_BANNER];
 
-  // ── Floating cart animation ───────────────────────────────────
+  // ── Floating cart animation ────────────────────────────────
   useEffect(() => {
     Animated.spring(floatingCartScale, {
       toValue:         totalItems > 0 ? 1 : 0,
@@ -140,7 +652,6 @@ const HomeScreen = ({ navigation }) => {
     }).start();
   }, [totalItems]);
 
-  // ── Reset on banner count change ──────────────────────────────
   useEffect(() => {
     setCurrentBannerIndex(0);
     bannerListRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -148,34 +659,34 @@ const HomeScreen = ({ navigation }) => {
     scrollXJS.setValue(0);
   }, [banners.length]);
 
-  // ── Auto-play ─────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       if (displayBanners.length <= 1) return;
-
       autoPlayRef.current = setInterval(() => {
         if (isUserScrolling.current) return;
-
         setCurrentBannerIndex((prev) => {
           const next   = (prev + 1) % displayBanners.length;
           const offset = next * BANNER_SNAP_INTERVAL;
-
           bannerListRef.current?.scrollToOffset({ offset, animated: true });
-          // Keep JS value in sync for dot animation
           scrollXJS.setValue(offset);
-
           return next;
         });
       }, 4000);
-
-      return () => {
-        if (autoPlayRef.current) clearInterval(autoPlayRef.current);
-      };
+      return () => { if (autoPlayRef.current) clearInterval(autoPlayRef.current); };
     }, [displayBanners.length, scrollXJS])
   );
 
-  // ── Data loading ──────────────────────────────────────────────
+  // ── Initial load ───────────────────────────────────────────
   useEffect(() => { loadInitialData(); }, []);
+
+  // ── Load preferred products when preference changes ────────
+  useEffect(() => {
+    if (preferredCategory) {
+      loadPreferredProducts(preferredCategory);
+    } else {
+      setPreferredProducts([]);
+    }
+  }, [preferredCategory]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -208,7 +719,8 @@ const HomeScreen = ({ navigation }) => {
         () => productsAPI.getCategories(),
         CATEGORIES_CACHE_TTL
       );
-      setCategories(r.categories || []);
+      const cats = (r.categories || []).filter((c) => c.isActive !== false);
+      setCategories(cats);
     } catch {}
   };
 
@@ -223,6 +735,22 @@ const HomeScreen = ({ navigation }) => {
     } catch {}
   };
 
+  const loadPreferredProducts = async (categoryName) => {
+    setIsLoadingPreferred(true);
+    try {
+      const r = await fetchWithCache(
+        `products:category:${categoryName}`,
+        () => productsAPI.getProducts({ category: categoryName, limit: 9 }),
+        PRODUCTS_CACHE_TTL
+      );
+      setPreferredProducts(r.data?.products || []);
+    } catch {
+      setPreferredProducts([]);
+    } finally {
+      setIsLoadingPreferred(false);
+    }
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -230,10 +758,49 @@ const HomeScreen = ({ navigation }) => {
       invalidateCacheByPrefix('categories:');
       invalidateCacheByPrefix('banners:');
       await loadInitialData();
+      if (preferredCategory) await loadPreferredProducts(preferredCategory);
     } catch {} finally { setIsRefreshing(false); }
   };
 
-  // ── Banner tap ────────────────────────────────────────────────
+  // ── Handle industry selection from modal ───────────────────
+  const handleIndustrySelect = useCallback(async (category) => {
+  const newCategoryName = category?.name || null;
+
+  // Close modal immediately
+  setShowIndustryModal(false);
+
+  // Optimistic update
+  setPreferredCategory(newCategoryName);
+
+  setSavingPreference(true);
+  try {
+    console.log('📡 Saving preference:', newCategoryName);
+    console.log('📡 API URL:', `${authAPI}`);
+
+    const result = await authAPI.updatePreferredCategory(newCategoryName);
+    console.log('✅ Save result:', result);
+
+    if (newCategoryName) {
+      showToast(`Industry set to "${newCategoryName}"`, 'success');
+    } else {
+      showToast('Industry preference cleared', 'success');
+    }
+  } catch (err) {
+    // ✅ Log the actual error so we can see what's wrong
+    console.error('❌ Save preference error:', err);
+    console.error('❌ Error message:', err?.message);
+    console.error('❌ Error status:', err?.status);
+    console.error('❌ Error data:', err?.data);
+
+    // Revert on failure
+    setPreferredCategory(preferredCategory);
+    showToast(`Failed: ${err?.message || 'Unknown error'}`, 'error');
+  } finally {
+    setSavingPreference(false);
+  }
+}, [preferredCategory, setPreferredCategory, showToast]);
+
+  // ── Navigation helpers ─────────────────────────────────────
   const handleBannerPress = useCallback((banner) => {
     if (!banner || banner.actionType === 'none') return;
     switch (banner.actionType) {
@@ -261,7 +828,6 @@ const HomeScreen = ({ navigation }) => {
     }
   }, [navigation, showToast]);
 
-  // ── Navigation helpers ────────────────────────────────────────
   const handleSearch = useCallback(() => {
     if (searchQuery.trim()) {
       hideSuggestions();
@@ -292,6 +858,13 @@ const HomeScreen = ({ navigation }) => {
       title:       `Search: ${searchQuery.trim()}`,
     });
   }, [hideSuggestions, searchQuery, navigation]);
+
+  const handleViewAllPreferred = useCallback(() => {
+    navigation.navigate('ProductList', {
+      category: preferredCategory,
+      title:    preferredCategory,
+    });
+  }, [navigation, preferredCategory]);
 
   const handleCategoryPress = useCallback((category) => {
     hideSuggestions();
@@ -346,12 +919,8 @@ const HomeScreen = ({ navigation }) => {
     handleCategoryPress(categoryName);
   }, [hideSuggestions, handleCategoryPress]);
 
-  const handleFillSearch = useCallback(
-    (text) => fillSearch(text), [fillSearch]
-  );
-  const handleRemoveRecentSearch = useCallback(
-    (term) => removeRecentSearch(term), [removeRecentSearch]
-  );
+  const handleFillSearch   = useCallback((text) => fillSearch(text), [fillSearch]);
+  const handleRemoveRecent = useCallback((term) => removeRecentSearch(term), [removeRecentSearch]);
 
   const handleDotPress = useCallback((index) => {
     const offset = index * BANNER_SNAP_INTERVAL;
@@ -360,12 +929,14 @@ const HomeScreen = ({ navigation }) => {
     setCurrentBannerIndex(index);
   }, [scrollXJS]);
 
-  // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
   // RENDERS
-  // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
 
+  // ── Header ────────────────────────────────────────────────
   const renderHeader = () => (
     <View style={styles.header}>
+      {/* Left: logo + name */}
       <View style={styles.headerLeft}>
         <View style={styles.logoContainer}>
           <TijaraLogo width={28} height={28} />
@@ -376,20 +947,55 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </View>
 
-      <TouchableOpacity
-        style={styles.notificationButton}
-        onPress={() => navigation.navigate('Notifications')}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-        {unreadCount > 0 && (
-          <View style={styles.notificationBadge}>
-            <Text style={styles.notificationBadgeText}>
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      {/* Right: industry pill + notification bell */}
+      <View style={styles.headerRight}>
+
+        {/* ── Industry pill ── */}
+       <TouchableOpacity
+  style={[
+    styles.industryPill,
+    preferredCategory && styles.industryPillActive,
+  ]}
+  onPress={() => setShowIndustryModal(true)}
+  activeOpacity={0.8}
+>
+  <Ionicons
+    name="business-outline"
+    size={12}
+    color={preferredCategory ? COLORS.black : COLORS.textSecondary}  // ✅ black when active
+  />
+  <Text
+    style={[
+      styles.industryPillText,
+      preferredCategory && styles.industryPillTextActive,
+    ]}
+    numberOfLines={1}
+  >
+    {preferredCategory || 'Industries We Serve'}
+  </Text>
+  <Ionicons
+    name="chevron-down"
+    size={10}
+    color={preferredCategory ? COLORS.black : COLORS.textSecondary}  // ✅ black when active
+  />
+</TouchableOpacity>
+
+        {/* Notification bell */}
+        <TouchableOpacity
+          style={styles.notificationButton}
+          onPress={() => navigation.navigate('Notifications')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+          {unreadCount > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -415,7 +1021,6 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         )}
       </View>
-
       <SearchSuggestions
         suggestions={suggestions}
         query={searchQuery}
@@ -427,7 +1032,7 @@ const HomeScreen = ({ navigation }) => {
         onSelectProduct={handleSelectProductSuggestion}
         onSelectCategory={handleSelectCategorySuggestion}
         onClearRecent={clearRecentSearches}
-        onRemoveRecentItem={handleRemoveRecentSearch}
+        onRemoveRecentItem={handleRemoveRecent}
         onFillSearch={handleFillSearch}
       />
     </View>
@@ -451,7 +1056,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Single banner card ─────────────────────────────────────────
+  // ── Banner card ───────────────────────────────────────────
   const renderBannerCard = useCallback(({ item: banner, index }) => {
     const hasImage     = !!banner.image;
     const isActionable = banner.actionType && banner.actionType !== 'none';
@@ -472,13 +1077,11 @@ const HomeScreen = ({ navigation }) => {
       (index + 1) * BANNER_SNAP_INTERVAL,
     ];
 
-    // ✅ Only transform properties — safe for useNativeDriver: true
     const animatedScale = scrollXNative.interpolate({
       inputRange,
       outputRange: [0.94, 1, 0.94],
       extrapolate: 'clamp',
     });
-
     const animatedOpacity = scrollXNative.interpolate({
       inputRange,
       outputRange: [0.7, 1, 0.7],
@@ -488,23 +1091,17 @@ const HomeScreen = ({ navigation }) => {
     const cardContent = (
       <>
         {hasImage && <View style={styles.bannerImageOverlay} />}
-
         {!hasImage && (
           <View style={styles.bannerPattern}>
             <View style={[styles.patternCircle, styles.patternCircle1]} />
             <View style={[styles.patternCircle, styles.patternCircle2]} />
           </View>
         )}
-
         <View style={styles.bannerContent}>
           <View style={styles.bannerTextSection}>
-            <Text style={styles.bannerTitle} numberOfLines={1}>
-              {banner.title}
-            </Text>
+            <Text style={styles.bannerTitle} numberOfLines={1}>{banner.title}</Text>
             {!!banner.subtitle && (
-              <Text style={styles.bannerSubtitle} numberOfLines={2}>
-                {banner.subtitle}
-              </Text>
+              <Text style={styles.bannerSubtitle} numberOfLines={2}>{banner.subtitle}</Text>
             )}
             {isActionable && actionLabel && (
               <View style={styles.shopNowButton}>
@@ -513,7 +1110,6 @@ const HomeScreen = ({ navigation }) => {
               </View>
             )}
           </View>
-
           {!hasImage && (
             <View style={styles.bannerImageSection}>
               <View style={styles.bannerIconContainer}>
@@ -531,16 +1127,9 @@ const HomeScreen = ({ navigation }) => {
         style={styles.bannerCardInner}
         imageStyle={styles.bannerCardImageStyle}
         resizeMode="cover"
-      >
-        {cardContent}
-      </ImageBackground>
+      >{cardContent}</ImageBackground>
     ) : (
-      <View
-        style={[
-          styles.bannerCardInner,
-          { backgroundColor: banner.backgroundColor || '#2D5A27' },
-        ]}
-      >
+      <View style={[styles.bannerCardInner, { backgroundColor: banner.backgroundColor || '#2D5A27' }]}>
         {cardContent}
       </View>
     );
@@ -549,10 +1138,7 @@ const HomeScreen = ({ navigation }) => {
       <Animated.View
         style={[
           styles.bannerCardOuter,
-          {
-            transform: [{ scale: animatedScale }],
-            opacity:   animatedOpacity,
-          },
+          { transform: [{ scale: animatedScale }], opacity: animatedOpacity },
         ]}
       >
         <TouchableOpacity
@@ -566,10 +1152,9 @@ const HomeScreen = ({ navigation }) => {
     );
   }, [scrollXNative, handleBannerPress]);
 
-  // ── Banner carousel ────────────────────────────────────────────
+  // ── Banner carousel ────────────────────────────────────────
   const renderBanner = () => {
     if (isSearching) return null;
-
     return (
       <View style={styles.bannerWrapper}>
         <Animated.FlatList
@@ -583,29 +1168,18 @@ const HomeScreen = ({ navigation }) => {
           snapToAlignment="start"
           decelerationRate="fast"
           contentContainerStyle={styles.bannerListContent}
-          // ── Native driver: drives card scale + opacity ──────────
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { x: scrollXNative } } }],
             {
               useNativeDriver: true,
-              // Simultaneously update JS value for dot width animation
-              listener: (event) => {
-                scrollXJS.setValue(event.nativeEvent.contentOffset.x);
-              },
+              listener: (e) => scrollXJS.setValue(e.nativeEvent.contentOffset.x),
             }
           )}
           scrollEventThrottle={16}
-          onScrollBeginDrag={() => {
-            isUserScrolling.current = true;
-          }}
+          onScrollBeginDrag={() => { isUserScrolling.current = true; }}
           onMomentumScrollEnd={(e) => {
-            const page = Math.round(
-              e.nativeEvent.contentOffset.x / BANNER_SNAP_INTERVAL
-            );
-            setCurrentBannerIndex(
-              Math.max(0, Math.min(page, displayBanners.length - 1))
-            );
-            // Resume auto-play after 6 s of inactivity
+            const page = Math.round(e.nativeEvent.contentOffset.x / BANNER_SNAP_INTERVAL);
+            setCurrentBannerIndex(Math.max(0, Math.min(page, displayBanners.length - 1)));
             setTimeout(() => { isUserScrolling.current = false; }, 6000);
           }}
           getItemLayout={(_, index) => ({
@@ -614,8 +1188,6 @@ const HomeScreen = ({ navigation }) => {
             index,
           })}
         />
-
-        {/* ── Animated dots — use scrollXJS (NO native driver) ─── */}
         {displayBanners.length > 1 && (
           <View style={styles.dotsContainer}>
             {displayBanners.map((_, index) => {
@@ -624,36 +1196,11 @@ const HomeScreen = ({ navigation }) => {
                 index       * BANNER_SNAP_INTERVAL,
                 (index + 1) * BANNER_SNAP_INTERVAL,
               ];
-
-              // ✅ width via JS Animated — useNativeDriver: false
-              const dotWidth = scrollXJS.interpolate({
-                inputRange,
-                outputRange: [8, 24, 8],
-                extrapolate: 'clamp',
-              });
-
-              const dotOpacity = scrollXJS.interpolate({
-                inputRange,
-                outputRange: [0.35, 1, 0.35],
-                extrapolate: 'clamp',
-              });
-
+              const dotWidth   = scrollXJS.interpolate({ inputRange, outputRange: [8, 24, 8], extrapolate: 'clamp' });
+              const dotOpacity = scrollXJS.interpolate({ inputRange, outputRange: [0.35, 1, 0.35], extrapolate: 'clamp' });
               return (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => handleDotPress(index)}
-                  style={styles.dotTouchable}
-                  activeOpacity={0.7}
-                >
-                  <Animated.View
-                    style={[
-                      styles.dot,
-                      {
-                        width:   dotWidth,   // layout prop — needs JS driver
-                        opacity: dotOpacity,
-                      },
-                    ]}
-                  />
+                <TouchableOpacity key={index} onPress={() => handleDotPress(index)} style={styles.dotTouchable} activeOpacity={0.7}>
+                  <Animated.View style={[styles.dot, { width: dotWidth, opacity: dotOpacity }]} />
                 </TouchableOpacity>
               );
             })}
@@ -663,57 +1210,56 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Categories ─────────────────────────────────────────────────
+  // ── Categories ─────────────────────────────────────────────
   const renderCategories = () => {
     if (isSearching) return null;
-
-    const getCategoryWithImage = (category, index) => {
-      const lower = category.name?.toLowerCase() || '';
-      if (lower.includes('wax'))      return { ...category, localImage: CATEGORY_IMAGES.wax };
-      if (lower.includes('chemical')) return { ...category, localImage: CATEGORY_IMAGES.chemicals };
-      if (index === 0) return { ...category, localImage: CATEGORY_IMAGES.wax };
-      if (index === 1) return { ...category, localImage: CATEGORY_IMAGES.chemicals };
-      return category;
-    };
-
-    const displayCategories =
-      categories.length > 0
-        ? categories.slice(0, 2).map((cat, idx) => getCategoryWithImage(cat, idx))
-        : DEFAULT_CATEGORIES;
+    const allCategories  = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
+    const homeCategories = allCategories.slice(0, 2);
+    const hasMore        = allCategories.length > 2;
 
     return (
       <View style={styles.categoriesSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Categories</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Categories')}>
-            <Text style={styles.seeAllText}>See all →</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Categories')} activeOpacity={0.7}>
+            <Text style={styles.seeAllText}>
+              {hasMore ? `See all (${allCategories.length}) →` : 'See all →'}
+            </Text>
           </TouchableOpacity>
         </View>
         <View style={styles.categoryGrid}>
-          {displayCategories.map((category) => (
-            <TouchableOpacity
-              key={category._id}
-              style={styles.categoryCard}
-              onPress={() => handleCategoryPress(category)}
-              activeOpacity={0.8}
-            >
-              <ImageBackground
-                source={category.localImage || CATEGORY_IMAGES.wax}
-                style={styles.categoryImage}
-                imageStyle={styles.categoryImageStyle}
+          {homeCategories.map((category) => {
+            const imageSource = category.image
+              ? { uri: getImageUrl(category.image) }
+              : CATEGORY_FALLBACK_IMAGE;
+            return (
+              <TouchableOpacity
+                key={category._id}
+                style={styles.categoryCard}
+                onPress={() => handleCategoryPress(category)}
+                activeOpacity={0.8}
               >
-                <View style={styles.categoryOverlay}>
-                  <Text style={styles.categoryText}>{category.name}</Text>
-                </View>
-              </ImageBackground>
-            </TouchableOpacity>
-          ))}
+                <ImageBackground
+                  source={imageSource}
+                  style={styles.categoryImage}
+                  imageStyle={styles.categoryImageStyle}
+                  defaultSource={CATEGORY_FALLBACK_IMAGE}
+                >
+                  <View style={styles.categoryOverlay}>
+                    <Text style={styles.categoryText} numberOfLines={2}>
+                      {category.name}
+                    </Text>
+                  </View>
+                </ImageBackground>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
     );
   };
 
-  // ── Product card ───────────────────────────────────────────────
+  // ── Compact product card ───────────────────────────────────
   const renderCompactProductCard = (product, index) => {
     const quantity = getItemQuantity(product._id);
     const discount = calculateDiscount(product.compareAtPrice, product.price);
@@ -731,42 +1277,30 @@ const HomeScreen = ({ navigation }) => {
       >
         <View style={styles.compactImageContainer}>
           {imageUrl ? (
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.compactImage}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: imageUrl }} style={styles.compactImage} resizeMode="cover" />
           ) : (
             <View style={styles.compactPlaceholder}>
               <Ionicons name="image-outline" size={24} color={COLORS.gray} />
             </View>
           )}
-
           {discount > 0 && (
             <View style={styles.compactSaleBadge}>
               <Text style={styles.compactSaleText}>Sale</Text>
             </View>
           )}
-
           {!product.inStock && (
             <View style={styles.compactOutOfStock}>
               <Text style={styles.compactOutOfStockText}>Out</Text>
             </View>
           )}
         </View>
-
         <View style={styles.compactContent}>
-          <Text style={styles.compactTitle} numberOfLines={2}>
-            {product.title}
-          </Text>
+          <Text style={styles.compactTitle} numberOfLines={2}>{product.title}</Text>
           <View style={styles.compactPriceRow}>
             <Text style={styles.compactPrice}>{formatCurrency(product.price)}</Text>
             {product.inStock && (
               <TouchableOpacity
-                style={[
-                  styles.compactAddButton,
-                  quantity > 0 && styles.compactAddButtonActive,
-                ]}
+                style={[styles.compactAddButton, quantity > 0 && styles.compactAddButtonActive]}
                 onPress={() => handleAddToCart(product)}
               >
                 {quantity > 0 ? (
@@ -782,7 +1316,59 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Products section ───────────────────────────────────────────
+  // ── Preferred products section ─────────────────────────────
+  const renderPreferredProducts = () => {
+    if (isSearching || !preferredCategory) return null;
+
+    return (
+      <View style={styles.preferredSection}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.preferredTitleRow}>
+            <View style={styles.preferredAccentBar} />
+            <View>
+              <Text style={styles.sectionTitle}>Products of You choice</Text>
+              <Text style={styles.preferredSubtitle}>{preferredCategory}</Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={handleViewAllPreferred} activeOpacity={0.7}>
+            <Text style={styles.seeAllText}>See all →</Text>
+          </TouchableOpacity>
+        </View>
+
+        {isLoadingPreferred ? (
+          <View style={styles.preferredLoader}>
+            <ActivityIndicator color={COLORS.primary} />
+            <Text style={styles.preferredLoaderText}>Loading products…</Text>
+          </View>
+        ) : preferredProducts.length === 0 ? (
+          <View style={styles.preferredEmpty}>
+            <Ionicons name="cube-outline" size={32} color={COLORS.gray} />
+            <Text style={styles.preferredEmptyText}>
+              No products in {preferredCategory} yet
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.productsGrid}>
+            {preferredProducts
+              .slice(0, 9)
+              .map((product, index) => renderCompactProductCard(product, index))}
+          </View>
+        )}
+
+        {/* Change industry link */}
+        <TouchableOpacity
+          style={styles.changeIndustryBtn}
+          onPress={() => setShowIndustryModal(true)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="swap-horizontal" size={13} color={COLORS.primary} />
+          <Text style={styles.changeIndustryText}>Change industry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // ── All products section ───────────────────────────────────
   const renderProducts = () => {
     const displayProducts = isSearching ? filteredProducts : products;
     const maxProducts     = isSearching ? 12 : 9;
@@ -808,9 +1394,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.noResultsContainer}>
             <Ionicons name="search-outline" size={48} color={COLORS.gray} />
             <Text style={styles.noResultsTitle}>No products found</Text>
-            <Text style={styles.noResultsText}>
-              Try searching with different keywords
-            </Text>
+            <Text style={styles.noResultsText}>Try searching with different keywords</Text>
             <TouchableOpacity style={styles.clearSearchButton} onPress={clearSearch}>
               <Text style={styles.clearSearchButtonText}>Clear Search</Text>
             </TouchableOpacity>
@@ -834,9 +1418,7 @@ const HomeScreen = ({ navigation }) => {
 
         {isSearching && filteredProducts.length > maxProducts && (
           <TouchableOpacity style={styles.viewMoreButton} onPress={handleViewAllSearchResults}>
-            <Text style={styles.viewMoreText}>
-              View All {filteredProducts.length} Results
-            </Text>
+            <Text style={styles.viewMoreText}>View All {filteredProducts.length} Results</Text>
             <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
           </TouchableOpacity>
         )}
@@ -844,7 +1426,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Floating cart ──────────────────────────────────────────────
+  // ── Floating cart ──────────────────────────────────────────
   const renderFloatingCart = () => {
     if (totalItems === 0) return null;
     return (
@@ -854,11 +1436,7 @@ const HomeScreen = ({ navigation }) => {
           { transform: [{ scale: floatingCartScale }], opacity: floatingCartScale },
         ]}
       >
-        <TouchableOpacity
-          style={styles.floatingCartButton}
-          onPress={handleGoToCart}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={styles.floatingCartButton} onPress={handleGoToCart} activeOpacity={0.8}>
           <Ionicons name="cart" size={24} color={COLORS.black} />
           <View style={styles.floatingCartBadge}>
             <Text style={styles.floatingCartBadgeText}>
@@ -870,7 +1448,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Loading skeleton ───────────────────────────────────────────
+  // ── Loading ────────────────────────────────────────────────
   if (isLoading) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
@@ -901,19 +1479,29 @@ const HomeScreen = ({ navigation }) => {
         {renderHeader()}
         {renderSearchBar()}
         {renderSearchHeader()}
+
+        
+
         {renderBanner()}
         {renderCategories()}
+        {renderPreferredProducts()}
         {renderProducts()}
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
       {renderFloatingCart()}
 
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        visible={toast.visible}
+      {/* ── Industry Selection Modal ── */}
+      <IndustryModal
+        visible={showIndustryModal}
+        categories={categories}
+        selectedCategoryName={preferredCategory}
+        onSelect={handleIndustrySelect}
+        onClose={() => setShowIndustryModal(false)}
+        saving={savingPreference}
       />
+
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} />
     </Screen>
   );
 };
@@ -922,7 +1510,7 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   scrollView: { flex: 1 },
 
-  // ── Header ──────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────
   header: {
     flexDirection:     'row',
     justifyContent:    'space-between',
@@ -935,6 +1523,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems:    'center',
     flex:          1,
+    minWidth:      0,
   },
   logoContainer: {
     width:           40,
@@ -949,15 +1538,54 @@ const styles = StyleSheet.create({
     shadowOpacity:   0.08,
     shadowRadius:    4,
     elevation:       2,
+    flexShrink:      0,
   },
-  headerTextContainer: { flex: 1 },
+  headerTextContainer: { flex: 1, minWidth: 0 },
   welcomeText:         { fontSize: 12, color: COLORS.gray },
-  userName:            { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
+  userName: {
+    fontSize:   16,
+    color:      COLORS.textPrimary,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+
+  headerRight: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           8,
+    flexShrink:    0,
+    marginLeft:    8,
+  },
+
+  // ── Industry pill (in header) ─────────────────────────────
+  industryPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    backgroundColor:   '#F5F5F5',
+    borderRadius:      20,
+    paddingVertical:   6,
+    paddingHorizontal: 10,
+    gap:               3,
+    maxWidth:          170,
+    borderWidth:       1,
+    borderColor:       'transparent',
+  },
+  industryPillActive: {
+  backgroundColor: '#F0F0F0',      // ✅ neutral gray instead of yellow tint
+  borderColor:     COLORS.black + '30',  // ✅ subtle black border
+},
+  industryPillText: {
+  fontSize:   11,
+  fontWeight: '600',
+  color:      COLORS.textSecondary,
+  flexShrink: 1,
+},
+industryPillTextActive: { color: COLORS.black },
 
   notificationButton: {
-    width:           40,
-    height:          40,
-    borderRadius:    20,
+    width:           38,
+    height:          38,
+    borderRadius:    19,
     backgroundColor: COLORS.card,
     alignItems:      'center',
     justifyContent:  'center',
@@ -979,7 +1607,7 @@ const styles = StyleSheet.create({
   },
   notificationBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
 
-  // ── Search ──────────────────────────────────────────────────
+  // ── Search ────────────────────────────────────────────────
   searchWrapper: {
     marginHorizontal: SPACING.screenPadding,
     marginBottom:     SPACING.md,
@@ -1043,52 +1671,31 @@ const styles = StyleSheet.create({
   },
   clearSearchButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.black },
 
-  // ── Banner carousel ─────────────────────────────────────────
-  bannerWrapper: {
-    marginBottom: SPACING.lg,
-  },
+  // ── Banner ────────────────────────────────────────────────
+  bannerWrapper:     { marginBottom: SPACING.lg },
+  bannerListContent: { paddingHorizontal: BANNER_SIDE_PADDING },
 
-  bannerListContent: {
-    // Padding so the first card starts at BANNER_SIDE_PADDING
-    // and the last card ends with the same gap on the right.
-    paddingHorizontal: BANNER_SIDE_PADDING,
-  },
-
-  // Outer Animated.View — handles scale + opacity
   bannerCardOuter: {
     width:       BANNER_CARD_WIDTH,
     height:      BANNER_CARD_HEIGHT,
     marginRight: BANNER_CARD_GAP,
   },
-
-  // TouchableOpacity fills the animated wrapper
   bannerCardTouchable: {
-    flex:         1,
-    borderRadius: 16,
-    overflow:     'hidden',
+    flex:          1,
+    borderRadius:  16,
+    overflow:      'hidden',
     shadowColor:   '#000',
     shadowOffset:  { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius:  14,
     elevation:     10,
   },
-
-  // Inner card — colour bg or ImageBackground
-  bannerCardInner: {
-    flex:         1,
-    borderRadius: 16,
-    overflow:     'hidden',
-  },
-
-  bannerCardImageStyle: {
-    borderRadius: 16,
-  },
-
+  bannerCardInner:      { flex: 1, borderRadius: 16, overflow: 'hidden' },
+  bannerCardImageStyle: { borderRadius: 16 },
   bannerImageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
-
   bannerPattern: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   patternCircle: {
     position:        'absolute',
@@ -1098,9 +1705,9 @@ const styles = StyleSheet.create({
   patternCircle1: { width: 180, height: 180, top: -60,    right: -40 },
   patternCircle2: { width: 120, height: 120, bottom: -40, right: 60  },
 
-  bannerContent:      { flex: 1, flexDirection: 'row', padding: SPACING.md },
-  bannerTextSection:  { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
-  bannerImageSection: { width: 90, alignItems: 'center', justifyContent: 'center' },
+  bannerContent:     { flex: 1, flexDirection: 'row', padding: SPACING.md },
+  bannerTextSection: { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
+  bannerImageSection:{ width: 90, alignItems: 'center', justifyContent: 'center' },
   bannerIconContainer: {
     width:           70,
     height:          70,
@@ -1109,18 +1716,8 @@ const styles = StyleSheet.create({
     alignItems:      'center',
     justifyContent:  'center',
   },
-  bannerTitle: {
-    fontSize:     18,
-    fontWeight:   '700',
-    color:        COLORS.white,
-    marginBottom: 6,
-  },
-  bannerSubtitle: {
-    fontSize:     12,
-    color:        'rgba(255,255,255,0.85)',
-    marginBottom: SPACING.sm,
-    lineHeight:   17,
-  },
+  bannerTitle:    { fontSize: 18, fontWeight: '700', color: COLORS.white, marginBottom: 6 },
+  bannerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginBottom: SPACING.sm, lineHeight: 17 },
   shopNowButton: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -1133,7 +1730,7 @@ const styles = StyleSheet.create({
   },
   shopNowText: { fontSize: 12, color: COLORS.black, fontWeight: '700' },
 
-  // ── Dots ────────────────────────────────────────────────────
+  // ── Dots ──────────────────────────────────────────────────
   dotsContainer: {
     flexDirection:  'row',
     justifyContent: 'center',
@@ -1142,16 +1739,15 @@ const styles = StyleSheet.create({
   },
   dotTouchable: { padding: 4 },
   dot: {
-    // width is animated via scrollXJS (JS driver — no native driver)
     height:           8,
     borderRadius:     4,
     backgroundColor:  COLORS.primary,
     marginHorizontal: 3,
   },
 
-  // ── Categories ──────────────────────────────────────────────
+  // ── Categories ────────────────────────────────────────────
   categoriesSection: {
-    marginBottom:     SPACING.lg,
+    marginBottom:      SPACING.lg,
     paddingHorizontal: SPACING.screenPadding,
   },
   sectionHeader: {
@@ -1177,18 +1773,75 @@ const styles = StyleSheet.create({
   },
   categoryImage:      { width: '100%', height: '100%', justifyContent: 'flex-end' },
   categoryImageStyle: { borderRadius: 12 },
-  categoryOverlay:    { backgroundColor: 'rgba(0,0,0,0.35)', padding: SPACING.sm },
+  categoryOverlay:    { backgroundColor: 'rgba(0,0,0,0.40)', padding: SPACING.sm },
   categoryText:       { fontSize: 13, color: COLORS.white, fontWeight: '700' },
 
-  // ── Products ─────────────────────────────────────────────────
+  // ── Preferred products ─────────────────────────────────────
+  preferredSection: {
+    paddingHorizontal: SPACING.screenPadding,
+    marginBottom:      SPACING.lg,
+    borderTopWidth:    1,
+    borderTopColor:    COLORS.borderLight,
+    paddingTop:        SPACING.lg,
+  },
+  preferredTitleRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           10,
+  },
+  preferredAccentBar: {
+    width:           4,
+    height:          36,
+    borderRadius:    2,
+    backgroundColor: COLORS.primary,
+  },
+  preferredSubtitle: {
+    fontSize:   12,
+    color:      COLORS.primary,
+    fontWeight: '500',
+    marginTop:  1,
+  },
+  preferredLoader: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingVertical: SPACING.xl,
+    gap:             8,
+  },
+  preferredLoaderText: { fontSize: 13, color: COLORS.textSecondary },
+  preferredEmpty: {
+    alignItems:      'center',
+    paddingVertical: SPACING.xl,
+    gap:             8,
+  },
+  preferredEmptyText: {
+    fontSize:  13,
+    color:     COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  changeIndustryBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingVertical: SPACING.sm,
+    gap:             4,
+    marginTop:       SPACING.xs,
+  },
+  changeIndustryText: {
+    fontSize:   12,
+    color:      COLORS.primary,
+    fontWeight: '500',
+  },
+
+  // ── Products ──────────────────────────────────────────────
   productsSection: { paddingHorizontal: SPACING.screenPadding },
   productsGrid:    { flexDirection: 'row', flexWrap: 'wrap' },
-  viewMoreButton:  {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
+  viewMoreButton: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
     paddingVertical: SPACING.md,
-    gap:            4,
+    gap:             4,
   },
   viewMoreText: { fontSize: 14, color: COLORS.primary, fontWeight: '500' },
 
@@ -1226,7 +1879,7 @@ const styles = StyleSheet.create({
     paddingVertical:   2,
     borderRadius:      10,
   },
-  compactSaleText: { color: COLORS.white, fontSize: 9, fontWeight: '700' },
+  compactSaleText:       { color: COLORS.white, fontSize: 9, fontWeight: '700' },
   compactOutOfStock: {
     position:          'absolute',
     top:               6,
@@ -1251,7 +1904,7 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'space-between',
   },
-  compactPrice:     { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
+  compactPrice:           { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
   compactAddButton: {
     width:           24,
     height:          24,
@@ -1260,10 +1913,10 @@ const styles = StyleSheet.create({
     alignItems:      'center',
     justifyContent:  'center',
   },
-  compactAddButtonActive:  { backgroundColor: '#0D9488' },
-  compactQuantityText:     { fontSize: 10, color: COLORS.white, fontWeight: '700' },
+  compactAddButtonActive: { backgroundColor: '#0D9488' },
+  compactQuantityText:    { fontSize: 10, color: COLORS.white, fontWeight: '700' },
 
-  // ── Floating cart ─────────────────────────────────────────────
+  // ── Floating cart ─────────────────────────────────────────
   floatingCartContainer: {
     position: 'absolute',
     bottom:   SPACING.tabBarHeight + SPACING.lg,

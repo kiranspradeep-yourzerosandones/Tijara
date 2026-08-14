@@ -10,6 +10,45 @@ const {
 } = require("../services/messageCentral");
 const emailService = require("../services/emailService");
 
+
+
+// ✅ Separate top-level export — not nested inside anything
+exports.updatePreferredCategory = async (req, res) => {
+  try {
+    const { preferredCategory } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { preferredCategory: preferredCategory || null },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    console.log(`⭐ Preferred category updated for user ${user._id}: ${preferredCategory || 'cleared'}`);
+
+    return res.status(200).json({
+      success: true,
+      message: preferredCategory
+        ? `Industry preference set to "${preferredCategory}"`
+        : "Industry preference cleared",
+      preferredCategory: user.preferredCategory
+    });
+  } catch (error) {
+    console.error("Update Preferred Category Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update industry preference",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
 // ============================================================
 // EMAIL PASSWORD RESET
 // ============================================================
@@ -1340,4 +1379,10 @@ exports.updateNotificationPreferences = async (req, res) => {
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
+  // ✅ Closing brace is HERE — function ends properly
 };
+
+// ============================================================
+// PREFERRED CATEGORY
+// ============================================================
+

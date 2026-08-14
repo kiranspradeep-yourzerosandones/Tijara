@@ -207,6 +207,12 @@ const userSchema = new mongoose.Schema({
     }
   },
 
+  preferredCategory: {
+  type: String,
+  default: null,
+  trim: true
+},
+
   lastLoginAt: Date,
 
   adminNotes: {
@@ -345,6 +351,8 @@ userSchema.methods.getPublicProfile = function () {
     creditBlockedReason: this.creditBlockedReason,
     paymentTerms: this.paymentTerms || 30,
     lastPaymentDate: this.lastPaymentDate,
+
+    preferredCategory: this.preferredCategory || null,
 
     profileImage: this.profileImage,
     address: this.address,

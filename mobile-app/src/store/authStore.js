@@ -19,28 +19,37 @@ export const useAuthStore = create(
 
       return {
         // ─── State ───────────────────────────────────────────
-        user: null,
-        isAuthenticated: false,
-        isLoading: true,
+        user:              null,
+        isAuthenticated:   false,
+        isLoading:         true,
         isSessionRestored: false,
-        error: null,
+        error:             null,
+
+        // ✅ Preferred category — synced with backend
+        preferredCategory: null,
 
         registrationPhone: null,
-        isPhoneVerified: false,
+        isPhoneVerified:   false,
 
         // ─── Basic actions ───────────────────────────────────
-        setLoading: (loading) => set({ isLoading: loading }),
-        setError: (error) => set({ error }),
-        clearError: () => set({ error: null }),
-        setRegistrationPhone: (phone) => set({ registrationPhone: phone }),
-        setPhoneVerified: (verified) => set({ isPhoneVerified: verified }),
+        setLoading:            (loading)  => set({ isLoading: loading }),
+        setError:              (error)    => set({ error }),
+        clearError:            ()         => set({ error: null }),
+        setRegistrationPhone:  (phone)    => set({ registrationPhone: phone }),
+        setPhoneVerified:      (verified) => set({ isPhoneVerified: verified }),
+
+        // ✅ Set preferred category locally (optimistic update)
+        // The actual backend save is done in HomeScreen via authAPI
+        setPreferredCategory: (categoryName) => {
+          set({ preferredCategory: categoryName || null });
+          // Also keep user object in sync so refreshUser doesn't overwrite
+          const currentUser = get().user;
+          if (currentUser) {
+            set({ user: { ...currentUser, preferredCategory: categoryName || null } });
+          }
+        },
 
         // ─── Login with password ─────────────────────────────
-        //
-        // ⚠️  Do NOT set isLoading:true here.
-        // The navigator watches isLoading — flipping it causes
-        // LoginScreen to remount, wiping local error state.
-        // The screen manages its own loading spinner via useState.
         login: async (phone, password) => {
           set({ error: null });
           try {
@@ -51,9 +60,11 @@ export const useAuthStore = create(
 
             set({
               user,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
+              isAuthenticated:   true,
+              isLoading:         false,
+              error:             null,
+              // ✅ Load preferred category from user profile on login
+              preferredCategory: user?.preferredCategory || null,
             });
 
             return response;
@@ -74,9 +85,11 @@ export const useAuthStore = create(
 
             set({
               user,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
+              isAuthenticated:   true,
+              isLoading:         false,
+              error:             null,
+              // ✅ Load preferred category from user profile on OTP login
+              preferredCategory: user?.preferredCategory || null,
             });
 
             return response;
@@ -97,11 +110,13 @@ export const useAuthStore = create(
 
             set({
               user,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
+              isAuthenticated:   true,
+              isLoading:         false,
+              error:             null,
               registrationPhone: null,
-              isPhoneVerified: false,
+              isPhoneVerified:   false,
+              // ✅ New users start with no preference
+              preferredCategory: user?.preferredCategory || null,
             });
 
             return response;
@@ -116,23 +131,22 @@ export const useAuthStore = create(
           try {
             await tokenManager.clearAll();
           } catch {
-            // Non-critical — continue with state reset
+            // Non-critical
           }
           set({
-            user: null,
-            isAuthenticated: false,
+            user:              null,
+            isAuthenticated:   false,
             isSessionRestored: false,
-            isLoading: false,
-            error: null,
+            isLoading:         false,
+            error:             null,
             registrationPhone: null,
-            isPhoneVerified: false,
+            isPhoneVerified:   false,
+            // ✅ Clear preference on logout
+            preferredCategory: null,
           });
         },
 
         // ─── Restore session (called ONCE on app start) ───────
-        //
-        // The ONLY place where isLoading:true is correct.
-        // Runs during splash before any screen is mounted.
         restoreSession: async () => {
           if (get().isSessionRestored) {
             set({ isLoading: false });
@@ -146,8 +160,8 @@ export const useAuthStore = create(
 
             if (!token) {
               set({
-                isAuthenticated: false,
-                isLoading: false,
+                isAuthenticated:   false,
+                isLoading:         false,
                 isSessionRestored: true,
               });
               return false;
@@ -159,20 +173,24 @@ export const useAuthStore = create(
             if (!userData) throw new Error('Invalid profile response');
 
             set({
-              user: userData,
-              isAuthenticated: true,
-              isLoading: false,
+              user:              userData,
+              isAuthenticated:   true,
+              isLoading:         false,
               isSessionRestored: true,
+              // ✅ Restore preferred category from backend profile
+              // This is the key cross-device sync — always trust backend
+              preferredCategory: userData?.preferredCategory || null,
             });
             return true;
 
           } catch {
             await tokenManager.clearAll();
             set({
-              user: null,
-              isAuthenticated: false,
-              isLoading: false,
+              user:              null,
+              isAuthenticated:   false,
+              isLoading:         false,
               isSessionRestored: true,
+              preferredCategory: null,
             });
             return false;
           }
@@ -183,8 +201,13 @@ export const useAuthStore = create(
           try {
             const response = await authAPI.getProfile();
             if (response.success && response.data?.user) {
-              set({ user: response.data.user });
-              return response.data.user;
+              const userData = response.data.user;
+              set({
+                user: userData,
+                // ✅ Always sync preferredCategory from backend on refresh
+                preferredCategory: userData?.preferredCategory || null,
+              });
+              return userData;
             }
             return null;
           } catch {
@@ -197,7 +220,12 @@ export const useAuthStore = create(
           set({ error: null });
           try {
             const response = await authAPI.updateProfile(data);
-            set({ user: response.data.user });
+            const userData = response.data.user;
+            set({
+              user: userData,
+              // ✅ Sync in case profile update affected preferredCategory
+              preferredCategory: userData?.preferredCategory || null,
+            });
             return response;
           } catch (error) {
             set({ error: extractMessage(error) });
@@ -208,19 +236,26 @@ export const useAuthStore = create(
         // ─── Merge partial user data locally ─────────────────
         updateUser: (userData) => {
           const currentUser = get().user;
-          set({ user: { ...currentUser, ...userData } });
+          const merged      = { ...currentUser, ...userData };
+          set({
+            user: merged,
+            // ✅ Sync if preferredCategory was part of the update
+            ...(userData.preferredCategory !== undefined
+              ? { preferredCategory: userData.preferredCategory || null }
+              : {}),
+          });
         },
       };
     },
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist user data and auth flag.
-      // Token lives in SecureStore via tokenManager.
-      // isLoading / isSessionRestored reset on every boot.
+      // ✅ Also persist preferredCategory so it's available
+      // instantly before restoreSession completes (no flash)
       partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
+        user:              state.user,
+        isAuthenticated:   state.isAuthenticated,
+        preferredCategory: state.preferredCategory,
       }),
     }
   )
