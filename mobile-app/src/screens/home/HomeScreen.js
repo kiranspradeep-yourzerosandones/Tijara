@@ -1,6 +1,5 @@
-//.slice(0, 9) cahe this to increase rows in products of your choice
 // src/screens/home/HomeScreen.js
-import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -37,7 +36,6 @@ import { fetchWithCache, invalidateCacheByPrefix } from '../../utils/apiCache';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ── Banner dimensions ──────────────────────────────────────────
 const BANNER_SIDE_PADDING  = 16;
 const BANNER_CARD_GAP      = 10;
 const BANNER_CARD_WIDTH    = SCREEN_WIDTH - BANNER_SIDE_PADDING * 2;
@@ -46,12 +44,19 @@ const BANNER_SNAP_INTERVAL = BANNER_CARD_WIDTH + BANNER_CARD_GAP;
 
 const CATEGORY_HEIGHT    = 114;
 const PRODUCT_GAP        = 10;
-const PRODUCT_CARD_WIDTH =
-  (SCREEN_WIDTH - SPACING.screenPadding * 2 - PRODUCT_GAP * 2) / 3;
+
+// ✅ Always 3 columns
+const COLS               = 3;
+const PRODUCT_CARD_WIDTH = Math.floor(
+  (SCREEN_WIDTH - SPACING.screenPadding * 2 - PRODUCT_GAP * (COLS - 1)) / COLS
+);;
 
 const PRODUCTS_CACHE_TTL   = 5 * 60 * 1000;
 const CATEGORIES_CACHE_TTL = 30 * 60 * 1000;
 const BANNERS_CACHE_TTL    = 10 * 60 * 1000;
+
+// ✅ How many preferred products to show (must be multiple of 3)
+const MAX_PREFERRED_PRODUCTS = 9; // 3 rows × 3 cols
 
 const FALLBACK_BANNER = {
   _id:             'fallback',
@@ -73,31 +78,20 @@ const DEFAULT_CATEGORIES = [
 // ── Industry Selector Modal ───────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 function IndustryModal({ visible, categories, selectedCategoryName, onSelect, onClose, saving }) {
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-
+  const slideAnim     = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const allCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
 
-  // Slide up when visible
   useEffect(() => {
     if (visible) {
       Animated.spring(slideAnim, {
-        toValue:         0,
-        useNativeDriver: true,
-        friction:        10,
-        tension:         60,
+        toValue: 0, useNativeDriver: true, friction: 10, tension: 60,
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue:         SCREEN_HEIGHT,
-        duration:        250,
-        useNativeDriver: true,
+        toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true,
       }).start();
     }
   }, [visible, slideAnim]);
-
-  const handleSelect = (category) => {
-    onSelect(category);
-  };
 
   return (
     <Modal
@@ -107,21 +101,15 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      {/* Backdrop */}
       <Pressable style={modalStyles.backdrop} onPress={onClose}>
         <Animated.View
-          style={[
-            modalStyles.sheet,
-            { transform: [{ translateY: slideAnim }] },
-          ]}
+          style={[modalStyles.sheet, { transform: [{ translateY: slideAnim }] }]}
         >
-          {/* Stop touch propagation so tapping sheet doesn't close */}
           <Pressable onPress={(e) => e.stopPropagation()}>
 
-            {/* ── Handle bar ── */}
             <View style={modalStyles.handleBar} />
 
-            {/* ── Header ── */}
+            {/* Header */}
             <View style={modalStyles.header}>
               <View style={modalStyles.headerLeft}>
                 <View style={modalStyles.headerIconBg}>
@@ -134,25 +122,17 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity
-                onPress={onClose}
-                style={modalStyles.closeBtn}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={onClose} style={modalStyles.closeBtn} activeOpacity={0.7}>
                 <Ionicons name="close" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            {/* ── Divider ── */}
             <View style={modalStyles.divider} />
 
-            {/* ── "No preference" option ── */}
+            {/* All Industries option */}
             <TouchableOpacity
-              style={[
-                modalStyles.item,
-                !selectedCategoryName && modalStyles.itemSelected,
-              ]}
-              onPress={() => handleSelect(null)}
+              style={[modalStyles.item, !selectedCategoryName && modalStyles.itemSelected]}
+              onPress={() => onSelect(null)}
               activeOpacity={0.7}
             >
               <View style={[modalStyles.itemThumb, modalStyles.clearThumb]}>
@@ -163,12 +143,7 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
                 />
               </View>
               <View style={modalStyles.itemContent}>
-                <Text
-                  style={[
-                    modalStyles.itemName,
-                    !selectedCategoryName && modalStyles.itemNameSelected,
-                  ]}
-                >
+                <Text style={[modalStyles.itemName, !selectedCategoryName && modalStyles.itemNameSelected]}>
                   All Industries
                 </Text>
                 <Text style={modalStyles.itemDesc}>Show products from all categories</Text>
@@ -182,7 +157,7 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
 
             <View style={modalStyles.divider} />
 
-            {/* ── Category list ── */}
+            {/* Category list */}
             <FlatList
               data={allCategories}
               keyExtractor={(item) => item._id}
@@ -194,7 +169,7 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
                 const imageSource = item.image
                   ? { uri: getImageUrl(item.image) }
                   : CATEGORY_FALLBACK_IMAGE;
-                const isLast      = index === allCategories.length - 1;
+                const isLast = index === allCategories.length - 1;
 
                 return (
                   <TouchableOpacity
@@ -203,53 +178,32 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
                       isSelected && modalStyles.itemSelected,
                       !isLast && modalStyles.itemBorder,
                     ]}
-                    onPress={() => handleSelect(item)}
+                    onPress={() => onSelect(item)}
                     activeOpacity={0.7}
                   >
-                    {/* Thumbnail */}
                     <View style={modalStyles.itemThumb}>
-                      <Image
-                        source={imageSource}
-                        style={modalStyles.itemThumbImg}
-                        resizeMode="cover"
-                      />
+                      <Image source={imageSource} style={modalStyles.itemThumbImg} resizeMode="cover" />
                     </View>
-
-                    {/* Text */}
                     <View style={modalStyles.itemContent}>
-                      <Text
-                        style={[
-                          modalStyles.itemName,
-                          isSelected && modalStyles.itemNameSelected,
-                        ]}
-                      >
+                      <Text style={[modalStyles.itemName, isSelected && modalStyles.itemNameSelected]}>
                         {item.name}
                       </Text>
-                      {item.slug ? (
-                        <Text style={modalStyles.itemDesc}>/{item.slug}</Text>
-                      ) : (
-                        <Text style={modalStyles.itemDesc}>Browse products</Text>
-                      )}
+                      <Text style={modalStyles.itemDesc}>
+                        {item.slug ? `/${item.slug}` : 'Browse products'}
+                      </Text>
                     </View>
-
-                    {/* Selected indicator OR arrow */}
                     {isSelected ? (
                       <View style={modalStyles.checkCircle}>
                         <Ionicons name="checkmark" size={14} color={COLORS.white} />
                       </View>
                     ) : (
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={COLORS.lightGray}
-                      />
+                      <Ionicons name="chevron-forward" size={16} color={COLORS.lightGray} />
                     )}
                   </TouchableOpacity>
                 );
               }}
             />
 
-            {/* ── Saving indicator ── */}
             {saving && (
               <View style={modalStyles.savingRow}>
                 <ActivityIndicator size="small" color={COLORS.primary} />
@@ -266,340 +220,103 @@ function IndustryModal({ visible, categories, selectedCategoryName, onSelect, on
 
 const modalStyles = StyleSheet.create({
   backdrop: {
-    flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent:  'flex-end',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor:    COLORS.white,
+    backgroundColor:      COLORS.white,
     borderTopLeftRadius:  24,
     borderTopRightRadius: 24,
-    // Max height — leaves some space at top so user can see backdrop
-    maxHeight: SCREEN_HEIGHT * 0.75,
-    // Shadow for iOS
-    shadowColor:   '#000',
-    shadowOffset:  { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius:  16,
-    elevation:     20,
+    maxHeight:            SCREEN_HEIGHT * 0.75,
+    shadowColor:          '#000',
+    shadowOffset:         { width: 0, height: -4 },
+    shadowOpacity:        0.12,
+    shadowRadius:         16,
+    elevation:            20,
   },
-
-  // ── Handle ──────────────────────────────────────────────
   handleBar: {
-    width:           40,
-    height:          4,
-    borderRadius:    2,
+    width: 40, height: 4, borderRadius: 2,
     backgroundColor: COLORS.lightGray,
-    alignSelf:       'center',
-    marginTop:       12,
-    marginBottom:    4,
+    alignSelf: 'center', marginTop: 12, marginBottom: 4,
   },
-
-  // ── Header ──────────────────────────────────────────────
   header: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: SPACING.screenPadding,
-    paddingVertical:   SPACING.md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: SPACING.screenPadding, paddingVertical: SPACING.md,
   },
   headerLeft: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           12,
-    flex:          1,
+    flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1,
   },
   headerIconBg: {
-    width:           40,
-    height:          40,
-    borderRadius:    12,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: COLORS.primary + '18',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize:   16,
-    fontWeight: '700',
-    color:      COLORS.textPrimary,
-  },
-  headerSub: {
-    fontSize:  12,
-    color:     COLORS.textSecondary,
-    marginTop: 1,
-  },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.black },
+  headerSub:   { fontSize: 12, color: COLORS.black, marginTop: 1 },
   closeBtn: {
-    width:           34,
-    height:          34,
-    borderRadius:    17,
+    width: 34, height: 34, borderRadius: 17,
     backgroundColor: '#F5F5F5',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-
-  divider: {
-    height:          1,
-    backgroundColor: COLORS.borderLight,
-  },
-
-  // ── List ────────────────────────────────────────────────
-  list: {
-    maxHeight: SCREEN_HEIGHT * 0.45,
-  },
-
-  // ── Item ────────────────────────────────────────────────
+  divider: { height: 1, backgroundColor: COLORS.borderLight },
+  list:    { maxHeight: SCREEN_HEIGHT * 0.45 },
   item: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    paddingVertical:   14,
-    paddingHorizontal: SPACING.screenPadding,
-    gap:               14,
-    backgroundColor:   COLORS.white,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 14, paddingHorizontal: SPACING.screenPadding,
+    gap: 14, backgroundColor: COLORS.white,
   },
-  itemSelected: {
-    backgroundColor: COLORS.primary + '0A',
-  },
-  itemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
+  itemSelected: { backgroundColor: COLORS.primary + '0A' },
+  itemBorder:   { borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
   itemThumb: {
-    width:           48,
-    height:          48,
-    borderRadius:    12,
-    overflow:        'hidden',
-    backgroundColor: '#F5F5F5',
-    flexShrink:      0,
+    width: 48, height: 48, borderRadius: 12,
+    overflow: 'hidden', backgroundColor: '#F5F5F5', flexShrink: 0,
   },
   clearThumb: {
-    alignItems:     'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor: COLORS.primary + '10',
   },
-  itemThumbImg: {
-    width:  '100%',
-    height: '100%',
-  },
-  itemContent: { flex: 1 },
-  itemName: {
-    fontSize:   14,
-    fontWeight: '600',
-    color:      COLORS.textPrimary,
-  },
-  itemNameSelected: {
-    color: COLORS.primary,
-  },
-  itemDesc: {
-    fontSize:  12,
-    color:     COLORS.textSecondary,
-    marginTop: 2,
-  },
+  itemThumbImg:     { width: '100%', height: '100%' },
+  itemContent:      { flex: 1 },
+  itemName:         { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  itemNameSelected: { color: COLORS.primary },
+  itemDesc:         { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   checkCircle: {
-    width:           24,
-    height:          24,
-    borderRadius:    12,
+    width: 24, height: 24, borderRadius: 12,
     backgroundColor: COLORS.primary,
-    alignItems:      'center',
-    justifyContent:  'center',
-    flexShrink:      0,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-
-  // ── Saving ──────────────────────────────────────────────
   savingRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.sm,
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: SPACING.sm, gap: 8,
+    borderTopWidth: 1, borderTopColor: COLORS.borderLight,
   },
-  savingText: {
-    fontSize: 13,
-    color:    COLORS.textSecondary,
-  },
-});
-
-// ─────────────────────────────────────────────────────────────
-// ── Industry Trigger Button (shown above carousel) ────────────
-// ─────────────────────────────────────────────────────────────
-function IndustryTrigger({ selectedCategoryName, categories, onPress }) {
-  const allCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
-  const selectedCat   = allCategories.find((c) => c.name === selectedCategoryName);
-  const hasSelection  = !!selectedCategoryName;
-
-  return (
-    <TouchableOpacity
-      style={[triggerStyles.container, hasSelection && triggerStyles.containerSelected]}
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      {/* Left: icon / image */}
-      <View style={triggerStyles.iconWrap}>
-        {hasSelection && selectedCat?.image ? (
-          <Image
-            source={{ uri: getImageUrl(selectedCat.image) }}
-            style={triggerStyles.thumbImg}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[triggerStyles.iconBg, hasSelection && triggerStyles.iconBgSelected]}>
-            <Ionicons
-              name="business-outline"
-              size={18}
-              color={hasSelection ? COLORS.primary : COLORS.textSecondary}
-            />
-          </View>
-        )}
-      </View>
-
-      {/* Center text */}
-      <View style={triggerStyles.textWrap}>
-        {hasSelection ? (
-          <>
-            <Text style={triggerStyles.label} numberOfLines={1}>
-              {selectedCategoryName}
-            </Text>
-            <Text style={triggerStyles.sub}>Your selected industry · tap to change</Text>
-          </>
-        ) : (
-          <>
-            <Text style={triggerStyles.labelDefault}>Industries We Serve</Text>
-            <Text style={triggerStyles.sub}>
-              {allCategories.length} industr{allCategories.length === 1 ? 'y' : 'ies'} · tap to select yours
-            </Text>
-          </>
-        )}
-      </View>
-
-      {/* Right: chevron */}
-      <View style={[triggerStyles.chevronWrap, hasSelection && triggerStyles.chevronWrapSelected]}>
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={hasSelection ? COLORS.primary : COLORS.textSecondary}
-        />
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-const triggerStyles = StyleSheet.create({
-  container: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    marginHorizontal:  SPACING.screenPadding,
-    marginBottom:      SPACING.md,
-    backgroundColor:   COLORS.white,
-    borderRadius:      16,
-    paddingVertical:   12,
-    paddingHorizontal: 14,
-    borderWidth:       1.5,
-    borderColor:       COLORS.borderLight,
-    shadowColor:       '#000',
-    shadowOffset:      { width: 0, height: 2 },
-    shadowOpacity:     0.06,
-    shadowRadius:      8,
-    elevation:         3,
-    gap:               12,
-  },
-  containerSelected: {
-    borderColor:     COLORS.primary + '60',
-    backgroundColor: COLORS.primary + '04',
-  },
-
-  // ── Icon / thumb ─────────────────────────────────────────
-  iconWrap: {
-    width:        44,
-    height:       44,
-    borderRadius: 12,
-    overflow:     'hidden',
-    flexShrink:   0,
-  },
-  iconBg: {
-    width:           '100%',
-    height:          '100%',
-    borderRadius:    12,
-    backgroundColor: '#F5F5F5',
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  iconBgSelected: {
-    backgroundColor: COLORS.primary + '15',
-  },
-  thumbImg: {
-    width:  '100%',
-    height: '100%',
-  },
-
-  // ── Text ─────────────────────────────────────────────────
-  textWrap: { flex: 1 },
-  labelDefault: {
-    fontSize:   14,
-    fontWeight: '700',
-    color:      COLORS.textPrimary,
-    letterSpacing: 0.1,
-  },
-  label: {
-    fontSize:   14,
-    fontWeight: '700',
-    color:      COLORS.primary,
-  },
-  sub: {
-    fontSize:  11,
-    color:     COLORS.textSecondary,
-    marginTop: 2,
-  },
-
-  // ── Chevron ──────────────────────────────────────────────
-  chevronWrap: {
-    width:           28,
-    height:          28,
-    borderRadius:    14,
-    backgroundColor: '#F5F5F5',
-    alignItems:      'center',
-    justifyContent:  'center',
-    flexShrink:      0,
-  },
-  chevronWrapSelected: {
-    backgroundColor: COLORS.primary + '15',
-  },
+  savingText: { fontSize: 13, color: COLORS.textSecondary },
 });
 
 // ─────────────────────────────────────────────────────────────
 // ── Main Screen ───────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 const HomeScreen = ({ navigation }) => {
-  const [products,             setProducts]             = useState([]);
-  const [categories,           setCategories]           = useState([]);
-  const [banners,              setBanners]              = useState([]);
-  const [isLoading,            setIsLoading]            = useState(true);
-  const [isRefreshing,         setIsRefreshing]         = useState(false);
-  const [currentBannerIndex,   setCurrentBannerIndex]   = useState(0);
+  const [products,           setProducts]           = useState([]);
+  const [categories,         setCategories]         = useState([]);
+  const [banners,            setBanners]            = useState([]);
+  const [isLoading,          setIsLoading]          = useState(true);
+  const [isRefreshing,       setIsRefreshing]       = useState(false);
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [preferredProducts,  setPreferredProducts]  = useState([]);
+  const [isLoadingPreferred, setIsLoadingPreferred] = useState(false);
+  const [savingPreference,   setSavingPreference]   = useState(false);
+  const [showIndustryModal,  setShowIndustryModal]  = useState(false);
 
-  // ── Preferred-category products ────────────────────────────
-  const [preferredProducts,    setPreferredProducts]    = useState([]);
-  const [isLoadingPreferred,   setIsLoadingPreferred]   = useState(false);
-
-  // ── Preferred-category save state ──────────────────────────
-  const [savingPreference,     setSavingPreference]     = useState(false);
-
-  // ── Industry modal ─────────────────────────────────────────
-  const [showIndustryModal,    setShowIndustryModal]    = useState(false);
-
-  // ── Refs ───────────────────────────────────────────────────
   const bannerListRef   = useRef(null);
   const autoPlayRef     = useRef(null);
   const isUserScrolling = useRef(false);
-
-  const scrollXNative = useRef(new Animated.Value(0)).current;
-  const scrollXJS     = useRef(new Animated.Value(0)).current;
-
+  const scrollXNative   = useRef(new Animated.Value(0)).current;
+  const scrollXJS       = useRef(new Animated.Value(0)).current;
   const floatingCartScale = useRef(new Animated.Value(0)).current;
   const addingRef         = useRef({});
 
   const { toast, showToast } = useToast();
 
-  // ── Store ──────────────────────────────────────────────────
   const user                 = useAuthStore((s) => s.user);
   const setPreferredCategory = useAuthStore((s) => s.setPreferredCategory);
   const preferredCategory    = useAuthStore((s) => s.preferredCategory);
@@ -632,23 +349,16 @@ const HomeScreen = ({ navigation }) => {
     removeRecentSearch,
     clearRecentSearches,
   } = useSearch({
-    debounceMs:          300,
-    minQueryLength:      2,
-    maxSuggestions:      8,
-    enableBackendSearch: true,
-    localProducts:       products,
-    categories,
+    debounceMs: 300, minQueryLength: 2, maxSuggestions: 8,
+    enableBackendSearch: true, localProducts: products, categories,
   });
 
   const displayBanners = banners.length > 0 ? banners : [FALLBACK_BANNER];
 
-  // ── Floating cart animation ────────────────────────────────
   useEffect(() => {
     Animated.spring(floatingCartScale, {
-      toValue:         totalItems > 0 ? 1 : 0,
-      useNativeDriver: true,
-      friction:        6,
-      tension:         40,
+      toValue: totalItems > 0 ? 1 : 0,
+      useNativeDriver: true, friction: 6, tension: 40,
     }).start();
   }, [totalItems]);
 
@@ -676,10 +386,8 @@ const HomeScreen = ({ navigation }) => {
     }, [displayBanners.length, scrollXJS])
   );
 
-  // ── Initial load ───────────────────────────────────────────
   useEffect(() => { loadInitialData(); }, []);
 
-  // ── Load preferred products when preference changes ────────
   useEffect(() => {
     if (preferredCategory) {
       loadPreferredProducts(preferredCategory);
@@ -692,9 +400,7 @@ const HomeScreen = ({ navigation }) => {
     setIsLoading(true);
     try {
       await Promise.all([
-        loadProducts(),
-        loadCategories(),
-        loadBanners(),
+        loadProducts(), loadCategories(), loadBanners(),
         cartItems.length === 0 ? fetchCart() : Promise.resolve(),
         fetchUnreadCount(),
       ]);
@@ -740,7 +446,8 @@ const HomeScreen = ({ navigation }) => {
     try {
       const r = await fetchWithCache(
         `products:category:${categoryName}`,
-        () => productsAPI.getProducts({ category: categoryName, limit: 9 }),
+        // ✅ Fetch more so user has multiple rows to see
+        () => productsAPI.getProducts({ category: categoryName, limit: 50 }),
         PRODUCTS_CACHE_TTL
       );
       setPreferredProducts(r.data?.products || []);
@@ -762,45 +469,25 @@ const HomeScreen = ({ navigation }) => {
     } catch {} finally { setIsRefreshing(false); }
   };
 
-  // ── Handle industry selection from modal ───────────────────
   const handleIndustrySelect = useCallback(async (category) => {
-  const newCategoryName = category?.name || null;
-
-  // Close modal immediately
-  setShowIndustryModal(false);
-
-  // Optimistic update
-  setPreferredCategory(newCategoryName);
-
-  setSavingPreference(true);
-  try {
-    console.log('📡 Saving preference:', newCategoryName);
-    console.log('📡 API URL:', `${authAPI}`);
-
-    const result = await authAPI.updatePreferredCategory(newCategoryName);
-    console.log('✅ Save result:', result);
-
-    if (newCategoryName) {
-      showToast(`Industry set to "${newCategoryName}"`, 'success');
-    } else {
-      showToast('Industry preference cleared', 'success');
+    const newCategoryName = category?.name || null;
+    setShowIndustryModal(false);
+    setPreferredCategory(newCategoryName);
+    setSavingPreference(true);
+    try {
+      await authAPI.updatePreferredCategory(newCategoryName);
+      showToast(
+        newCategoryName ? `Industry set to "${newCategoryName}"` : 'Industry preference cleared',
+        'success'
+      );
+    } catch (err) {
+      setPreferredCategory(preferredCategory);
+      showToast(`Failed: ${err?.message || 'Unknown error'}`, 'error');
+    } finally {
+      setSavingPreference(false);
     }
-  } catch (err) {
-    // ✅ Log the actual error so we can see what's wrong
-    console.error('❌ Save preference error:', err);
-    console.error('❌ Error message:', err?.message);
-    console.error('❌ Error status:', err?.status);
-    console.error('❌ Error data:', err?.data);
+  }, [preferredCategory, setPreferredCategory, showToast]);
 
-    // Revert on failure
-    setPreferredCategory(preferredCategory);
-    showToast(`Failed: ${err?.message || 'Unknown error'}`, 'error');
-  } finally {
-    setSavingPreference(false);
-  }
-}, [preferredCategory, setPreferredCategory, showToast]);
-
-  // ── Navigation helpers ─────────────────────────────────────
   const handleBannerPress = useCallback((banner) => {
     if (!banner || banner.actionType === 'none') return;
     switch (banner.actionType) {
@@ -811,19 +498,14 @@ const HomeScreen = ({ navigation }) => {
       }
       case 'category':
         if (banner.actionCategory)
-          navigation.navigate('ProductList', {
-            category: banner.actionCategory,
-            title:    banner.actionCategory,
-          });
+          navigation.navigate('ProductList', { category: banner.actionCategory, title: banner.actionCategory });
         break;
       case 'screen':
         if (banner.actionScreen) navigation.navigate(banner.actionScreen);
         break;
       case 'url':
         if (banner.actionUrl)
-          Linking.openURL(banner.actionUrl).catch(() =>
-            showToast('Could not open link', 'error')
-          );
+          Linking.openURL(banner.actionUrl).catch(() => showToast('Could not open link', 'error'));
         break;
     }
   }, [navigation, showToast]);
@@ -833,10 +515,7 @@ const HomeScreen = ({ navigation }) => {
       hideSuggestions();
       Keyboard.dismiss();
       addToRecentSearches(searchQuery.trim());
-      navigation.navigate('ProductList', {
-        searchQuery: searchQuery.trim(),
-        title:       `Search: ${searchQuery.trim()}`,
-      });
+      navigation.navigate('ProductList', { searchQuery: searchQuery.trim(), title: `Search: ${searchQuery.trim()}` });
     }
   }, [searchQuery, hideSuggestions, addToRecentSearches, navigation]);
 
@@ -846,25 +525,13 @@ const HomeScreen = ({ navigation }) => {
     navigation.navigate('ProductDetail', { product });
   }, [hideSuggestions, navigation]);
 
-  const handleViewAllProducts = useCallback(() => {
-    navigation.navigate('ProductList', { title: 'All Products' });
-  }, [navigation]);
-
+  const handleViewAllProducts     = useCallback(() => navigation.navigate('ProductList', { title: 'All Products' }), [navigation]);
+  const handleViewAllPreferred    = useCallback(() => navigation.navigate('ProductList', { category: preferredCategory, title: preferredCategory }), [navigation, preferredCategory]);
   const handleViewAllSearchResults = useCallback(() => {
     hideSuggestions();
     Keyboard.dismiss();
-    navigation.navigate('ProductList', {
-      searchQuery: searchQuery.trim(),
-      title:       `Search: ${searchQuery.trim()}`,
-    });
+    navigation.navigate('ProductList', { searchQuery: searchQuery.trim(), title: `Search: ${searchQuery.trim()}` });
   }, [hideSuggestions, searchQuery, navigation]);
-
-  const handleViewAllPreferred = useCallback(() => {
-    navigation.navigate('ProductList', {
-      category: preferredCategory,
-      title:    preferredCategory,
-    });
-  }, [navigation, preferredCategory]);
 
   const handleCategoryPress = useCallback((category) => {
     hideSuggestions();
@@ -875,9 +542,7 @@ const HomeScreen = ({ navigation }) => {
     });
   }, [hideSuggestions, navigation]);
 
-  const handleGoToCart = useCallback(() => {
-    navigation.navigate('Cart');
-  }, [navigation]);
+  const handleGoToCart = useCallback(() => navigation.navigate('Cart'), [navigation]);
 
   const handleAddToCart = useCallback(async (product) => {
     if (addingRef.current[product._id]) return;
@@ -898,27 +563,14 @@ const HomeScreen = ({ navigation }) => {
       addToRecentSearches(suggestion);
       hideSuggestions();
       Keyboard.dismiss();
-      navigation.navigate('ProductList', {
-        searchQuery: suggestion,
-        title:       `Search: ${suggestion}`,
-      });
+      navigation.navigate('ProductList', { searchQuery: suggestion, title: `Search: ${suggestion}` });
     } else {
       selectSuggestion(suggestion);
     }
   }, [setSearchQuery, addToRecentSearches, hideSuggestions, selectSuggestion, navigation]);
 
-  const handleSelectProductSuggestion = useCallback((product) => {
-    hideSuggestions();
-    Keyboard.dismiss();
-    handleProductPress(product);
-  }, [hideSuggestions, handleProductPress]);
-
-  const handleSelectCategorySuggestion = useCallback((categoryName) => {
-    hideSuggestions();
-    Keyboard.dismiss();
-    handleCategoryPress(categoryName);
-  }, [hideSuggestions, handleCategoryPress]);
-
+  const handleSelectProductSuggestion  = useCallback((product) => { hideSuggestions(); Keyboard.dismiss(); handleProductPress(product); }, [hideSuggestions, handleProductPress]);
+  const handleSelectCategorySuggestion = useCallback((name) => { hideSuggestions(); Keyboard.dismiss(); handleCategoryPress(name); }, [hideSuggestions, handleCategoryPress]);
   const handleFillSearch   = useCallback((text) => fillSearch(text), [fillSearch]);
   const handleRemoveRecent = useCallback((term) => removeRecentSearch(term), [removeRecentSearch]);
 
@@ -933,10 +585,8 @@ const HomeScreen = ({ navigation }) => {
   // RENDERS
   // ─────────────────────────────────────────────────────────
 
-  // ── Header ────────────────────────────────────────────────
   const renderHeader = () => (
     <View style={styles.header}>
-      {/* Left: logo + name */}
       <View style={styles.headerLeft}>
         <View style={styles.logoContainer}>
           <TijaraLogo width={28} height={28} />
@@ -947,40 +597,30 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Right: industry pill + notification bell */}
       <View style={styles.headerRight}>
+        <TouchableOpacity
+          style={[styles.industryPill, preferredCategory && styles.industryPillActive]}
+          onPress={() => setShowIndustryModal(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="business-outline"
+            size={12}
+            color={preferredCategory ? COLORS.black : COLORS.textSecondary}
+          />
+          <Text
+            style={[styles.industryPillText, preferredCategory && styles.industryPillTextActive]}
+            numberOfLines={1}
+          >
+            {preferredCategory || 'Industries We Serve'}
+          </Text>
+          <Ionicons
+            name="chevron-down"
+            size={10}
+            color={preferredCategory ? COLORS.black : COLORS.textSecondary}
+          />
+        </TouchableOpacity>
 
-        {/* ── Industry pill ── */}
-       <TouchableOpacity
-  style={[
-    styles.industryPill,
-    preferredCategory && styles.industryPillActive,
-  ]}
-  onPress={() => setShowIndustryModal(true)}
-  activeOpacity={0.8}
->
-  <Ionicons
-    name="business-outline"
-    size={12}
-    color={preferredCategory ? COLORS.black : COLORS.textSecondary}  // ✅ black when active
-  />
-  <Text
-    style={[
-      styles.industryPillText,
-      preferredCategory && styles.industryPillTextActive,
-    ]}
-    numberOfLines={1}
-  >
-    {preferredCategory || 'Industries We Serve'}
-  </Text>
-  <Ionicons
-    name="chevron-down"
-    size={10}
-    color={preferredCategory ? COLORS.black : COLORS.textSecondary}  // ✅ black when active
-  />
-</TouchableOpacity>
-
-        {/* Notification bell */}
         <TouchableOpacity
           style={styles.notificationButton}
           onPress={() => navigation.navigate('Notifications')}
@@ -1045,8 +685,7 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.searchResultsInfo}>
           <Ionicons name="search" size={16} color={COLORS.textSecondary} />
           <Text style={styles.searchResultsText}>
-            {filteredProducts.length} result
-            {filteredProducts.length !== 1 ? 's' : ''} for "{searchQuery}"
+            {filteredProducts.length} result{filteredProducts.length !== 1 ? 's' : ''} for "{searchQuery}"
           </Text>
         </View>
         <TouchableOpacity onPress={clearSearch}>
@@ -1056,7 +695,6 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Banner card ───────────────────────────────────────────
   const renderBannerCard = useCallback(({ item: banner, index }) => {
     const hasImage     = !!banner.image;
     const isActionable = banner.actionType && banner.actionType !== 'none';
@@ -1076,17 +714,8 @@ const HomeScreen = ({ navigation }) => {
       index       * BANNER_SNAP_INTERVAL,
       (index + 1) * BANNER_SNAP_INTERVAL,
     ];
-
-    const animatedScale = scrollXNative.interpolate({
-      inputRange,
-      outputRange: [0.94, 1, 0.94],
-      extrapolate: 'clamp',
-    });
-    const animatedOpacity = scrollXNative.interpolate({
-      inputRange,
-      outputRange: [0.7, 1, 0.7],
-      extrapolate: 'clamp',
-    });
+    const animatedScale   = scrollXNative.interpolate({ inputRange, outputRange: [0.94, 1, 0.94], extrapolate: 'clamp' });
+    const animatedOpacity = scrollXNative.interpolate({ inputRange, outputRange: [0.7, 1, 0.7],   extrapolate: 'clamp' });
 
     const cardContent = (
       <>
@@ -1135,12 +764,7 @@ const HomeScreen = ({ navigation }) => {
     );
 
     return (
-      <Animated.View
-        style={[
-          styles.bannerCardOuter,
-          { transform: [{ scale: animatedScale }], opacity: animatedOpacity },
-        ]}
-      >
+      <Animated.View style={[styles.bannerCardOuter, { transform: [{ scale: animatedScale }], opacity: animatedOpacity }]}>
         <TouchableOpacity
           activeOpacity={isActionable ? 0.9 : 1}
           onPress={() => handleBannerPress(banner)}
@@ -1152,7 +776,6 @@ const HomeScreen = ({ navigation }) => {
     );
   }, [scrollXNative, handleBannerPress]);
 
-  // ── Banner carousel ────────────────────────────────────────
   const renderBanner = () => {
     if (isSearching) return null;
     return (
@@ -1170,10 +793,7 @@ const HomeScreen = ({ navigation }) => {
           contentContainerStyle={styles.bannerListContent}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { x: scrollXNative } } }],
-            {
-              useNativeDriver: true,
-              listener: (e) => scrollXJS.setValue(e.nativeEvent.contentOffset.x),
-            }
+            { useNativeDriver: true, listener: (e) => scrollXJS.setValue(e.nativeEvent.contentOffset.x) }
           )}
           scrollEventThrottle={16}
           onScrollBeginDrag={() => { isUserScrolling.current = true; }}
@@ -1182,11 +802,7 @@ const HomeScreen = ({ navigation }) => {
             setCurrentBannerIndex(Math.max(0, Math.min(page, displayBanners.length - 1)));
             setTimeout(() => { isUserScrolling.current = false; }, 6000);
           }}
-          getItemLayout={(_, index) => ({
-            length: BANNER_SNAP_INTERVAL,
-            offset: BANNER_SNAP_INTERVAL * index,
-            index,
-          })}
+          getItemLayout={(_, index) => ({ length: BANNER_SNAP_INTERVAL, offset: BANNER_SNAP_INTERVAL * index, index })}
         />
         {displayBanners.length > 1 && (
           <View style={styles.dotsContainer}>
@@ -1210,7 +826,6 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Categories ─────────────────────────────────────────────
   const renderCategories = () => {
     if (isSearching) return null;
     const allCategories  = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
@@ -1246,9 +861,7 @@ const HomeScreen = ({ navigation }) => {
                   defaultSource={CATEGORY_FALLBACK_IMAGE}
                 >
                   <View style={styles.categoryOverlay}>
-                    <Text style={styles.categoryText} numberOfLines={2}>
-                      {category.name}
-                    </Text>
+                    <Text style={styles.categoryText} numberOfLines={2}>{category.name}</Text>
                   </View>
                 </ImageBackground>
               </TouchableOpacity>
@@ -1259,22 +872,27 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Compact product card ───────────────────────────────────
-  const renderCompactProductCard = (product, index) => {
-    const quantity = getItemQuantity(product._id);
-    const discount = calculateDiscount(product.compareAtPrice, product.price);
-    const imageUrl = product.images?.[0] ? getImageUrl(product.images[0]) : null;
 
-    return (
-      <TouchableOpacity
-        key={product._id}
-        style={[
-          styles.compactProductCard,
-          { marginRight: (index + 1) % 3 === 0 ? 0 : PRODUCT_GAP },
-        ]}
-        onPress={() => handleProductPress(product)}
-        activeOpacity={0.8}
-      >
+const renderCompactProductCard = (product, index) => {
+  const quantity = getItemQuantity(product._id);
+  const discount = calculateDiscount(product.compareAtPrice, product.price);
+  const imageUrl = product.images?.[0] ? getImageUrl(product.images[0]) : null;
+
+  // ✅ Symmetric left+right margins so 3 cards always fit exactly
+  const col         = index % COLS;
+  const marginLeft  = col === 0 ? 0 : PRODUCT_GAP / 2;
+  const marginRight = col === COLS - 1 ? 0 : PRODUCT_GAP / 2;
+
+  return (
+    <TouchableOpacity
+      key={product._id}
+      style={[
+        styles.compactProductCard,
+        { marginLeft, marginRight },
+      ]}
+      onPress={() => handleProductPress(product)}
+      activeOpacity={0.8}
+    >
         <View style={styles.compactImageContainer}>
           {imageUrl ? (
             <Image source={{ uri: imageUrl }} style={styles.compactImage} resizeMode="cover" />
@@ -1316,9 +934,12 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Preferred products section ─────────────────────────────
+  // ── Preferred products ─────────────────────────────────────
   const renderPreferredProducts = () => {
     if (isSearching || !preferredCategory) return null;
+
+    // ✅ Show MAX_PREFERRED_PRODUCTS (multiple of 3 = always complete rows)
+    const displayPreferred = preferredProducts.slice(0, MAX_PREFERRED_PRODUCTS);
 
     return (
       <View style={styles.preferredSection}>
@@ -1326,7 +947,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.preferredTitleRow}>
             <View style={styles.preferredAccentBar} />
             <View>
-              <Text style={styles.sectionTitle}>Products of You choice</Text>
+              <Text style={styles.sectionTitle}>Products of Your Choice</Text>
               <Text style={styles.preferredSubtitle}>{preferredCategory}</Text>
             </View>
           </View>
@@ -1349,13 +970,12 @@ const HomeScreen = ({ navigation }) => {
           </View>
         ) : (
           <View style={styles.productsGrid}>
-            {preferredProducts
-              .slice(0, 9)
-              .map((product, index) => renderCompactProductCard(product, index))}
+            {displayPreferred.map((product, index) =>
+              renderCompactProductCard(product, index)
+            )}
           </View>
         )}
 
-        {/* Change industry link */}
         <TouchableOpacity
           style={styles.changeIndustryBtn}
           onPress={() => setShowIndustryModal(true)}
@@ -1368,7 +988,6 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── All products section ───────────────────────────────────
   const renderProducts = () => {
     const displayProducts = isSearching ? filteredProducts : products;
     const maxProducts     = isSearching ? 12 : 9;
@@ -1426,7 +1045,6 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Floating cart ──────────────────────────────────────────
   const renderFloatingCart = () => {
     if (totalItems === 0) return null;
     return (
@@ -1448,7 +1066,6 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  // ── Loading ────────────────────────────────────────────────
   if (isLoading) {
     return (
       <Screen backgroundColor={COLORS.backgroundLight}>
@@ -1479,9 +1096,6 @@ const HomeScreen = ({ navigation }) => {
         {renderHeader()}
         {renderSearchBar()}
         {renderSearchHeader()}
-
-        
-
         {renderBanner()}
         {renderCategories()}
         {renderPreferredProducts()}
@@ -1491,7 +1105,6 @@ const HomeScreen = ({ navigation }) => {
 
       {renderFloatingCart()}
 
-      {/* ── Industry Selection Modal ── */}
       <IndustryModal
         visible={showIndustryModal}
         categories={categories}
@@ -1512,264 +1125,132 @@ const styles = StyleSheet.create({
 
   // ── Header ────────────────────────────────────────────────
   header: {
-    flexDirection:     'row',
-    justifyContent:    'space-between',
-    alignItems:        'center',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: SPACING.screenPadding,
-    paddingTop:        SPACING.sm,
-    paddingBottom:     SPACING.sm,
+    paddingTop: SPACING.sm, paddingBottom: SPACING.sm,
   },
   headerLeft: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    flex:          1,
-    minWidth:      0,
+    flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0,
   },
   logoContainer: {
-    width:           40,
-    height:          40,
-    backgroundColor: COLORS.white,
-    borderRadius:    10,
-    marginRight:     SPACING.sm,
-    alignItems:      'center',
-    justifyContent:  'center',
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 2 },
-    shadowOpacity:   0.08,
-    shadowRadius:    4,
-    elevation:       2,
-    flexShrink:      0,
+    width: 40, height: 40, backgroundColor: COLORS.white,
+    borderRadius: 10, marginRight: SPACING.sm,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2, flexShrink: 0,
   },
   headerTextContainer: { flex: 1, minWidth: 0 },
   welcomeText:         { fontSize: 12, color: COLORS.gray },
-  userName: {
-    fontSize:   16,
-    color:      COLORS.textPrimary,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
+  userName:            { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600', flexShrink: 1 },
+  headerRight:         { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 8 },
 
-  headerRight: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           8,
-    flexShrink:    0,
-    marginLeft:    8,
-  },
-
-  // ── Industry pill (in header) ─────────────────────────────
+  // ── Industry pill ─────────────────────────────────────────
   industryPill: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   '#F5F5F5',
-    borderRadius:      20,
-    paddingVertical:   6,
-    paddingHorizontal: 10,
-    gap:               3,
-    maxWidth:          170,
-    borderWidth:       1,
-    borderColor:       'transparent',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F5F5F5', borderRadius: 20,
+    paddingVertical: 6, paddingHorizontal: 10,
+    gap: 3, maxWidth: 170, borderWidth: 1, borderColor: 'transparent',
   },
   industryPillActive: {
-  backgroundColor: '#F0F0F0',      // ✅ neutral gray instead of yellow tint
-  borderColor:     COLORS.black + '30',  // ✅ subtle black border
-},
-  industryPillText: {
-  fontSize:   11,
-  fontWeight: '600',
-  color:      COLORS.textSecondary,
-  flexShrink: 1,
-},
-industryPillTextActive: { color: COLORS.black },
+    backgroundColor: '#F0F0F0',
+    borderColor: COLORS.black + '30',
+  },
+  industryPillText:       { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary, flexShrink: 1 },
+  industryPillTextActive: { color: COLORS.black },
 
   notificationButton: {
-    width:           38,
-    height:          38,
-    borderRadius:    19,
-    backgroundColor: COLORS.card,
-    alignItems:      'center',
-    justifyContent:  'center',
-    position:        'relative',
+    width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.card,
+    alignItems: 'center', justifyContent: 'center', position: 'relative',
   },
   notificationBadge: {
-    position:          'absolute',
-    top:               -2,
-    right:             -2,
-    minWidth:          18,
-    height:            18,
-    borderRadius:      9,
-    backgroundColor:   COLORS.error,
-    alignItems:        'center',
-    justifyContent:    'center',
-    paddingHorizontal: 3,
-    borderWidth:       1.5,
-    borderColor:       COLORS.white,
+    position: 'absolute', top: -2, right: -2,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: COLORS.error,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3, borderWidth: 1.5, borderColor: COLORS.white,
   },
   notificationBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
 
   // ── Search ────────────────────────────────────────────────
   searchWrapper: {
-    marginHorizontal: SPACING.screenPadding,
-    marginBottom:     SPACING.md,
-    zIndex:           1000,
-    elevation:        1000,
+    marginHorizontal: SPACING.screenPadding, marginBottom: SPACING.md,
+    zIndex: 1000, elevation: 1000,
   },
   searchContainer: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    paddingHorizontal: SPACING.md,
-    height:            44,
-    backgroundColor:   '#F5F5F5',
-    borderRadius:      12,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: SPACING.md, height: 44,
+    backgroundColor: '#F5F5F5', borderRadius: 12,
   },
-  searchInput: {
-    flex:       1,
-    fontSize:   14,
-    color:      COLORS.textPrimary,
-    marginLeft: SPACING.sm,
-  },
-  clearButton: { padding: 4 },
+  searchInput:  { flex: 1, fontSize: 14, color: COLORS.textPrimary, marginLeft: SPACING.sm },
+  clearButton:  { padding: 4 },
 
   searchResultsHeader: {
-    flexDirection:     'row',
-    justifyContent:    'space-between',
-    alignItems:        'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   SPACING.sm,
-    backgroundColor:   COLORS.card,
-    marginHorizontal:  SPACING.screenPadding,
-    marginBottom:      SPACING.md,
-    borderRadius:      8,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.card, marginHorizontal: SPACING.screenPadding,
+    marginBottom: SPACING.md, borderRadius: 8,
   },
   searchResultsInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  searchResultsText:  { fontSize: 13, color: COLORS.textSecondary },
-  clearSearchText:    { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
+  searchResultsText: { fontSize: 13, color: COLORS.textSecondary },
+  clearSearchText:   { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
 
-  noResultsContainer: {
-    alignItems:      'center',
-    justifyContent:  'center',
-    paddingVertical: SPACING.xxxl,
-  },
-  noResultsTitle: {
-    fontSize:   16,
-    fontWeight: '600',
-    color:      COLORS.textPrimary,
-    marginTop:  SPACING.md,
-  },
-  noResultsText: {
-    fontSize:  14,
-    color:     COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    textAlign: 'center',
-  },
+  noResultsContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.xxxl },
+  noResultsTitle:     { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginTop: SPACING.md },
+  noResultsText:      { fontSize: 14, color: COLORS.textSecondary, marginTop: SPACING.xs, textAlign: 'center' },
   clearSearchButton: {
-    marginTop:         SPACING.lg,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical:   SPACING.sm,
-    backgroundColor:   COLORS.primary,
-    borderRadius:      20,
+    marginTop: SPACING.lg, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.primary, borderRadius: 20,
   },
   clearSearchButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.black },
 
   // ── Banner ────────────────────────────────────────────────
   bannerWrapper:     { marginBottom: SPACING.lg },
   bannerListContent: { paddingHorizontal: BANNER_SIDE_PADDING },
-
-  bannerCardOuter: {
-    width:       BANNER_CARD_WIDTH,
-    height:      BANNER_CARD_HEIGHT,
-    marginRight: BANNER_CARD_GAP,
-  },
+  bannerCardOuter:   { width: BANNER_CARD_WIDTH, height: BANNER_CARD_HEIGHT, marginRight: BANNER_CARD_GAP },
   bannerCardTouchable: {
-    flex:          1,
-    borderRadius:  16,
-    overflow:      'hidden',
-    shadowColor:   '#000',
-    shadowOffset:  { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius:  14,
-    elevation:     10,
+    flex: 1, borderRadius: 16, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18, shadowRadius: 14, elevation: 10,
   },
   bannerCardInner:      { flex: 1, borderRadius: 16, overflow: 'hidden' },
   bannerCardImageStyle: { borderRadius: 16 },
-  bannerImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  bannerPattern: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
-  patternCircle: {
-    position:        'absolute',
-    borderRadius:    1000,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  patternCircle1: { width: 180, height: 180, top: -60,    right: -40 },
-  patternCircle2: { width: 120, height: 120, bottom: -40, right: 60  },
-
-  bannerContent:     { flex: 1, flexDirection: 'row', padding: SPACING.md },
-  bannerTextSection: { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
-  bannerImageSection:{ width: 90, alignItems: 'center', justifyContent: 'center' },
+  bannerImageOverlay:   { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+  bannerPattern:        { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  patternCircle:        { position: 'absolute', borderRadius: 1000, backgroundColor: 'rgba(255,255,255,0.1)' },
+  patternCircle1:       { width: 180, height: 180, top: -60,    right: -40 },
+  patternCircle2:       { width: 120, height: 120, bottom: -40, right: 60  },
+  bannerContent:        { flex: 1, flexDirection: 'row', padding: SPACING.md },
+  bannerTextSection:    { flex: 1, justifyContent: 'center', paddingRight: SPACING.sm },
+  bannerImageSection:   { width: 90, alignItems: 'center', justifyContent: 'center' },
   bannerIconContainer: {
-    width:           70,
-    height:          70,
-    borderRadius:    35,
+    width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   bannerTitle:    { fontSize: 18, fontWeight: '700', color: COLORS.white, marginBottom: 6 },
   bannerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginBottom: SPACING.sm, lineHeight: 17 },
   shopNowButton: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   COLORS.primary,
-    paddingHorizontal: 14,
-    paddingVertical:   8,
-    borderRadius:      16,
-    alignSelf:         'flex-start',
-    gap:               4,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primary,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, alignSelf: 'flex-start', gap: 4,
   },
   shopNowText: { fontSize: 12, color: COLORS.black, fontWeight: '700' },
 
-  // ── Dots ──────────────────────────────────────────────────
-  dotsContainer: {
-    flexDirection:  'row',
-    justifyContent: 'center',
-    alignItems:     'center',
-    marginTop:      SPACING.sm,
-  },
-  dotTouchable: { padding: 4 },
-  dot: {
-    height:           8,
-    borderRadius:     4,
-    backgroundColor:  COLORS.primary,
-    marginHorizontal: 3,
-  },
+  dotsContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.sm },
+  dotTouchable:  { padding: 4 },
+  dot:           { height: 8, borderRadius: 4, backgroundColor: COLORS.primary, marginHorizontal: 3 },
 
   // ── Categories ────────────────────────────────────────────
-  categoriesSection: {
-    marginBottom:      SPACING.lg,
-    paddingHorizontal: SPACING.screenPadding,
-  },
+  categoriesSection: { marginBottom: SPACING.lg, paddingHorizontal: SPACING.screenPadding },
   sectionHeader: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-    marginBottom:   SPACING.sm,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm,
   },
   sectionTitle: { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
-  seeAllText:   { fontSize: 13, color: COLORS.primary,     fontWeight: '500' },
-
+  seeAllText:   { fontSize: 13, color: COLORS.primary, fontWeight: '500' },
   categoryGrid: { flexDirection: 'row', gap: 10 },
   categoryCard: {
-    flex:          1,
-    height:        CATEGORY_HEIGHT,
-    borderRadius:  12,
-    overflow:      'hidden',
-    shadowColor:   '#000',
-    shadowOffset:  { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius:  6,
-    elevation:     4,
+    flex: 1, height: CATEGORY_HEIGHT, borderRadius: 12, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12, shadowRadius: 6, elevation: 4,
   },
   categoryImage:      { width: '100%', height: '100%', justifyContent: 'flex-end' },
   categoryImageStyle: { borderRadius: 12 },
@@ -1779,139 +1260,80 @@ industryPillTextActive: { color: COLORS.black },
   // ── Preferred products ─────────────────────────────────────
   preferredSection: {
     paddingHorizontal: SPACING.screenPadding,
-    marginBottom:      SPACING.lg,
-    borderTopWidth:    1,
-    borderTopColor:    COLORS.borderLight,
-    paddingTop:        SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderTopWidth: 1, borderTopColor: COLORS.borderLight, paddingTop: SPACING.lg,
   },
-  preferredTitleRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           10,
-  },
-  preferredAccentBar: {
-    width:           4,
-    height:          36,
-    borderRadius:    2,
-    backgroundColor: COLORS.primary,
-  },
-  preferredSubtitle: {
-    fontSize:   12,
-    color:      COLORS.primary,
-    fontWeight: '500',
-    marginTop:  1,
-  },
+  preferredTitleRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  preferredAccentBar:  { width: 4, height: 36, borderRadius: 2, backgroundColor: COLORS.primary },
+  preferredSubtitle:   { fontSize: 12, color: COLORS.primary, fontWeight: '500', marginTop: 1 },
   preferredLoader: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    paddingVertical: SPACING.xl,
-    gap:             8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: SPACING.xl, gap: 8,
   },
   preferredLoaderText: { fontSize: 13, color: COLORS.textSecondary },
-  preferredEmpty: {
-    alignItems:      'center',
-    paddingVertical: SPACING.xl,
-    gap:             8,
-  },
-  preferredEmptyText: {
-    fontSize:  13,
-    color:     COLORS.textSecondary,
-    textAlign: 'center',
-  },
+  preferredEmpty:      { alignItems: 'center', paddingVertical: SPACING.xl, gap: 8 },
+  preferredEmptyText:  { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center' },
   changeIndustryBtn: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    paddingVertical: SPACING.sm,
-    gap:             4,
-    marginTop:       SPACING.xs,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: SPACING.sm, gap: 4, marginTop: SPACING.xs,
   },
-  changeIndustryText: {
-    fontSize:   12,
-    color:      COLORS.primary,
-    fontWeight: '500',
-  },
+  changeIndustryText: { fontSize: 12, color: COLORS.primary, fontWeight: '500' },
 
-  // ── Products ──────────────────────────────────────────────
+  // ── Products grid ─────────────────────────────────────────
   productsSection: { paddingHorizontal: SPACING.screenPadding },
-  productsGrid:    { flexDirection: 'row', flexWrap: 'wrap' },
+
+  // ✅ flexWrap ensures 3-per-row wrapping
+  productsGrid: {
+  flexDirection: 'row',
+  flexWrap:      'wrap',
+  // ✅ Ensure the grid doesn't exceed screen width
+  width:         COLS * PRODUCT_CARD_WIDTH + PRODUCT_GAP * (COLS - 1),
+},
+
   viewMoreButton: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    paddingVertical: SPACING.md,
-    gap:             4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: SPACING.md, gap: 4,
   },
   viewMoreText: { fontSize: 14, color: COLORS.primary, fontWeight: '500' },
 
+  // ── Product card ──────────────────────────────────────────
   compactProductCard: {
-    width:           PRODUCT_CARD_WIDTH,
-    backgroundColor: COLORS.white,
-    borderRadius:    12,
-    marginBottom:    PRODUCT_GAP,
-    overflow:        'hidden',
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 2 },
-    shadowOpacity:   0.08,
-    shadowRadius:    4,
-    elevation:       3,
-  },
+  width:           PRODUCT_CARD_WIDTH,
+  backgroundColor: COLORS.white,
+  borderRadius:    12,
+  marginBottom:    PRODUCT_GAP,
+  overflow:        'hidden',
+  shadowColor:     '#000',
+  shadowOffset:    { width: 0, height: 2 },
+  shadowOpacity:   0.08,
+  shadowRadius:    4,
+  elevation:       3,
+},
   compactImageContainer: {
-    width:           '100%',
-    aspectRatio:     1,
-    backgroundColor: '#F8F8F8',
-    position:        'relative',
+    width: '100%', aspectRatio: 1, backgroundColor: '#F8F8F8', position: 'relative',
   },
   compactImage:       { width: '100%', height: '100%' },
-  compactPlaceholder: {
-    width:          '100%',
-    height:         '100%',
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
+  compactPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   compactSaleBadge: {
-    position:          'absolute',
-    top:               6,
-    left:              6,
-    backgroundColor:   '#0D9488',
-    paddingHorizontal: 6,
-    paddingVertical:   2,
-    borderRadius:      10,
+    position: 'absolute', top: 6, left: 6,
+    backgroundColor: '#0D9488', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
   },
   compactSaleText:       { color: COLORS.white, fontSize: 9, fontWeight: '700' },
   compactOutOfStock: {
-    position:          'absolute',
-    top:               6,
-    right:             6,
-    backgroundColor:   COLORS.error,
-    paddingHorizontal: 6,
-    paddingVertical:   2,
-    borderRadius:      10,
+    position: 'absolute', top: 6, right: 6,
+    backgroundColor: COLORS.error, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
   },
   compactOutOfStockText: { color: COLORS.white, fontSize: 9, fontWeight: '600' },
   compactContent:        { padding: 8 },
   compactTitle: {
-    fontSize:     11,
-    fontWeight:   '500',
-    color:        COLORS.textPrimary,
-    marginBottom: 6,
-    lineHeight:   14,
-    height:       28,
+    fontSize: 11, fontWeight: '500', color: COLORS.textPrimary,
+    marginBottom: 6, lineHeight: 14, height: 28,
   },
-  compactPriceRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-  },
+  compactPriceRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   compactPrice:           { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
   compactAddButton: {
-    width:           24,
-    height:          24,
-    borderRadius:    12,
-    backgroundColor: '#0D9488',
-    alignItems:      'center',
-    justifyContent:  'center',
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#0D9488', alignItems: 'center', justifyContent: 'center',
   },
   compactAddButtonActive: { backgroundColor: '#0D9488' },
   compactQuantityText:    { fontSize: 10, color: COLORS.white, fontWeight: '700' },
@@ -1919,34 +1341,22 @@ industryPillTextActive: { color: COLORS.black },
   // ── Floating cart ─────────────────────────────────────────
   floatingCartContainer: {
     position: 'absolute',
-    bottom:   SPACING.tabBarHeight + SPACING.lg,
-    right:    SPACING.screenPadding,
-    zIndex:   1000,
+    bottom: SPACING.tabBarHeight + SPACING.lg,
+    right: SPACING.screenPadding,
+    zIndex: 1000,
   },
   floatingCartButton: {
-    width:           56,
-    height:          56,
-    borderRadius:    28,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: COLORS.primary,
-    alignItems:      'center',
-    justifyContent:  'center',
-    ...SHADOWS.large,
-    shadowColor:     COLORS.primary,
-    shadowOpacity:   0.4,
+    alignItems: 'center', justifyContent: 'center',
+    ...SHADOWS.large, shadowColor: COLORS.primary, shadowOpacity: 0.4,
   },
   floatingCartBadge: {
-    position:          'absolute',
-    top:               -2,
-    right:             -2,
-    minWidth:          20,
-    height:            20,
-    borderRadius:      10,
-    backgroundColor:   COLORS.white,
-    alignItems:        'center',
-    justifyContent:    'center',
-    paddingHorizontal: 4,
-    borderWidth:       2,
-    borderColor:       COLORS.primary,
+    position: 'absolute', top: -2, right: -2,
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: COLORS.white,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4, borderWidth: 2, borderColor: COLORS.primary,
   },
   floatingCartBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.black },
 
