@@ -534,14 +534,15 @@ const CategoriesScreen = ({ navigation }) => {
       <View style={styles.content}>
         {/* Sidebar */}
         <View style={styles.sidebar}>
-          <FlatList
-            data={categories}
-            renderItem={renderCategory}
-            keyExtractor={(item) => item._id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.sidebarContent}
-          />
-        </View>
+  <FlatList
+    data={categories}
+    renderItem={renderCategory}
+    keyExtractor={(item) => item._id}
+    showsVerticalScrollIndicator={false}
+    bounces={true}                        // ← enable bounce on iOS
+    contentContainerStyle={styles.sidebarContent}
+  />
+</View>
 
         {/* Divider between sidebar and products */}
         <View style={styles.sidebarDivider} />
@@ -655,6 +656,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     flexDirection: 'row',
+    overflow: 'hidden',
   },
 
   // ============================================================
@@ -663,11 +665,12 @@ const styles = StyleSheet.create({
   sidebar: {
     width: SIDEBAR_WIDTH,
     backgroundColor: COLORS.white,
+    flex: 0,  
   },
   sidebarContent: {
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.tabBarHeight + SPACING.xl,
-  },
+  paddingTop: SPACING.sm,
+  paddingBottom: 120,   // ← enough padding so last item isn't hidden by tab bar
+},
   sidebarDivider: {
     width: 1,
     backgroundColor: '#F0F0F0',
