@@ -1,8 +1,13 @@
 // backend/controllers/authController.js
+
 const User = require("../models/User");
 const PendingRegistration = require("../models/PendingRegistration");
 const { generateToken } = require("../utils/jwtUtils");
-const { checkSmsOtpLimit, logOtpSent } = require("../utils/otpLimiter");
+const {
+  checkSmsOtpLimit,
+  checkIpPhoneComboLimit,
+  logOtpSent,
+} = require("../utils/otpLimiter");
 const {
   getMCAuthToken,
   mcSendOtp,
@@ -10,9 +15,23 @@ const {
 } = require("../services/messageCentral");
 const emailService = require("../services/emailService");
 
+// ============================================================
+// HELPER: Extract real client IP
+// Handles proxies (nginx, load balancers) via x-forwarded-for
+// ============================================================
+const getClientIp = (req) => {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    // x-forwarded-for can be "client, proxy1, proxy2" — take first
+    return forwarded.split(",")[0].trim();
+  }
+  return req.ip || req.connection?.remoteAddress || "unknown";
+};
 
+// ============================================================
+// PREFERRED CATEGORY
+// ============================================================
 
-// ✅ Separate top-level export — not nested inside anything
 exports.updatePreferredCategory = async (req, res) => {
   try {
     const { preferredCategory } = req.body;
@@ -26,18 +45,20 @@ exports.updatePreferredCategory = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found"
+        message: "User not found",
       });
     }
 
-    console.log(`⭐ Preferred category updated for user ${user._id}: ${preferredCategory || 'cleared'}`);
+    console.log(
+      `⭐ Preferred category updated for user ${user._id}: ${preferredCategory || "cleared"}`
+    );
 
     return res.status(200).json({
       success: true,
       message: preferredCategory
         ? `Industry preference set to "${preferredCategory}"`
         : "Industry preference cleared",
-      preferredCategory: user.preferredCategory
+      preferredCategory: user.preferredCategory,
     });
   } catch (error) {
     console.error("Update Preferred Category Error:", error);
@@ -58,12 +79,16 @@ exports.requestPasswordResetEmail = async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ success: false, message: "Email is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required" });
     }
 
     const emailRegex = /^\S+@\S+\.\S+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Please enter a valid email address" });
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
@@ -72,14 +97,17 @@ exports.requestPasswordResetEmail = async (req, res) => {
     if (!user || !user.isActive) {
       return res.status(200).json({
         success: true,
-        message: "If an account exists with this email, you will receive a password reset link.",
+        message:
+          "If an account exists with this email, you will receive a password reset link.",
       });
     }
 
     const resetToken = user.generatePasswordResetToken();
     await user.save({ validateBeforeSave: false });
 
-    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password/${resetToken}`;
+    const resetUrl = `${
+      process.env.FRONTEND_URL || "http://localhost:3000"
+    }/reset-password/${resetToken}`;
 
     const emailResult = await emailService.sendPasswordResetEmail({
       to: user.email,
@@ -103,7 +131,8 @@ exports.requestPasswordResetEmail = async (req, res) => {
 
     const responseData = {
       success: true,
-      message: "If an account exists with this email, you will receive a password reset link.",
+      message:
+        "If an account exists with this email, you will receive a password reset link.",
     };
 
     if (process.env.NODE_ENV === "development") {
@@ -126,13 +155,17 @@ exports.verifyResetToken = async (req, res) => {
     const { token } = req.params;
 
     if (!token) {
-      return res.status(400).json({ success: false, message: "Reset token is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Reset token is required" });
     }
 
     const user = await User.verifyPasswordResetToken(token);
 
     if (!user) {
-      return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid or expired reset token" });
     }
 
     return res.status(200).json({
@@ -155,15 +188,23 @@ exports.resetPasswordWithToken = async (req, res) => {
     const { token, newPassword, confirmPassword } = req.body;
 
     if (!token || !newPassword) {
-      return res.status(400).json({ success: false, message: "Token and new password are required" });
+      return res.status(400).json({
+        success: false,
+        message: "Token and new password are required",
+      });
     }
 
     if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
+      });
     }
 
     if (confirmPassword && newPassword !== confirmPassword) {
-      return res.status(400).json({ success: false, message: "Passwords do not match" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Passwords do not match" });
     }
 
     const user = await User.verifyPasswordResetToken(token);
@@ -180,7 +221,10 @@ exports.resetPasswordWithToken = async (req, res) => {
     await user.save();
 
     if (user.email) {
-      await emailService.sendPasswordChangedEmail({ to: user.email, name: user.name });
+      await emailService.sendPasswordChangedEmail({
+        to: user.email,
+        name: user.name,
+      });
     }
 
     const authToken = generateToken(user._id, "customer");
@@ -211,7 +255,9 @@ exports.sendRegistrationOtp = async (req, res) => {
     const { phone } = req.body;
 
     if (!phone) {
-      return res.status(400).json({ success: false, message: "Phone number is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone number is required" });
     }
 
     const phoneRegex = /^[6-9]\d{9}$/;
@@ -240,7 +286,9 @@ exports.sendRegistrationOtp = async (req, res) => {
       const expiresAt = new Date(pending.otpExpires);
       if (expiresAt > now) {
         const otpValiditySeconds = 300;
-        const otpSentAt = new Date(expiresAt.getTime() - otpValiditySeconds * 1000);
+        const otpSentAt = new Date(
+          expiresAt.getTime() - otpValiditySeconds * 1000
+        );
         const secondsSinceSent = Math.floor((now - otpSentAt) / 1000);
 
         if (secondsSinceSent < 30) {
@@ -255,7 +303,20 @@ exports.sendRegistrationOtp = async (req, res) => {
       }
     }
 
-    // ── Daily limit ────────────────────────────────────────
+    // ── Layer 2: IP + Phone combo check ───────────────────────
+    const clientIp = getClientIp(req);
+    const comboCheck = await checkIpPhoneComboLimit(phone, clientIp);
+
+    if (!comboCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        code: "IP_PHONE_LIMIT",
+        message:
+          "Too many OTP requests for this number from your device. Please wait 1 hour.",
+      });
+    }
+
+    // ── Layer 3: Phone daily limit ─────────────────────────────
     const limitCheck = await checkSmsOtpLimit(phone);
     if (!limitCheck.allowed) {
       return res.status(429).json({
@@ -286,9 +347,9 @@ exports.sendRegistrationOtp = async (req, res) => {
 
       if (pending) {
         pending.verificationId = verificationId;
-        pending.otpExpires     = new Date(Date.now() + timeout * 1000);
-        pending.otpAttempts    = 0;
-        pending.isVerified     = false;
+        pending.otpExpires = new Date(Date.now() + timeout * 1000);
+        pending.otpAttempts = 0;
+        pending.isVerified = false;
         await pending.save();
       } else {
         pending = await PendingRegistration.create({
@@ -298,17 +359,22 @@ exports.sendRegistrationOtp = async (req, res) => {
         });
       }
 
-      await logOtpSent(phone, "registration", verificationId);
+      // ── Log with IP ────────────────────────────────────────
+      await logOtpSent(phone, "registration", verificationId, clientIp);
 
       return res.status(200).json({
         success: true,
         message: "OTP sent successfully",
-        data: { phone, timeout, expiresIn: `${Math.floor(timeout / 60)} minutes` },
+        data: {
+          phone,
+          timeout,
+          expiresIn: `${Math.floor(timeout / 60)} minutes`,
+        },
       });
     } catch (providerError) {
       console.error("Message Central Error:", providerError);
       const responseCode = providerError?.response?.data?.responseCode;
-      const message      = providerError?.response?.data?.message;
+      const message = providerError?.response?.data?.message;
 
       if (responseCode === 506 || message === "REQUEST_ALREADY_EXISTS") {
         return res.status(429).json({
@@ -335,7 +401,9 @@ exports.verifyRegistrationOtp = async (req, res) => {
     const { phone, otp } = req.body;
 
     if (!phone || !otp) {
-      return res.status(400).json({ success: false, message: "Phone and OTP are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone and OTP are required" });
     }
 
     const pending = await PendingRegistration.findOne({ phone });
@@ -387,8 +455,8 @@ exports.verifyRegistrationOtp = async (req, res) => {
     }
 
     if (result.verificationStatus === "VERIFICATION_COMPLETED") {
-      pending.isVerified  = true;
-      pending.verifiedAt  = new Date();
+      pending.isVerified = true;
+      pending.verifiedAt = new Date();
       pending.otpAttempts = 0;
       await pending.save();
 
@@ -439,7 +507,15 @@ exports.verifyRegistrationOtp = async (req, res) => {
 
 exports.completeRegistration = async (req, res) => {
   try {
-    const { phone, name, password, businessName, businessType, gstNumber, email } = req.body;
+    const {
+      phone,
+      name,
+      password,
+      businessName,
+      businessType,
+      gstNumber,
+      email,
+    } = req.body;
 
     if (!phone || !name || !password) {
       return res.status(400).json({
@@ -455,7 +531,10 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    const pending = await PendingRegistration.findOne({ phone, isVerified: true });
+    const pending = await PendingRegistration.findOne({
+      phone,
+      isVerified: true,
+    });
 
     if (!pending) {
       return res.status(400).json({
@@ -464,7 +543,7 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
-    const verifiedAt    = new Date(pending.verifiedAt);
+    const verifiedAt = new Date(pending.verifiedAt);
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
     if (verifiedAt < tenMinutesAgo) {
@@ -598,14 +677,14 @@ exports.login = async (req, res) => {
       { _id: user._id },
       {
         $set: {
-          lastLoginAt:      new Date(),
+          lastLoginAt: new Date(),
           otpCycleFailures: 0,
-          otpLockedUntil:   null,
+          otpLockedUntil: null,
         },
       }
     );
 
-    const token       = generateToken(user._id, "customer");
+    const token = generateToken(user._id, "customer");
     const updatedUser = await User.findById(user._id);
 
     console.log(`✅ Login successful: ${user.phone}`);
@@ -630,7 +709,9 @@ exports.sendLoginOtp = async (req, res) => {
     const { phone } = req.body;
 
     if (!phone) {
-      return res.status(400).json({ success: false, message: "Phone number is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone number is required" });
     }
 
     const user = await User.findOne({ phone });
@@ -669,7 +750,9 @@ exports.sendLoginOtp = async (req, res) => {
       const expiresAt = new Date(user.loginOtpExpires);
       if (expiresAt > now) {
         const otpValiditySeconds = 300;
-        const otpSentAt = new Date(expiresAt.getTime() - otpValiditySeconds * 1000);
+        const otpSentAt = new Date(
+          expiresAt.getTime() - otpValiditySeconds * 1000
+        );
         const secondsSinceSent = Math.floor((now - otpSentAt) / 1000);
 
         if (secondsSinceSent < 30) {
@@ -684,6 +767,20 @@ exports.sendLoginOtp = async (req, res) => {
       }
     }
 
+    // ── Layer 2: IP + Phone combo check ───────────────────────
+    const clientIp = getClientIp(req);
+    const comboCheck = await checkIpPhoneComboLimit(phone, clientIp);
+
+    if (!comboCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        code: "IP_PHONE_LIMIT",
+        message:
+          "Too many OTP requests for this number from your device. Please wait 1 hour.",
+      });
+    }
+
+    // ── Layer 3: Phone daily limit ─────────────────────────────
     const limitCheck = await checkSmsOtpLimit(phone);
     if (!limitCheck.allowed) {
       return res.status(429).json({
@@ -716,23 +813,28 @@ exports.sendLoginOtp = async (req, res) => {
         {
           $set: {
             loginVerificationId: verificationId,
-            loginOtpExpires:     new Date(Date.now() + timeout * 1000),
-            loginOtpAttempts:    0,
+            loginOtpExpires: new Date(Date.now() + timeout * 1000),
+            loginOtpAttempts: 0,
           },
         }
       );
 
-      await logOtpSent(phone, "login", verificationId);
+      // ── Log with IP ────────────────────────────────────────
+      await logOtpSent(phone, "login", verificationId, clientIp);
 
       return res.status(200).json({
         success: true,
         message: "OTP sent successfully",
-        data: { phone, timeout, expiresIn: `${Math.floor(timeout / 60)} minutes` },
+        data: {
+          phone,
+          timeout,
+          expiresIn: `${Math.floor(timeout / 60)} minutes`,
+        },
       });
     } catch (providerError) {
       console.error("Message Central Error:", providerError);
       const responseCode = providerError?.response?.data?.responseCode;
-      const message      = providerError?.response?.data?.message;
+      const message = providerError?.response?.data?.message;
 
       if (responseCode === 506 || message === "REQUEST_ALREADY_EXISTS") {
         return res.status(429).json({
@@ -759,7 +861,9 @@ exports.verifyLoginOtp = async (req, res) => {
     const { phone, otp } = req.body;
 
     if (!phone || !otp) {
-      return res.status(400).json({ success: false, message: "Phone and OTP are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone and OTP are required" });
     }
 
     const user = await User.findOne({ phone });
@@ -824,16 +928,16 @@ exports.verifyLoginOtp = async (req, res) => {
         {
           $set: {
             loginVerificationId: undefined,
-            loginOtpExpires:     undefined,
-            loginOtpAttempts:    0,
-            lastLoginAt:         new Date(),
-            otpCycleFailures:    0,
-            otpLockedUntil:      null,
+            loginOtpExpires: undefined,
+            loginOtpAttempts: 0,
+            lastLoginAt: new Date(),
+            otpCycleFailures: 0,
+            otpLockedUntil: null,
           },
         }
       );
 
-      const token       = generateToken(user._id, "customer");
+      const token = generateToken(user._id, "customer");
       const updatedUser = await User.findById(user._id);
 
       return res.status(200).json({
@@ -843,8 +947,8 @@ exports.verifyLoginOtp = async (req, res) => {
       });
     }
 
-    const respCode      = Number(result.responseCode || result.response_code || 0);
-    const newAttempts   = user.loginOtpAttempts + 1;
+    const respCode = Number(result.responseCode || result.response_code || 0);
+    const newAttempts = user.loginOtpAttempts + 1;
     const newCycleFailures =
       newAttempts >= 3
         ? (user.otpCycleFailures || 0) + 1
@@ -855,9 +959,11 @@ exports.verifyLoginOtp = async (req, res) => {
       { _id: user._id },
       {
         $set: {
-          loginOtpAttempts:  newAttempts,
-          otpCycleFailures:  newCycleFailures,
-          ...(shouldLock && { otpLockedUntil: new Date(Date.now() + 60 * 60 * 1000) }),
+          loginOtpAttempts: newAttempts,
+          otpCycleFailures: newCycleFailures,
+          ...(shouldLock && {
+            otpLockedUntil: new Date(Date.now() + 60 * 60 * 1000),
+          }),
         },
       }
     );
@@ -912,7 +1018,9 @@ exports.sendForgotPasswordOtp = async (req, res) => {
     const { phone } = req.body;
 
     if (!phone) {
-      return res.status(400).json({ success: false, message: "Phone number is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone number is required" });
     }
 
     const user = await User.findOne({ phone });
@@ -927,11 +1035,14 @@ exports.sendForgotPasswordOtp = async (req, res) => {
 
     const now = new Date();
 
+    // ── Cooldown check ─────────────────────────────────────
     if (user.resetOtpExpires && user.resetVerificationId) {
       const expiresAt = new Date(user.resetOtpExpires);
       if (expiresAt > now) {
         const otpValiditySeconds = 300;
-        const otpSentAt = new Date(expiresAt.getTime() - otpValiditySeconds * 1000);
+        const otpSentAt = new Date(
+          expiresAt.getTime() - otpValiditySeconds * 1000
+        );
         const secondsSinceSent = Math.floor((now - otpSentAt) / 1000);
 
         if (secondsSinceSent < 30) {
@@ -946,6 +1057,20 @@ exports.sendForgotPasswordOtp = async (req, res) => {
       }
     }
 
+    // ── Layer 2: IP + Phone combo check ───────────────────────
+    const clientIp = getClientIp(req);
+    const comboCheck = await checkIpPhoneComboLimit(phone, clientIp);
+
+    if (!comboCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        code: "IP_PHONE_LIMIT",
+        message:
+          "Too many OTP requests for this number from your device. Please wait 1 hour.",
+      });
+    }
+
+    // ── Layer 3: Phone daily limit ─────────────────────────────
     const limitCheck = await checkSmsOtpLimit(phone);
     if (!limitCheck.allowed) {
       return res.status(429).json({
@@ -978,23 +1103,28 @@ exports.sendForgotPasswordOtp = async (req, res) => {
         {
           $set: {
             resetVerificationId: verificationId,
-            resetOtpExpires:     new Date(Date.now() + timeout * 1000),
-            resetOtpAttempts:    0,
+            resetOtpExpires: new Date(Date.now() + timeout * 1000),
+            resetOtpAttempts: 0,
           },
         }
       );
 
-      await logOtpSent(phone, "reset_password", verificationId);
+      // ── Log with IP ────────────────────────────────────────
+      await logOtpSent(phone, "reset_password", verificationId, clientIp);
 
       return res.status(200).json({
         success: true,
         message: "OTP sent successfully",
-        data: { phone, timeout, expiresIn: `${Math.floor(timeout / 60)} minutes` },
+        data: {
+          phone,
+          timeout,
+          expiresIn: `${Math.floor(timeout / 60)} minutes`,
+        },
       });
     } catch (providerError) {
       console.error("Message Central Error:", providerError);
       const responseCode = providerError?.response?.data?.responseCode;
-      const message      = providerError?.response?.data?.message;
+      const message = providerError?.response?.data?.message;
 
       if (responseCode === 506 || message === "REQUEST_ALREADY_EXISTS") {
         return res.status(429).json({
@@ -1097,14 +1227,14 @@ exports.resetPassword = async (req, res) => {
         {
           $set: {
             resetVerificationId: undefined,
-            resetOtpExpires:     undefined,
-            resetOtpAttempts:    0,
+            resetOtpExpires: undefined,
+            resetOtpAttempts: 0,
           },
         }
       );
 
       // Re-fetch then save password (triggers bcrypt pre-save hook)
-      const freshUser  = await User.findById(user._id);
+      const freshUser = await User.findById(user._id);
       freshUser.password = newPassword;
       await freshUser.save({ validateBeforeSave: false });
 
@@ -1121,9 +1251,14 @@ exports.resetPassword = async (req, res) => {
 
     const respCode = Number(result.responseCode || result.response_code || 0);
 
-    await User.updateOne({ _id: user._id }, { $inc: { resetOtpAttempts: 1 } });
+    await User.updateOne(
+      { _id: user._id },
+      { $inc: { resetOtpAttempts: 1 } }
+    );
 
-    const updatedUser = await User.findById(user._id).select("resetOtpAttempts");
+    const updatedUser = await User.findById(user._id).select(
+      "resetOtpAttempts"
+    );
 
     if (respCode === 702) {
       return res.status(400).json({
@@ -1167,15 +1302,17 @@ exports.getMe = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     const creditSummary = user.getCreditSummary();
 
     const profileData = {
       ...user.getPublicProfile(),
-      creditUtilization:   creditSummary.creditUtilization,
-      totalPaid:           creditSummary.totalPaid,
+      creditUtilization: creditSummary.creditUtilization,
+      totalPaid: creditSummary.totalPaid,
       creditBlockedReason: creditSummary.creditBlockedReason,
     };
 
@@ -1197,14 +1334,16 @@ exports.updateProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
-    if (name         !== undefined) user.name         = name;
-    if (email        !== undefined) user.email        = email;
+    if (name !== undefined) user.name = name;
+    if (email !== undefined) user.email = email;
     if (businessName !== undefined) user.businessName = businessName;
     if (businessType !== undefined) user.businessType = businessType;
-    if (gstNumber    !== undefined) user.gstNumber    = gstNumber;
+    if (gstNumber !== undefined) user.gstNumber = gstNumber;
 
     await user.save();
 
@@ -1276,13 +1415,15 @@ exports.updatePushToken = async (req, res) => {
     const { pushToken } = req.body;
 
     await User.findByIdAndUpdate(req.user._id, {
-      pushToken:          pushToken || null,
+      pushToken: pushToken || null,
       pushTokenUpdatedAt: new Date(),
     });
 
     return res.status(200).json({
       success: true,
-      message: pushToken ? "Push token updated successfully" : "Push token cleared successfully",
+      message: pushToken
+        ? "Push token updated successfully"
+        : "Push token cleared successfully",
     });
   } catch (error) {
     console.error("Update Push Token Error:", error);
@@ -1296,22 +1437,29 @@ exports.updatePushToken = async (req, res) => {
 
 exports.getNotificationPreferences = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("notificationPreferences");
+    const user = await User.findById(req.user._id).select(
+      "notificationPreferences"
+    );
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     const prefs = {
-      pushEnabled:          user.notificationPreferences?.pushEnabled          ?? true,
-      inAppEnabled:         user.notificationPreferences?.inAppEnabled         ?? true,
-      orderUpdates:         user.notificationPreferences?.orderUpdates         ?? true,
-      paymentNotifications: user.notificationPreferences?.paymentNotifications ?? true,
-      promotions:           user.notificationPreferences?.promotions           ?? true,
-      announcements:        user.notificationPreferences?.announcements        ?? true,
+      pushEnabled: user.notificationPreferences?.pushEnabled ?? true,
+      inAppEnabled: user.notificationPreferences?.inAppEnabled ?? true,
+      orderUpdates: user.notificationPreferences?.orderUpdates ?? true,
+      paymentNotifications:
+        user.notificationPreferences?.paymentNotifications ?? true,
+      promotions: user.notificationPreferences?.promotions ?? true,
+      announcements: user.notificationPreferences?.announcements ?? true,
     };
 
-    return res.status(200).json({ success: true, data: { preferences: prefs } });
+    return res
+      .status(200)
+      .json({ success: true, data: { preferences: prefs } });
   } catch (error) {
     console.error("Get Notification Preferences Error:", error);
     res.status(500).json({
@@ -1338,33 +1486,44 @@ exports.updateNotificationPreferences = async (req, res) => {
     );
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     if (!user.notificationPreferences) {
       user.notificationPreferences = {};
     }
 
-    if (pushEnabled          !== undefined) user.notificationPreferences.pushEnabled          = pushEnabled;
-    if (inAppEnabled         !== undefined) user.notificationPreferences.inAppEnabled         = inAppEnabled;
-    if (orderUpdates         !== undefined) user.notificationPreferences.orderUpdates         = orderUpdates;
-    if (paymentNotifications !== undefined) user.notificationPreferences.paymentNotifications = paymentNotifications;
-    if (promotions           !== undefined) user.notificationPreferences.promotions           = promotions;
-    if (announcements        !== undefined) user.notificationPreferences.announcements        = announcements;
+    if (pushEnabled !== undefined)
+      user.notificationPreferences.pushEnabled = pushEnabled;
+    if (inAppEnabled !== undefined)
+      user.notificationPreferences.inAppEnabled = inAppEnabled;
+    if (orderUpdates !== undefined)
+      user.notificationPreferences.orderUpdates = orderUpdates;
+    if (paymentNotifications !== undefined)
+      user.notificationPreferences.paymentNotifications = paymentNotifications;
+    if (promotions !== undefined)
+      user.notificationPreferences.promotions = promotions;
+    if (announcements !== undefined)
+      user.notificationPreferences.announcements = announcements;
 
     user.markModified("notificationPreferences");
     await user.save({ validateBeforeSave: false });
 
     const prefs = {
-      pushEnabled:          user.notificationPreferences.pushEnabled          ?? true,
-      inAppEnabled:         user.notificationPreferences.inAppEnabled         ?? true,
-      orderUpdates:         user.notificationPreferences.orderUpdates         ?? true,
-      paymentNotifications: user.notificationPreferences.paymentNotifications ?? true,
-      promotions:           user.notificationPreferences.promotions           ?? true,
-      announcements:        user.notificationPreferences.announcements        ?? true,
+      pushEnabled: user.notificationPreferences.pushEnabled ?? true,
+      inAppEnabled: user.notificationPreferences.inAppEnabled ?? true,
+      orderUpdates: user.notificationPreferences.orderUpdates ?? true,
+      paymentNotifications:
+        user.notificationPreferences.paymentNotifications ?? true,
+      promotions: user.notificationPreferences.promotions ?? true,
+      announcements: user.notificationPreferences.announcements ?? true,
     };
 
-    console.log(`🔔 Notification preferences updated for user ${user._id}`);
+    console.log(
+      `🔔 Notification preferences updated for user ${user._id}`
+    );
 
     return res.status(200).json({
       success: true,
@@ -1379,10 +1538,4 @@ exports.updateNotificationPreferences = async (req, res) => {
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
-  // ✅ Closing brace is HERE — function ends properly
 };
-
-// ============================================================
-// PREFERRED CATEGORY
-// ============================================================
-
