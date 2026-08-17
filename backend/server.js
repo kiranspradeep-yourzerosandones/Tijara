@@ -88,8 +88,11 @@ app.use("/api", globalLimiter);
 // OTP limiter — tight limit on actual OTP sends (costs money)
 const otpLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,  // 1 hour
-  max: 5,                     // 5 OTP sends per hour per IP
-  message: { success: false, message: "Too many OTP requests. Please try again in 1 hour." },
+  max: 20,                    // ← was 5, now 20 (flood protection only)
+  message: {
+    success: false,
+    message: "Too many OTP requests from this network. Please try again later.",
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
