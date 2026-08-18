@@ -1414,10 +1414,16 @@ exports.updatePushToken = async (req, res) => {
   try {
     const { pushToken } = req.body;
 
+    // ✅ Log so we can confirm the endpoint is being hit
+    console.log(`🔔 updatePushToken called for user ${req.user._id}`);
+    console.log(`🔔 Token received: ${pushToken ? pushToken.substring(0, 30) + '...' : 'NULL'}`);
+
     await User.findByIdAndUpdate(req.user._id, {
       pushToken: pushToken || null,
       pushTokenUpdatedAt: new Date(),
     });
+
+    console.log(`🔔 Push token ${pushToken ? 'saved' : 'cleared'} for user ${req.user._id}`);
 
     return res.status(200).json({
       success: true,
