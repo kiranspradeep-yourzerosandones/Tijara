@@ -27,30 +27,18 @@ Notifications.setNotificationHandler({
   },
 });
 
-// ── How many times to retry on transient errors ───────────────
-const MAX_TOKEN_RETRIES  = 3;
-const RETRY_DELAY_MS     = 30_000; // 30 seconds between retries
+const MAX_TOKEN_RETRIES = 3;
+const RETRY_DELAY_MS    = 30_000;
 
-// ── Errors we consider transient (safe to retry silently) ─────
 const isTransientError = (error) => {
   const msg = error?.message || '';
   return (
-    msg.includes('503')                  ||
-    msg.includes('SERVICE_UNAVAILABLE')  ||
+    msg.includes('503')                     ||
+    msg.includes('SERVICE_UNAVAILABLE')     ||
     msg.includes('temporarily unavailable') ||
-    msg.includes('high load')            ||
-    msg.includes('Try again')            ||
+    msg.includes('high load')               ||
+    msg.includes('Try again')               ||
     msg.includes('isTransient')
-  );
-};
-
-// ── Errors we should never log (expected / harmless) ──────────
-const isSilentError = (error) => {
-  const msg = error?.message || '';
-  return (
-    msg.includes('projectId') ||
-    msg.includes('simulat')   ||
-    isTransientError(error)     // transient = log at DEBUG level only, not as ERROR
   );
 };
 
@@ -60,7 +48,7 @@ class NotificationService {
     this.notificationListener = null;
     this.responseListener     = null;
     this.navigationRef        = null;
-    this._retryTimeout        = null; // holds the retry timer so we can cancel it
+    this._retryTimeout        = null;
     this._retryCount          = 0;
   }
 
@@ -70,8 +58,18 @@ class NotificationService {
 
   // ── Public entry point ─────────────────────────────────────
   async registerForPushNotifications() {
-    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) return null;
-    if (!Device.isDevice)                 return null;
+    console.log('🔔 registerForPushNotifications called');
+    console.log('🔔 PUSH_NOTIFICATIONS flag:', ENV.FEATURES.PUSH_NOTIFICATIONS);
+    console.log('🔔 Device.isDevice:', Device.isDevice);
+
+    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) {
+      console.log('🔔 Push disabled in config — returning null');
+      return null;
+    }
+    if (!Device.isDevice) {
+      console.log('🔔 Not a physical device — returning null');
+      return null;
+    }
 
     this._retryCount = 0;
     return this._attemptRegistration();
@@ -80,18 +78,26 @@ class NotificationService {
   // ── Internal: single attempt + retry scheduling ────────────
   async _attemptRegistration() {
     try {
+      console.log('🔔 _attemptRegistration starting...');
+
       // ── 1. Permissions ──────────────────────────────────────
       const { status: existingStatus } =
         await Notifications.getPermissionsAsync();
+
+      console.log('🔔 Existing permission status:', existingStatus);
 
       let finalStatus = existingStatus;
 
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
+        console.log('🔔 Permission requested, result:', finalStatus);
       }
 
-      if (finalStatus !== 'granted') return null;
+      if (finalStatus !== 'granted') {
+        console.warn('🔔 Permission not granted — finalStatus:', finalStatus);
+        return null;
+      }
 
       // ── 2. Android notification channels ────────────────────
       if (Platform.OS === 'android') {
@@ -102,61 +108,53 @@ class NotificationService {
       const projectId =
         Constants.expoConfig?.extra?.eas?.projectId ||
         Constants.easConfig?.projectId             ||
-        null;
+        'ea84ccfa-33d3-40ac-a698-880a9554039c';     // ✅ hardcoded fallback
 
-      const tokenOptions = projectId ? { projectId } : {};
-      const tokenData    = await Notifications.getExpoPushTokenAsync(tokenOptions);
+      console.log('🔔 Using projectId:', projectId);
+      console.log('🔔 Constants.expoConfig?.extra?.eas?.projectId:',
+        Constants.expoConfig?.extra?.eas?.projectId);
+      console.log('🔔 Constants.easConfig?.projectId:',
+        Constants.easConfig?.projectId);
+
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
 
       this.expoPushToken = tokenData.data;
-      this._retryCount   = 0; // success — reset counter
+      this._retryCount   = 0;
 
+      console.log('🔔 ✅ Push token obtained:', this.expoPushToken?.substring(0, 40) + '...');
       return this.expoPushToken;
 
     } catch (error) {
+      // ✅ ALWAYS log the full error — no more silent suppression
+      console.error('❌ [NotificationService._attemptRegistration] ERROR:');
+      console.error('❌ Message:', error?.message);
+      console.error('❌ Code:', error?.code);
+      console.error('❌ Stack:', error?.stack);
+
       if (isTransientError(error)) {
-        // ── Transient: schedule a quiet retry ──────────────────
         if (this._retryCount < MAX_TOKEN_RETRIES) {
           this._retryCount++;
-          const delay = RETRY_DELAY_MS * this._retryCount; // 30s, 60s, 90s
+          const delay = RETRY_DELAY_MS * this._retryCount;
 
-          if (__DEV__) {
-            console.debug(
-              `[NotificationService] Expo token fetch failed (transient). ` +
-              `Retry ${this._retryCount}/${MAX_TOKEN_RETRIES} in ${delay / 1000}s.`
-            );
-          }
+          console.warn(
+            `[NotificationService] Transient error — retry ` +
+            `${this._retryCount}/${MAX_TOKEN_RETRIES} in ${delay / 1000}s`
+          );
 
-          // Clear any existing retry timer before scheduling a new one
           if (this._retryTimeout) clearTimeout(this._retryTimeout);
-
           this._retryTimeout = setTimeout(() => {
             this._attemptRegistration();
           }, delay);
-
         } else {
-          // Gave up after MAX retries — log quietly in dev only
-          if (__DEV__) {
-            console.debug(
-              '[NotificationService] Expo push token unavailable after ' +
-              `${MAX_TOKEN_RETRIES} retries (Expo server busy). ` +
-              'Push notifications will not work this session.'
-            );
-          }
+          console.warn(
+            '[NotificationService] Gave up after max retries (Expo server busy)'
+          );
         }
-
-        return null; // Don't propagate — not our bug
+        return null;
       }
 
-      // ── Non-transient, non-silent: log properly ────────────
-      if (!isSilentError(error)) {
-  console.error('❌ [NotificationService.register] FULL ERROR:', error);
-  console.error('❌ Error message:', error?.message);
-  console.error('❌ Error code:', error?.code);
-  console.error('❌ Error stack:', error?.stack);
-
-  logError('NotificationService.register', error);
-}
-
+      // Non-transient error — log and return null
+      logError('NotificationService.register', error);
       return null;
     }
   }
@@ -239,12 +237,10 @@ class NotificationService {
           this.navigationRef.navigate('OrderDetail', { orderId: data.orderId });
           return;
         }
-
         if (data.productId) {
           this.navigationRef.navigate('ProductDetail', { productId: data.productId });
           return;
         }
-
         if (data.actionUrl) {
           if (data.actionUrl.startsWith('order:')) {
             this.navigationRef.navigate('OrderDetail', {
@@ -263,7 +259,6 @@ class NotificationService {
             return;
           }
         }
-
         if (data.type === 'payment_reminder') {
           this.navigationRef.navigate('CreditSummary');
           return;
@@ -278,11 +273,9 @@ class NotificationService {
           });
           return;
         }
-
         if (data.screen) {
           this.navigationRef.navigate(data.screen, data.params || {});
         }
-
       } catch {
         // Navigation failed — silently ignore
       }
@@ -296,37 +289,30 @@ class NotificationService {
     try {
       const current = await Notifications.getBadgeCountAsync();
       await Notifications.setBadgeCountAsync(current + 1);
-    } catch {
-      // Not supported on all devices
-    }
+    } catch {}
   }
 
   async clearBadge() {
     try {
       await Notifications.setBadgeCountAsync(0);
-    } catch {
-      // Silently fail
-    }
+    } catch {}
   }
 
   // ── Cleanup ────────────────────────────────────────────────
   stopListening() {
-  if (this.notificationListener) {
-    // ✅ New API: call .remove() on the subscription object directly
-    this.notificationListener.remove();
-    this.notificationListener = null;
+    if (this.notificationListener) {
+      this.notificationListener.remove();
+      this.notificationListener = null;
+    }
+    if (this.responseListener) {
+      this.responseListener.remove();
+      this.responseListener = null;
+    }
+    if (this._retryTimeout) {
+      clearTimeout(this._retryTimeout);
+      this._retryTimeout = null;
+    }
   }
-  if (this.responseListener) {
-    this.responseListener.remove();
-    this.responseListener = null;
-  }
-
-  // Cancel any pending retry timer
-  if (this._retryTimeout) {
-    clearTimeout(this._retryTimeout);
-    this._retryTimeout = null;
-  }
-}
 
   // ── Helpers ────────────────────────────────────────────────
   async getLastNotificationResponse() {
@@ -343,9 +329,7 @@ class NotificationService {
         content: { title, body, data, sound: 'default', badge: 1 },
         trigger: seconds === 0 ? null : { seconds },
       });
-    } catch {
-      // Silently fail
-    }
+    } catch {}
   }
 
   async sendTestNotification() {

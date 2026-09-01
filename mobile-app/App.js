@@ -22,27 +22,20 @@ export default function App() {
   const isAuthenticated  = useAuthStore((state) => state.isAuthenticated);
   const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
 
-  // ── App initialization ─────────────────────────────────────
   useEffect(() => {
     networkUtils.startMonitoring();
-
     const init = async () => {
       try {
         await restoreSession();
-      } catch {
-        // Session restore failure is non-fatal — app continues as guest
-      }
+      } catch {}
     };
-
     init();
-
     return () => {
       networkUtils.stopMonitoring();
       notificationService.stopListening();
     };
   }, []);
 
-  // ── Clear badge / refresh count when app comes to foreground ─
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (
@@ -56,11 +49,9 @@ export default function App() {
       }
       appStateRef.current = nextState;
     });
-
     return () => subscription.remove();
   }, [isAuthenticated]);
 
-  // ── Push notifications setup (only when authenticated) ──────
   useEffect(() => {
     if (isAuthenticated) {
       setupPushNotifications();
@@ -68,27 +59,36 @@ export default function App() {
   }, [isAuthenticated]);
 
   const setupPushNotifications = async () => {
-    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) return;
+    if (!ENV.FEATURES.PUSH_NOTIFICATIONS) {
+      console.log('🔔 Push notifications disabled in ENV config');
+      return;
+    }
 
     try {
+      console.log('🔔 setupPushNotifications starting...');
+
       if (navigationRef.current) {
         notificationService.setNavigationRef(navigationRef.current);
       }
 
+      console.log('🔔 Calling registerForPushNotifications...');
       const token = await notificationService.registerForPushNotifications();
+      console.log('🔔 Token result:', token ?? 'NULL - no token returned');
 
       if (token) {
         try {
+          console.log('🔔 Sending token to backend...');
           await updatePushToken(token);
-        } catch {
-          // Non-critical
+          console.log('🔔 Token sent to backend successfully');
+        } catch (e) {
+          console.warn('🔔 Failed to send token to backend:', e?.message);
         }
+      } else {
+        console.warn('🔔 registerForPushNotifications returned null/undefined');
       }
 
       notificationService.startListening(
-        () => {
-          fetchUnreadCount().catch(() => {});
-        },
+        () => { fetchUnreadCount().catch(() => {}); },
         () => {}
       );
 
@@ -98,8 +98,8 @@ export default function App() {
           notificationService.handleNotificationResponse(lastResponse);
         }, 1000);
       }
-    } catch {
-      // Non-critical
+    } catch (e) {
+      console.error('🔔 setupPushNotifications CAUGHT ERROR:', e?.message, e);
     }
   };
 

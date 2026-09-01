@@ -515,6 +515,7 @@ exports.completeRegistration = async (req, res) => {
       businessType,
       gstNumber,
       email,
+      preferredCategory, // ✅ Accept preferred category from body
     } = req.body;
 
     if (!phone || !name || !password) {
@@ -562,6 +563,7 @@ exports.completeRegistration = async (req, res) => {
       });
     }
 
+    // ✅ Save the customer with their selected industry preference
     const user = await User.create({
       name,
       phone,
@@ -570,6 +572,7 @@ exports.completeRegistration = async (req, res) => {
       businessType,
       gstNumber,
       email,
+      preferredCategory: preferredCategory || null,
       isPhoneVerified: true,
       isActive: true,
     });
@@ -578,7 +581,7 @@ exports.completeRegistration = async (req, res) => {
 
     await PendingRegistration.deleteOne({ phone });
 
-    console.log(`✅ New customer registered: ${user.phone}`);
+    console.log(`✅ New customer registered with preference [${user.preferredCategory || 'None'}]: ${user.phone}`);
 
     return res.status(201).json({
       success: true,
@@ -603,7 +606,6 @@ exports.completeRegistration = async (req, res) => {
     });
   }
 };
-
 // ============================================================
 // LOGIN FLOW
 // ============================================================
