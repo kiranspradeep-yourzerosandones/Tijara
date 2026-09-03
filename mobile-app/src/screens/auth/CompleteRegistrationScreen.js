@@ -15,10 +15,7 @@ import {
   FlatList,
   ActivityIndicator,
   Pressable,
-<<<<<<< HEAD
-=======
   StatusBar,
->>>>>>> 218207a3f53c183ca8d7c13f57daa798b6654532
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
@@ -102,14 +99,8 @@ const CompleteRegistrationScreen = ({ navigation, route }) => {
         businessName,
         businessType,
         gstNumber,
-<<<<<<< HEAD
-        preferredCategory, // ✅ Pass preferredCategory along to the signup process
-      });
-      // Navigation handled automatically by RootNavigator
-=======
         preferredCategory,
       });
->>>>>>> 218207a3f53c183ca8d7c13f57daa798b6654532
     } catch (err) {
       Alert.alert('Registration Failed', err.message || 'Something went wrong');
     }

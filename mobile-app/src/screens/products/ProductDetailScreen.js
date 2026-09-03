@@ -359,44 +359,6 @@ const ProductDetailScreen = ({ navigation, route }) => {
         <View style={{ height: 110 + Math.max(insets.bottom, 16) }} />
       </ScrollView>
 
-<<<<<<< HEAD
-      {/* ── Bottom Action Bar ─────────────────────────────── */}
-
-{product.inStock && (
-  <View style={styles.bottomBar}>
-    {isInCart ? (
-      <View style={styles.cartStepperRow}>
-        {/* Cart Stepper */}
-        <View style={styles.cartStepper}>
-          <TouchableOpacity
-            style={styles.stepperBtnMinus}
-            onPress={handleCartDecrease}
-            disabled={isCartLoading}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={cartQuantity <= min ? 'trash-outline' : 'remove'}
-              size={18}
-              color={COLORS.white}
-            />
-          </TouchableOpacity>
-
-          <View style={styles.stepperCount}>
-            <Text style={styles.stepperCountText}>{cartQuantity}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.stepperBtnPlus,
-              cartQuantity >= max && styles.stepperBtnDisabled,
-            ]}
-            onPress={handleCartIncrease}
-            disabled={isCartLoading || cartQuantity >= max}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={18} color={COLORS.white} />
-          </TouchableOpacity>
-=======
       {/* ── Bottom Action Bar (Clearance Calibrated) ─────────────── */}
       {product.inStock && (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -504,81 +466,8 @@ const ProductDetailScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
           )}
->>>>>>> 218207a3f53c183ca8d7c13f57daa798b6654532
         </View>
-
-        {/* View Cart */}
-        <TouchableOpacity
-          style={styles.goToCartBtn}
-          onPress={() => navigation.navigate('Cart')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="cart" size={18} color={COLORS.black} />
-          <Text style={styles.goToCartText}>View Cart</Text>
-        </TouchableOpacity>
-      </View>
-    ) : (
-      <View style={styles.addToCartRow}>
-        {/* Quantity Stepper */}
-        <View style={styles.localStepper}>
-          <TouchableOpacity
-            style={[
-              styles.localStepperBtn,
-              quantity <= min && styles.localStepperBtnDisabled,
-            ]}
-            onPress={() => handleQuantityChange(-1)}
-            disabled={quantity <= min}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="remove"
-              size={16}
-              color={quantity <= min ? COLORS.gray : COLORS.textPrimary}
-            />
-          </TouchableOpacity>
-
-          <Text style={styles.localStepperCount}>{quantity}</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.localStepperBtn,
-              quantity >= max && styles.localStepperBtnDisabled,
-            ]}
-            onPress={() => handleQuantityChange(1)}
-            disabled={quantity >= max}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="add"
-              size={16}
-              color={quantity >= max ? COLORS.gray : COLORS.textPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Add to Cart */}
-        <TouchableOpacity
-          style={[
-            styles.addToCartBtn,
-            isCartLoading && styles.addToCartBtnDisabled,
-          ]}
-          onPress={handleAddToCart}
-          disabled={isCartLoading}
-          activeOpacity={0.85}
-        >
-          {isCartLoading ? (
-            <Text style={styles.addToCartBtnText}>Adding...</Text>
-          ) : (
-            <>
-              <Ionicons name="cart-outline" size={18} color={COLORS.black} />
-              <Text style={styles.addToCartBtnText}>Add to Cart</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    )}
-  </View>
-)}
+      )}
 
       {/* ✅ Toast */}
       <Toast
@@ -781,7 +670,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-    // ── Bottom Bar ──────────────────────────────────────────
+  // ── Bottom Bar ──────────────────────────────────────────
   bottomBar: {
     position:          'absolute',
     bottom:            0,
@@ -789,10 +678,6 @@ const styles = StyleSheet.create({
     right:             0,
     paddingHorizontal: SPACING.screenPadding,
     paddingTop:        SPACING.sm,
-<<<<<<< HEAD
-    paddingBottom:     SPACING.lg,
-=======
->>>>>>> 218207a3f53c183ca8d7c13f57daa798b6654532
     backgroundColor:   COLORS.white,
     borderTopWidth:    1,
     borderTopColor:    COLORS.border,
