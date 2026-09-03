@@ -1,11 +1,11 @@
 //mobile-app\src\config\env.development.js
 const DEV_ENV = {
-  API_URL: 'http://192.168.29.69:5000/api',
-  IMAGE_BASE_URL: 'http://192.168.29.69:5000',
-  SOCKET_URL: 'http://192.168.29.69:5000',
-//   API_URL: 'https://admin.tijaracorp.com/api',
-// IMAGE_BASE_URL: 'https://admin.tijaracorp.com',
-// SOCKET_URL: 'https://admin.tijaracorp.com',
+  // API_URL: 'http://192.168.29.69:5000/api',
+  // IMAGE_BASE_URL: 'http://192.168.29.69:5000',
+  // SOCKET_URL: 'http://192.168.29.69:5000',
+  API_URL: 'https://admin.tijaracorp.com/api',
+IMAGE_BASE_URL: 'https://admin.tijaracorp.com',
+SOCKET_URL: 'https://admin.tijaracorp.com',
   DEBUG: true,
   LOG_LEVEL: 'verbose',
   ENVIRONMENT: 'development',
