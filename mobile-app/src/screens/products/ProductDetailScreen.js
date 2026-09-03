@@ -9,8 +9,11 @@ import {
   Image,
   Dimensions,
   Alert,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button, Loading, Screen } from '../../components/common';
 import Toast from '../../components/common/Toast';
@@ -25,11 +28,12 @@ import {
   cleanText,
 } from '../../utils/helpers';
 
-const { width } = Dimensions.get('window');
-const IMAGE_HEIGHT = width * 0.8;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.38; // Dynamic scaling based on screen height
 
 const ProductDetailScreen = ({ navigation, route }) => {
   const { product: initialProduct, productId } = route.params || {};
+  const insets = useSafeAreaInsets();
 
   const [product, setProduct]               = useState(initialProduct);
   const [isLoading, setIsLoading]           = useState(!initialProduct);
@@ -169,21 +173,27 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
   return (
     <Screen backgroundColor={COLORS.white}>
+      {/* Dynamic Status Bar config for edge-to-edge screens */}
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        bounces={Platform.OS === 'ios'}
       >
-        {/* ── Header ─────────────────────────────────────── */}
-        <View style={styles.header}>
+        {/* ── Header (Safety Calibrated) ─────────────────── */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cartButton}
             onPress={() => navigation.navigate('Cart')}
+            activeOpacity={0.7}
           >
             <Ionicons name="cart-outline" size={24} color={COLORS.textPrimary} />
             {cartQuantity > 0 && (
@@ -194,8 +204,8 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
-        {/* ── Image Gallery ──────────────────────────────── */}
-        <View style={styles.imageContainer}>
+        {/* ── Image Gallery (Refined Layout) ──────────────── */}
+        <View style={[styles.imageContainer, { paddingTop: Math.max(insets.top, 12) + 50 }]}>
           {images.length > 0 ? (
             <Image
               source={{ uri: getImageUrl(images[selectedImageIndex]) }}
@@ -209,7 +219,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           )}
 
           {discount > 0 && (
-            <View style={styles.saleBadge}>
+            <View style={[styles.saleBadge, { top: Math.max(insets.top, 12) + 56 }]}>
               <Text style={styles.saleText}>{discount}% OFF</Text>
             </View>
           )}
@@ -334,7 +344,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
             </View>
           )}
 
-          {/* ✅ Storage — HTML stripped with cleanText */}
+          {/* Storage */}
           {product.storage && (
             <View style={styles.descriptionContainer}>
               <Text style={styles.sectionTitle}>Storage</Text>
@@ -345,119 +355,119 @@ const ProductDetailScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        <View style={styles.bottomSpacing} />
+        {/* Dynamic spacing below ScrollView content */}
+        <View style={{ height: 110 + Math.max(insets.bottom, 16) }} />
       </ScrollView>
 
-      {/* ── Bottom Action Bar ─────────────────────────────── */}
+      {/* ── Bottom Action Bar (Clearance Calibrated) ─────────────── */}
+      {product.inStock && (
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          {isInCart ? (
+            <View style={styles.cartStepperRow}>
+              {/* Cart Stepper */}
+              <View style={styles.cartStepper}>
+                <TouchableOpacity
+                  style={styles.stepperBtnMinus}
+                  onPress={handleCartDecrease}
+                  disabled={isCartLoading}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={cartQuantity <= min ? 'trash-outline' : 'remove'}
+                    size={18}
+                    color={COLORS.white}
+                  />
+                </TouchableOpacity>
 
-{product.inStock && (
-  <View style={styles.bottomBar}>
-    {isInCart ? (
-      <View style={styles.cartStepperRow}>
-        {/* Cart Stepper */}
-        <View style={styles.cartStepper}>
-          <TouchableOpacity
-            style={styles.stepperBtnMinus}
-            onPress={handleCartDecrease}
-            disabled={isCartLoading}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={cartQuantity <= min ? 'trash-outline' : 'remove'}
-              size={18}
-              color={COLORS.white}
-            />
-          </TouchableOpacity>
+                <View style={styles.stepperCount}>
+                  <Text style={styles.stepperCountText}>{cartQuantity}</Text>
+                </View>
 
-          <View style={styles.stepperCount}>
-            <Text style={styles.stepperCountText}>{cartQuantity}</Text>
-          </View>
+                <TouchableOpacity
+                  style={[
+                    styles.stepperBtnPlus,
+                    cartQuantity >= max && styles.stepperBtnDisabled,
+                  ]}
+                  onPress={handleCartIncrease}
+                  disabled={isCartLoading || cartQuantity >= max}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={18} color={COLORS.white} />
+                </TouchableOpacity>
+              </View>
 
-          <TouchableOpacity
-            style={[
-              styles.stepperBtnPlus,
-              cartQuantity >= max && styles.stepperBtnDisabled,
-            ]}
-            onPress={handleCartIncrease}
-            disabled={isCartLoading || cartQuantity >= max}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={18} color={COLORS.white} />
-          </TouchableOpacity>
-        </View>
-
-        {/* View Cart */}
-        <TouchableOpacity
-          style={styles.goToCartBtn}
-          onPress={() => navigation.navigate('Cart')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="cart" size={18} color={COLORS.black} />
-          <Text style={styles.goToCartText}>View Cart</Text>
-        </TouchableOpacity>
-      </View>
-    ) : (
-      <View style={styles.addToCartRow}>
-        {/* Quantity Stepper */}
-        <View style={styles.localStepper}>
-          <TouchableOpacity
-            style={[
-              styles.localStepperBtn,
-              quantity <= min && styles.localStepperBtnDisabled,
-            ]}
-            onPress={() => handleQuantityChange(-1)}
-            disabled={quantity <= min}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="remove"
-              size={16}
-              color={quantity <= min ? COLORS.gray : COLORS.textPrimary}
-            />
-          </TouchableOpacity>
-
-          <Text style={styles.localStepperCount}>{quantity}</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.localStepperBtn,
-              quantity >= max && styles.localStepperBtnDisabled,
-            ]}
-            onPress={() => handleQuantityChange(1)}
-            disabled={quantity >= max}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="add"
-              size={16}
-              color={quantity >= max ? COLORS.gray : COLORS.textPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Add to Cart */}
-        <TouchableOpacity
-          style={[
-            styles.addToCartBtn,
-            isCartLoading && styles.addToCartBtnDisabled,
-          ]}
-          onPress={handleAddToCart}
-          disabled={isCartLoading}
-          activeOpacity={0.85}
-        >
-          {isCartLoading ? (
-            <Text style={styles.addToCartBtnText}>Adding...</Text>
+              {/* View Cart */}
+              <TouchableOpacity
+                style={styles.goToCartBtn}
+                onPress={() => navigation.navigate('Cart')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="cart" size={18} color={COLORS.black} />
+                <Text style={styles.goToCartText}>View Cart</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <>
-              <Ionicons name="cart-outline" size={18} color={COLORS.black} />
-              <Text style={styles.addToCartBtnText}>Add to Cart</Text>
-            </>
+            <View style={styles.addToCartRow}>
+              {/* Quantity Stepper */}
+              <View style={styles.localStepper}>
+                <TouchableOpacity
+                  style={[
+                    styles.localStepperBtn,
+                    quantity <= min && styles.localStepperBtnDisabled,
+                  ]}
+                  onPress={() => handleQuantityChange(-1)}
+                  disabled={quantity <= min}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="remove"
+                    size={16}
+                    color={quantity <= min ? COLORS.gray : COLORS.textPrimary}
+                  />
+                </TouchableOpacity>
+
+                <Text style={styles.localStepperCount}>{quantity}</Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.localStepperBtn,
+                    quantity >= max && styles.localStepperBtnDisabled,
+                  ]}
+                  onPress={() => handleQuantityChange(1)}
+                  disabled={quantity >= max}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="add"
+                    size={16}
+                    color={quantity >= max ? COLORS.gray : COLORS.textPrimary}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Add to Cart */}
+              <TouchableOpacity
+                style={[
+                  styles.addToCartBtn,
+                  isCartLoading && styles.addToCartBtnDisabled,
+                ]}
+                onPress={handleAddToCart}
+                disabled={isCartLoading}
+                activeOpacity={0.85}
+              >
+                {isCartLoading ? (
+                  <Text style={styles.addToCartBtnText}>Adding...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="cart-outline" size={18} color={COLORS.black} />
+                    <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           )}
-        </TouchableOpacity>
-      </View>
-    )}
-  </View>
-)}
+        </View>
+      )}
 
       {/* ✅ Toast */}
       <Toast
@@ -478,12 +488,12 @@ const styles = StyleSheet.create({
     justifyContent:    'space-between',
     alignItems:        'center',
     paddingHorizontal: SPACING.screenPadding,
-    paddingVertical:   SPACING.md,
+    paddingVertical:   SPACING.sm,
     position:          'absolute',
-    top:    0,
-    left:   0,
-    right:  0,
-    zIndex: 10,
+    top:               0,
+    left:              0,
+    right:             0,
+    zIndex:            10,
   },
   backButton: {
     width:           44,
@@ -505,8 +515,8 @@ const styles = StyleSheet.create({
   },
   cartBadge: {
     position:        'absolute',
-    top:    -4,
-    right:  -4,
+    top:             -4,
+    right:           -4,
     backgroundColor: COLORS.primary,
     width:           20,
     height:          20,
@@ -522,12 +532,17 @@ const styles = StyleSheet.create({
 
   // ── Images ──────────────────────────────────────────────
   imageContainer: {
-    width:    width,
-    height:   IMAGE_HEIGHT,
+    width:           SCREEN_WIDTH,
+    height:          IMAGE_HEIGHT,
     backgroundColor: COLORS.card,
-    position: 'relative',
+    position:        'relative',
+    justifyContent:  'center',
+    alignItems:      'center',
   },
-  mainImage: { width: '100%', height: '100%' },
+  mainImage: { 
+    width: '100%', 
+    height: '100%',
+  },
   placeholderImage: {
     width:          '100%',
     height:         '100%',
@@ -537,12 +552,12 @@ const styles = StyleSheet.create({
   },
   saleBadge: {
     position:          'absolute',
-    top:               SPACING.lg + 50,
     left:              SPACING.screenPadding,
     backgroundColor:   COLORS.error,
     paddingHorizontal: SPACING.md,
     paddingVertical:   SPACING.xs,
     borderRadius:      SPACING.buttonRadius,
+    zIndex:            5,
   },
   saleText: {
     ...FONTS.labelSmall,
@@ -575,7 +590,7 @@ const styles = StyleSheet.create({
     overflow:     'hidden',
     borderWidth:  2,
     borderColor:  'transparent',
-    marginRight:  SPACING.sm,
+    marginRight:  SPACING.xs,
   },
   thumbnailActive: { borderColor: COLORS.primary },
   thumbnailImage:  { width: '100%', height: '100%' },
@@ -654,13 +669,15 @@ const styles = StyleSheet.create({
     flex:       1,
     lineHeight: 22,
   },
-  bottomSpacing: { height: 110 },
 
-    // ── Bottom Bar ──────────────────────────────────────────
+  // ── Bottom Bar ──────────────────────────────────────────
   bottomBar: {
+    position:          'absolute',
+    bottom:            0,
+    left:              0,
+    right:             0,
     paddingHorizontal: SPACING.screenPadding,
     paddingTop:        SPACING.sm,
-    paddingBottom:     SPACING.lg,
     backgroundColor:   COLORS.white,
     borderTopWidth:    1,
     borderTopColor:    COLORS.border,

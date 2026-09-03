@@ -15,6 +15,7 @@ import {
   FlatList,
   ActivityIndicator,
   Pressable,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING } from '../../theme';
@@ -98,9 +99,8 @@ const CompleteRegistrationScreen = ({ navigation, route }) => {
         businessName,
         businessType,
         gstNumber,
-        preferredCategory, // ✅ Pass preferredCategory along to the signup process
+        preferredCategory,
       });
-      // Navigation handled automatically by RootNavigator
     } catch (err) {
       Alert.alert('Registration Failed', err.message || 'Something went wrong');
     }
@@ -108,6 +108,7 @@ const CompleteRegistrationScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
@@ -118,10 +119,13 @@ const CompleteRegistrationScreen = ({ navigation, route }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>Complete Your Profile</Text>
-          <Text style={styles.subtitle}>
-            Set your password and business details
-          </Text>
+          {/* Top Title Section with Safe Clearance */}
+          <View style={styles.headerSection}>
+            <Text style={styles.title}>Complete Your Profile</Text>
+            <Text style={styles.subtitle}>
+              Set your password and business details
+            </Text>
+          </View>
 
           {/* Password Section */}
           <View style={styles.section}>
@@ -321,8 +325,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: SPACING.screenPadding,
+    paddingHorizontal: SPACING.screenPadding,
+    // ✅ Generous top padding dynamically calculated to avoid camera hole/notch
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 24 : 20,
     paddingBottom: SPACING.xxxl,
+  },
+  headerSection: {
+    marginBottom: SPACING.xl,
   },
   title: {
     ...FONTS.h2,
@@ -332,7 +341,6 @@ const styles = StyleSheet.create({
   subtitle: {
     ...FONTS.body,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xl,
   },
   section: {
     marginBottom: SPACING.xl,
