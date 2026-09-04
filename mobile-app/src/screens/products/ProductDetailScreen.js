@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Loading, Screen } from '../../components/common';
-import AddToCartBar from '../../components/products/AddToCartBar'; // ✅ Imported Component
+import AddToCartBar from '../../components/products/AddToCartBar';
 import Toast from '../../components/common/Toast';
 import useToast from '../../hooks/useToast';
 import { useCartStore } from '../../store';
@@ -41,14 +41,11 @@ const ProductDetailScreen = ({ navigation, route }) => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity]             = useState(1);
 
-  // ✅ Spam guards
   const addingRef   = useRef(false);
   const removingRef = useRef(false);
 
-  // ✅ Toast hook
   const { toast, showToast } = useToast();
 
-  // ✅ Global cart selectors
   const addToCart      = useCartStore((state) => state.addToCart);
   const removeFromCart = useCartStore((state) => state.removeFromCart);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
@@ -160,7 +157,6 @@ const ProductDetailScreen = ({ navigation, route }) => {
   const discount = calculateDiscount(product.compareAtPrice, product.price);
   const images   = product.images || [];
   const min      = product.minOrderQuantity || 1;
-
   const isInCart = cartQuantity > 0;
 
   return (
@@ -172,7 +168,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
         showsVerticalScrollIndicator={false}
         bounces={Platform.OS === 'ios'}
       >
-        {/* ── Header ── */}
+        {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity
             style={styles.backButton}
@@ -195,7 +191,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
-        {/* ── Image Gallery ── */}
+        {/* Images */}
         <View style={[styles.imageContainer, { paddingTop: Math.max(insets.top, 12) + 50 }]}>
           {images.length > 0 ? (
             <Image
@@ -222,7 +218,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* ── Thumbnail Gallery ── */}
+        {/* Thumbnails */}
         {images.length > 1 && (
           <ScrollView
             horizontal
@@ -248,7 +244,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </ScrollView>
         )}
 
-        {/* ── Product Info ── */}
+        {/* Info */}
         <View style={styles.infoContainer}>
           {product.category && (
             <Text style={styles.category}>{product.category}</Text>
@@ -268,7 +264,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
             )}
           </View>
 
-          {/* Stock Status */}
+          {/* Stock */}
           <View style={styles.stockContainer}>
             <View
               style={[
@@ -302,7 +298,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
             )}
           </View>
 
-          {/* Details & Specs */}
+          {/* Details */}
           {product.description && (
             <View style={styles.descriptionContainer}>
               <Text style={styles.sectionTitle}>Description</Text>
@@ -343,25 +339,23 @@ const ProductDetailScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* Dynamic spacing below ScrollView content */}
         <View style={{ height: 110 + Math.max(insets.bottom, 16) }} />
       </ScrollView>
 
-      {/* ── Standalone Bottom Action Bar Component ── */}
+      {/* Bottom Cart Bar */}
       <AddToCartBar
-        product={product}
-        isInCart={isInCart}
-        cartQuantity={cartQuantity}
-        quantity={quantity}
-        isCartLoading={isCartLoading}
-        onCartDecrease={handleCartDecrease}
-        onCartIncrease={handleCartIncrease}
-        onQuantityChange={handleQuantityChange}
-        onAddToCart={handleAddToCart}
-        onGoToCart={() => navigation.navigate('Cart')}
-      />
+  product={product}
+  isInCart={isInCart}
+  cartQuantity={cartQuantity}
+  quantity={quantity}
+  isCartLoading={isCartLoading}
+  onCartDecrease={handleCartDecrease}
+  onCartIncrease={handleCartIncrease}
+  onQuantityChange={handleQuantityChange}
+  onAddToCart={handleAddToCart}
+  onGoToCart={() => navigation.navigate('Cart')}
+/>
 
-      {/* Toast Alert System */}
       <Toast
         message={toast.message}
         type={toast.type}
@@ -373,7 +367,6 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   scrollView: { flex: 1 },
-
   header: {
     flexDirection:     'row',
     justifyContent:    'space-between',
@@ -397,7 +390,6 @@ const styles = StyleSheet.create({
   },
   cartButton: {
     width:           44,
-    height:          '100%',
     height:          44,
     borderRadius:    22,
     backgroundColor: COLORS.white,
