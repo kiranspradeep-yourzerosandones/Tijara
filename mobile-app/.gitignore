@@ -1,27 +1,22 @@
-# -----------------------------
 # Dependencies
-# -----------------------------
 node_modules/
 **/node_modules/
 
-# -----------------------------
 # Environment variables
-# -----------------------------
 .env
 .env.*
 !.env.example
 
-# -----------------------------
-# Next.js build files
-# -----------------------------
-.next/
-out/
-build/
-dist/
+# Expo
+.expo/
+.expo-shared/
 
-# -----------------------------
+# Build output
+dist/
+build/
+out/
+
 # Logs
-# -----------------------------
 logs/
 *.log
 npm-debug.log*
@@ -29,101 +24,49 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# -----------------------------
 # Cache
-# -----------------------------
 .cache/
 .parcel-cache/
+coverage/
 
-# -----------------------------
-# OS files
-# -----------------------------
+# OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# -----------------------------
 # Editor / IDE
-# -----------------------------
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# -----------------------------
-# Testing
-# -----------------------------
-coverage/
-
-# -----------------------------
 # Temporary files
-# -----------------------------
 tmp/
 temp/
-
-# -----------------------------
-# Package lock backups
-# -----------------------------
 *.tgz
 
-# -----------------------------
+# TypeScript
+*.tsbuildinfo
+
 # Firebase / Google
-# -----------------------------
 GoogleService-Info.plist
 google-services.json
 **/google-services.json
 
-# -----------------------------
-# Android
-# -----------------------------
-*.keystore
-!debug.keystore
-*.jks
-
-# -----------------------------
-# iOS
-# -----------------------------
-ios/GoogleService-Info.plist
-*.p12
-*.mobileprovision
-
-# -----------------------------
-# Expo
-# -----------------------------
-.expo/
-.expo-shared/
-
-<<<<<<< HEAD
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-# generated native folders
-/ios
-/android
-
-*.json
-!package.json
-!eas.json
-=======
-# -----------------------------
-# React Native
-# -----------------------------
+# Android local/build files
 android/local.properties
 android/.gradle/
 android/app/debug/
 android/app/release/
+*.keystore
+*.jks
+!debug.keystore
+
+# iOS generated/build files
+/ios
+/android
 ios/Pods/
 ios/build/
->>>>>>> 218207a3f53c183ca8d7c13f57daa798b6654532
+*.p12
+*.mobileprovision
+*.pem
