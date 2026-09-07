@@ -114,6 +114,8 @@ yarn-error.*
 /android
 
 *.json
+!package.json
+!eas.json
 =======
 # -----------------------------
 # React Native
