@@ -54,15 +54,13 @@ const CartStack = () => (
   </Stack.Navigator>
 );
 
-// ── Profile Stack ─────────────────────────────────────────
+// ── Profile Stack ──
 const ProfileStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="ProfileMain"             component={ProfileScreen} />
     <Stack.Screen name="EditProfile"             component={EditProfileScreen} />
     <Stack.Screen name="ChangePassword"          component={ChangePasswordScreen} />  
     <Stack.Screen name="LocationList"            component={LocationListScreen} />
-    <Stack.Screen name="AddLocation"             component={AddLocationScreen} />
-    <Stack.Screen name="EditLocation"            component={EditLocationScreen} />
     <Stack.Screen name="CreditSummary"           component={CreditSummaryScreen} />
     <Stack.Screen name="PaymentHistory"          component={PaymentHistoryScreen} />
     <Stack.Screen name="Notifications"           component={NotificationScreen} />
@@ -154,10 +152,11 @@ const TabNavigator = () => (
   </Tab.Navigator>
 );
 
-// ── Root App Navigator ────────────────────────────────────
+// ── Root App Navigator (AddLocation/EditLocation Exposed Globally Here) ──
 const AppNavigator = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="MainTabs" component={TabNavigator} />
+    
     <Stack.Screen
       name="ProductDetail"
       component={ProductDetailScreen}
@@ -186,6 +185,18 @@ const AppNavigator = () => (
     <Stack.Screen
       name="ProductList"
       component={ProductListScreen}
+      options={{ presentation: 'card' }}
+    />
+
+    {/* ✅ Exposing Location fields to the Parent Root Stack */}
+    <Stack.Screen
+      name="AddLocation"
+      component={AddLocationScreen}
+      options={{ presentation: 'card' }}
+    />
+    <Stack.Screen
+      name="EditLocation"
+      component={EditLocationScreen}
       options={{ presentation: 'card' }}
     />
   </Stack.Navigator>

@@ -10,7 +10,7 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.yourzerosandones.tijara",
       "infoPlist": {
         "UIBackgroundModes": [
