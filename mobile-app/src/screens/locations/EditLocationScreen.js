@@ -6,13 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Switch,
   TextInput,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING } from '../../theme';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button, Input, Screen } from '../../components/common';
 import { locationsAPI } from '../../api';
 import { validateLocationForm } from '../../utils/validation';
@@ -40,10 +40,63 @@ const EditLocationScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
+  // Custom dialog state (replaces native Alert)
+  const [dialog, setDialog] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    isSuccess: false,
+    showCancel: false,
+    confirmText: 'OK',
+    cancelText: 'Cancel',
+    confirmColor: COLORS.primary,
+    icon: 'alert-circle-outline',
+    iconColor: COLORS.primary,
+    onConfirm: null,
+    onCancel: null,
+  });
+
+  const closeDialog = () => {
+    setDialog((prev) => ({ ...prev, visible: false }));
+  };
+
+  const showAlert = ({ title, message, isSuccess = false, onConfirm = null }) => {
+    setDialog({
+      visible: true,
+      title,
+      message,
+      isSuccess,
+      showCancel: false,
+      confirmText: 'OK',
+      confirmColor: isSuccess ? COLORS.primary : COLORS.error,
+      icon: isSuccess ? 'checkmark-circle-outline' : 'alert-circle-outline',
+      iconColor: isSuccess ? (COLORS.success || '#22C55E') : COLORS.error,
+      onConfirm,
+      onCancel: null,
+    });
+  };
+
+  const showConfirm = ({ title, message, confirmText = 'Delete', cancelText = 'Cancel', onConfirm }) => {
+    setDialog({
+      visible: true,
+      title,
+      message,
+      isSuccess: false,
+      showCancel: true,
+      confirmText,
+      cancelText,
+      confirmColor: COLORS.error,
+      icon: 'trash-outline',
+      iconColor: COLORS.error,
+      onConfirm,
+      onCancel: closeDialog,
+    });
+  };
+
   const updateField = (field, value) => {
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         [parent]: {
           ...prev[parent],
@@ -51,11 +104,11 @@ const EditLocationScreen = ({ navigation, route }) => {
         },
       }));
     } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
+      setFormData((prev) => ({ ...prev, [field]: value }));
     }
-    
+
     if (errors[field] || errors[field.split('.')[1]]) {
-      setErrors(prev => {
+      setErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[field];
         delete newErrors[field.split('.')[1]];
@@ -66,7 +119,7 @@ const EditLocationScreen = ({ navigation, route }) => {
 
   const handleSubmit = async () => {
     const validation = validateLocationForm(formData);
-    
+
     if (!validation.isValid) {
       setErrors(validation.errors);
       return;
@@ -76,36 +129,44 @@ const EditLocationScreen = ({ navigation, route }) => {
 
     try {
       await locationsAPI.updateLocation(location._id, formData);
-      Alert.alert('Success', 'Address updated successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showAlert({
+        title: 'Address Updated',
+        message: 'Your address has been updated successfully.',
+        isSuccess: true,
+        onConfirm: () => navigation.goBack(),
+      });
     } catch (error) {
-      Alert.alert('Error', error.message);
+      showAlert({
+        title: 'Update Failed',
+        message: error?.message || 'Failed to update address. Please try again.',
+        isSuccess: false,
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Address',
-      'Are you sure you want to delete this address?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await locationsAPI.deleteLocation(location._id);
-              navigation.goBack();
-            } catch (error) {
-              Alert.alert('Error', error.message);
-            }
-          },
-        },
-      ]
-    );
+    showConfirm({
+      title: 'Delete Address?',
+      message: 'Are you sure you want to delete this address? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        try {
+          setIsLoading(true);
+          await locationsAPI.deleteLocation(location._id);
+          navigation.goBack();
+        } catch (error) {
+          setIsLoading(false);
+          showAlert({
+            title: 'Delete Failed',
+            message: error?.message || 'Could not delete address. Please try again.',
+            isSuccess: false,
+          });
+        }
+      },
+    });
   };
 
   return (
@@ -241,7 +302,7 @@ const EditLocationScreen = ({ navigation, route }) => {
           />
         </View>
 
-        {/* Delivery Instructions - Custom Multiline Input */}
+        {/* Delivery Instructions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Instructions</Text>
           <View style={styles.textAreaContainer}>
@@ -287,9 +348,154 @@ const EditLocationScreen = ({ navigation, route }) => {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {/* ── Custom Dialog (replaces native Alert) ── */}
+      <Modal
+        visible={dialog.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDialog}
+      >
+        <View style={dialogStyles.overlay}>
+          <View style={dialogStyles.card}>
+            <View
+              style={[
+                dialogStyles.iconCircle,
+                {
+                  backgroundColor: dialog.isSuccess
+                    ? (COLORS.success || '#22C55E') + '18'
+                    : COLORS.errorLight || '#FEE2E2',
+                },
+              ]}
+            >
+              <Ionicons
+                name={dialog.icon}
+                size={32}
+                color={dialog.iconColor}
+              />
+            </View>
+
+            <Text style={dialogStyles.title}>{dialog.title}</Text>
+            <Text style={dialogStyles.message}>{dialog.message}</Text>
+
+            <View style={dialogStyles.buttonRow}>
+              {dialog.showCancel && (
+                <TouchableOpacity
+                  style={dialogStyles.cancelBtn}
+                  onPress={() => {
+                    closeDialog();
+                    if (dialog.onCancel) dialog.onCancel();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={dialogStyles.cancelBtnText}>{dialog.cancelText}</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  dialogStyles.confirmBtn,
+                  { backgroundColor: dialog.confirmColor },
+                  !dialog.showCancel && { flex: 1, marginLeft: 0 },
+                ]}
+                onPress={() => {
+                  const cb = dialog.onConfirm;
+                  closeDialog();
+                  if (cb) cb();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={dialogStyles.confirmBtnText}>{dialog.confirmText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 };
+
+const dialogStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 24,
+    width: '90%',
+    maxWidth: 340,
+    alignItems: 'center',
+    ...(SHADOWS?.large || {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 24,
+      elevation: 12,
+    }),
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: SPACING.lg,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  cancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  confirmBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+});
 
 const styles = StyleSheet.create({
   header: {
@@ -370,7 +576,6 @@ const styles = StyleSheet.create({
   halfInput: {
     flex: 1,
   },
-  // Multiline Text Area Styles
   textAreaContainer: {
     borderWidth: 1,
     borderColor: COLORS.border,

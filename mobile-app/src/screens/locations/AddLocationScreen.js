@@ -6,13 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Switch,
   TextInput,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING } from '../../theme';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../../theme';
 import { Button, Input, Screen } from '../../components/common';
 import { locationsAPI } from '../../api';
 import { validateLocationForm } from '../../utils/validation';
@@ -40,10 +40,37 @@ const AddLocationScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
+  // Custom dialog state (replaces native Alert.alert)
+  const [dialog, setDialog] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    isSuccess: false,
+    confirmText: 'OK',
+    onConfirm: null,
+  });
+
+  const showDialog = ({ title, message, isSuccess = false, confirmText = 'OK', onConfirm = null }) => {
+    setDialog({
+      visible: true,
+      title,
+      message,
+      isSuccess,
+      confirmText,
+      onConfirm,
+    });
+  };
+
+  const closeDialog = () => {
+    const cb = dialog.onConfirm;
+    setDialog((prev) => ({ ...prev, visible: false, onConfirm: null }));
+    if (cb) cb();
+  };
+
   const updateField = (field, value) => {
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         [parent]: {
           ...prev[parent],
@@ -51,11 +78,11 @@ const AddLocationScreen = ({ navigation, route }) => {
         },
       }));
     } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
+      setFormData((prev) => ({ ...prev, [field]: value }));
     }
-    
+
     if (errors[field] || errors[field.split('.')[1]]) {
-      setErrors(prev => {
+      setErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[field];
         delete newErrors[field.split('.')[1]];
@@ -66,7 +93,7 @@ const AddLocationScreen = ({ navigation, route }) => {
 
   const handleSubmit = async () => {
     const validation = validateLocationForm(formData);
-    
+
     if (!validation.isValid) {
       setErrors(validation.errors);
       return;
@@ -76,16 +103,25 @@ const AddLocationScreen = ({ navigation, route }) => {
 
     try {
       const response = await locationsAPI.createLocation(formData);
-      
+
       if (onLocationAdded) {
         onLocationAdded(response.data.location);
       }
-      
-      Alert.alert('Success', 'Address added successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+
+      showDialog({
+        title: 'Address Saved',
+        message: 'Your delivery address has been added successfully.',
+        isSuccess: true,
+        confirmText: 'OK',
+        onConfirm: () => navigation.goBack(),
+      });
     } catch (error) {
-      Alert.alert('Error', error.message);
+      showDialog({
+        title: 'Could Not Save',
+        message: error?.message || 'Something went wrong. Please try again.',
+        isSuccess: false,
+        confirmText: 'OK',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -219,7 +255,7 @@ const AddLocationScreen = ({ navigation, route }) => {
           />
         </View>
 
-        {/* Delivery Instructions - Custom Multiline Input */}
+        {/* Delivery Instructions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Instructions</Text>
           <View style={styles.textAreaContainer}>
@@ -265,9 +301,123 @@ const AddLocationScreen = ({ navigation, route }) => {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {/* ── Custom Dialog (replaces native Alert) ── */}
+      <Modal
+        visible={dialog.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDialog}
+      >
+        <View style={dialogStyles.overlay}>
+          <View style={dialogStyles.card}>
+            <View
+              style={[
+                dialogStyles.iconCircle,
+                {
+                  backgroundColor: dialog.isSuccess
+                    ? (COLORS.success || '#22C55E') + '18'
+                    : COLORS.errorLight || '#FEE2E2',
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  dialog.isSuccess
+                    ? 'checkmark-circle-outline'
+                    : 'alert-circle-outline'
+                }
+                size={32}
+                color={
+                  dialog.isSuccess
+                    ? COLORS.success || '#22C55E'
+                    : COLORS.error
+                }
+              />
+            </View>
+
+            <Text style={dialogStyles.title}>{dialog.title}</Text>
+            <Text style={dialogStyles.message}>{dialog.message}</Text>
+
+            <TouchableOpacity
+              style={[
+                dialogStyles.okButton,
+                {
+                  backgroundColor: dialog.isSuccess
+                    ? COLORS.primary
+                    : COLORS.error,
+                },
+              ]}
+              onPress={closeDialog}
+              activeOpacity={0.7}
+            >
+              <Text style={dialogStyles.okButtonText}>{dialog.confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 };
+
+const dialogStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 24,
+    width: '90%',
+    maxWidth: 340,
+    alignItems: 'center',
+    ...(SHADOWS?.large || {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 24,
+      elevation: 12,
+    }),
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: SPACING.lg,
+  },
+  okButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  okButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+});
 
 const styles = StyleSheet.create({
   header: {
@@ -343,7 +493,6 @@ const styles = StyleSheet.create({
   halfInput: {
     flex: 1,
   },
-  // Multiline Text Area Styles
   textAreaContainer: {
     borderWidth: 1,
     borderColor: COLORS.border,

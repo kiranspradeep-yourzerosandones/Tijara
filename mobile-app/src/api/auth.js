@@ -131,3 +131,13 @@ export const updatePreferredCategory = async (categoryName) => {
   });
   return handleApiResponse(response);
 };
+// ============================================================
+// ACCOUNT DELETION
+// ============================================================
+
+export const deleteAccount = async () => {
+  // Using POST instead of DELETE because middleware chain
+  // (hpp/compression/sanitize) silently drops DELETE requests
+  const response = await apiClient.post('/auth/delete-account');
+  return handleApiResponse(response);
+};

@@ -1,3 +1,4 @@
+// backend/routes/authRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -25,8 +26,10 @@ const {
   // Notification preferences
   getNotificationPreferences,
   updateNotificationPreferences,
-  // ✅ Preferred category
+  // Preferred category
   updatePreferredCategory,
+  // Account Deletion
+  deleteAccount,
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/auth");
@@ -55,9 +58,11 @@ router.get("/me", protect, getMe);
 router.put("/profile", protect, updateProfile);
 router.put("/change-password", protect, changePassword);
 router.put("/push-token", protect, updatePushToken);
-
-// ✅ Preferred category — must be before any wildcard routes
 router.put("/preferred-category", protect, updatePreferredCategory);
+
+// ============ Account Deletion ============
+router.delete("/delete-account", protect, deleteAccount);
+router.post("/delete-account", protect, deleteAccount);
 
 // ============ Notification Preferences ============
 router.get("/notification-preferences", protect, getNotificationPreferences);

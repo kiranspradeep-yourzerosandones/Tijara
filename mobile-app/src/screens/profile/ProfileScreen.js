@@ -1,4 +1,3 @@
-// src/screens/profile/ProfileScreen.js
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
@@ -17,16 +16,18 @@ import { Card, Screen } from '../../components/common';
 import { ProfileSkeleton } from '../../components/common/Skeleton';
 import { useAuthStore } from '../../store';
 import { paymentsAPI } from '../../api';
+import { deleteAccount } from '../../api/auth';
+import { handleApiError } from '../../api/client';
 import { formatCurrency, getInitials } from '../../utils/helpers';
 
-// ─── Reuse ConfirmDialog ──────────────────────────────────────
+// ─── Custom Modal Component (Custom Styled for both Alerts & Confirmations) ───
 const ConfirmDialog = ({
   visible,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
-  confirmColor = COLORS.error,
+  confirmText = 'OK',
+  cancelText = null,
+  confirmColor = COLORS.primary,
   onConfirm,
   onCancel,
   icon,
@@ -47,6 +48,8 @@ const ConfirmDialog = ({
     }
   }, [visible]);
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={dialogStyles.overlay}>
@@ -57,15 +60,16 @@ const ConfirmDialog = ({
             <View
               style={[
                 dialogStyles.iconCircle,
-                { backgroundColor: (iconColor || confirmColor) + '20' },
+                { backgroundColor: (iconColor || confirmColor) + '15' },
               ]}
             >
-              <Ionicons name={icon} size={28} color={iconColor || confirmColor} />
+              <Ionicons name={icon} size={32} color={iconColor || confirmColor} />
             </View>
           )}
           <Text style={dialogStyles.title}>{title}</Text>
           <Text style={dialogStyles.message}>{message}</Text>
-          <View style={dialogStyles.buttons}>
+
+          <View style={dialogStyles.buttonsRow}>
             {cancelText ? (
               <TouchableOpacity
                 style={dialogStyles.cancelButton}
@@ -79,7 +83,7 @@ const ConfirmDialog = ({
               style={[
                 dialogStyles.confirmButton,
                 { backgroundColor: confirmColor },
-                !cancelText && { flex: 1 },
+                !cancelText && { flex: 1, marginLeft: 0 },
               ]}
               onPress={onConfirm}
               activeOpacity={0.7}
@@ -96,62 +100,72 @@ const ConfirmDialog = ({
 const dialogStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    padding: SPACING.lg,
   },
   card: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 24,
-    width: '100%',
+    width: '90%',
+    maxWidth: 340,
     alignItems: 'center',
     ...SHADOWS.large,
   },
   iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
   title: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 8,
+    marginBottom: SPACING.xs,
     textAlign: 'center',
   },
   message: {
     fontSize: 14,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 21,
+    marginBottom: SPACING.lg,
   },
-  buttons: { flexDirection: 'row', gap: 12, width: '100%' },
+  buttonsRow: {
+    flexDirection: 'row',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.xs,
+  },
   cancelButton: {
     flex: 1,
-    height: 46,
-    borderRadius: 23,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1.5,
     borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 8,
+    backgroundColor: COLORS.white,
   },
   cancelText: {
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
     color: COLORS.textSecondary,
   },
   confirmButton: {
     flex: 1,
-    height: 46,
-    borderRadius: 23,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   confirmText: {
     fontSize: 15,
@@ -169,7 +183,20 @@ const ProfileScreen = ({ navigation }) => {
   const [creditData, setCreditData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+
+  // Unified Custom Modal State
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    confirmText: 'OK',
+    cancelText: null,
+    confirmColor: COLORS.primary,
+    icon: null,
+    iconColor: null,
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -197,16 +224,143 @@ const ProfileScreen = ({ navigation }) => {
     setIsRefreshing(false);
   };
 
-  const handleLogout = async () => {
-    setShowLogoutDialog(false);
-    await logout();
+  const closeModal = () => {
+    setModalConfig((prev) => ({ ...prev, visible: false }));
   };
 
-  const availableCredit   = creditData?.availableCredit   ?? user?.availableCredit   ?? 0;
-  const creditLimit       = creditData?.creditLimit       ?? user?.creditLimit       ?? 0;
-  const pendingAmount     = creditData?.pendingAmount     ?? user?.pendingAmount     ?? 0;
-  const creditUtilization = creditData?.creditUtilization ?? user?.creditUtilization ?? 0;
-  const creditBalance     = creditData?.creditBalance     ?? user?.creditBalance     ?? 0; // ✅ NEW
+  // Helper: Open Confirmation Dialog (Two Buttons)
+  const openConfirmDialog = ({
+    title,
+    message,
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    confirmColor = COLORS.error,
+    icon = 'help-circle-outline',
+    iconColor = COLORS.error,
+    onConfirm,
+  }) => {
+    setModalConfig({
+      visible: true,
+      title,
+      message,
+      confirmText,
+      cancelText,
+      confirmColor,
+      icon,
+      iconColor,
+      onConfirm: () => {
+        closeModal();
+        if (onConfirm) onConfirm();
+      },
+      onCancel: closeModal,
+    });
+  };
+
+  // Helper: Open Alert Notice Dialog (Single OK Button)
+  const openAlertDialog = ({
+    title,
+    message,
+    confirmText = 'OK',
+    confirmColor = COLORS.primary,
+    icon = 'alert-circle-outline',
+    iconColor = COLORS.primary,
+    onConfirm,
+  }) => {
+    setModalConfig({
+      visible: true,
+      title,
+      message,
+      confirmText,
+      cancelText: null,
+      confirmColor,
+      icon,
+      iconColor,
+      onConfirm: () => {
+        closeModal();
+        if (onConfirm) onConfirm();
+      },
+      onCancel: closeModal,
+    });
+  };
+
+  // ── Handlers ──
+  const handleLogoutPrompt = () => {
+    openConfirmDialog({
+      title: 'Logout?',
+      message: 'Are you sure you want to logout from your account?',
+      confirmText: 'Logout',
+      cancelText: 'Stay',
+      confirmColor: COLORS.error,
+      icon: 'log-out-outline',
+      iconColor: COLORS.error,
+      onConfirm: async () => await logout(),
+    });
+  };
+
+  const handleDeletePrompt = () => {
+    openConfirmDialog({
+      title: 'Permanently Delete Account?',
+      message:
+        'This action is completely irreversible. All of your addresses, orders, and credit details will be permanently erased.',
+      confirmText: 'Delete Account',
+      cancelText: 'Cancel',
+      confirmColor: COLORS.error,
+      icon: 'trash-outline',
+      iconColor: COLORS.error,
+      onConfirm: processAccountDeletion,
+    });
+  };
+
+  const processAccountDeletion = async () => {
+    try {
+      setIsLoading(true);
+      const response = await deleteAccount();
+
+      if (response.success) {
+        openAlertDialog({
+          title: 'Account Deleted',
+          message:
+            'Your account and all associated personal data have been permanently removed.',
+          confirmText: 'OK',
+          confirmColor: COLORS.primary,
+          icon: 'checkmark-circle-outline',
+          iconColor: COLORS.success,
+          onConfirm: async () => await logout(),
+        });
+      } else {
+        openAlertDialog({
+          title: 'Unable to Delete',
+          message:
+            response.message ||
+            'Something went wrong while trying to delete your account.',
+          confirmText: 'OK',
+          confirmColor: COLORS.error,
+          icon: 'alert-circle-outline',
+          iconColor: COLORS.error,
+        });
+      }
+    } catch (error) {
+      console.log('Delete account blocked:', handleApiError(error));
+      openAlertDialog({
+        title: 'Unable to Delete Account',
+        message: handleApiError(error),
+        confirmText: 'OK',
+        confirmColor: COLORS.error,
+        icon: 'alert-circle-outline',
+        iconColor: COLORS.error,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const availableCredit =
+    creditData?.availableCredit ?? user?.availableCredit ?? 0;
+  const creditLimit = creditData?.creditLimit ?? user?.creditLimit ?? 0;
+  const pendingAmount = creditData?.pendingAmount ?? user?.pendingAmount ?? 0;
+  const creditUtilization =
+    creditData?.creditUtilization ?? user?.creditUtilization ?? 0;
+  const creditBalance = creditData?.creditBalance ?? user?.creditBalance ?? 0;
 
   const menuItems = [
     {
@@ -230,13 +384,12 @@ const ProfileScreen = ({ navigation }) => {
     {
       icon: 'card-outline',
       title: 'Credit & Payments',
-      // ✅ UPDATED: Show credit balance in subtitle if available
-      subtitle: creditBalance > 0
-        ? `Credit: ${formatCurrency(creditBalance)}`
-        : `Available: ${formatCurrency(availableCredit)}`,
+      subtitle:
+        creditBalance > 0
+          ? `Credit: ${formatCurrency(creditBalance)}`
+          : `Available: ${formatCurrency(availableCredit)}`,
       onPress: () => navigation.navigate('CreditSummary'),
       highlight: pendingAmount > 0,
-      // ✅ NEW: Show green highlight if has credit balance
       hasCredit: creditBalance > 0,
     },
     {
@@ -262,6 +415,13 @@ const ProfileScreen = ({ navigation }) => {
       title: 'About',
       subtitle: 'App version 1.0.0',
       onPress: () => {},
+    },
+    {
+      icon: 'trash-outline',
+      title: 'Delete Account',
+      subtitle: 'Permanently delete your account and data',
+      onPress: handleDeletePrompt,
+      isDanger: true,
     },
   ];
 
@@ -298,9 +458,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {getInitials(user?.name)}
-              </Text>
+              <Text style={styles.avatarText}>{getInitials(user?.name)}</Text>
             </View>
             <TouchableOpacity
               style={styles.editAvatarButton}
@@ -331,7 +489,11 @@ const ProfileScreen = ({ navigation }) => {
               </View>
               <View style={styles.viewDetailsButton}>
                 <Text style={styles.viewDetailsText}>Details</Text>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={COLORS.primary}
+                />
               </View>
             </View>
 
@@ -342,7 +504,9 @@ const ProfileScreen = ({ navigation }) => {
                   {
                     width: `${Math.min(creditUtilization, 100)}%`,
                     backgroundColor:
-                      creditUtilization > 80 ? COLORS.warning : COLORS.primary,
+                      creditUtilization > 80
+                        ? COLORS.warning
+                        : COLORS.primary,
                   },
                 ]}
               />
@@ -351,10 +515,12 @@ const ProfileScreen = ({ navigation }) => {
             <View style={styles.creditInfo}>
               <View style={styles.creditInfoItem}>
                 <Text style={styles.creditInfoLabel}>Pending</Text>
-                <Text style={[
-                  styles.creditInfoValue,
-                  pendingAmount > 0 && { color: COLORS.warning },
-                ]}>
+                <Text
+                  style={[
+                    styles.creditInfoValue,
+                    pendingAmount > 0 && { color: COLORS.warning },
+                  ]}
+                >
                   {formatCurrency(pendingAmount)}
                 </Text>
               </View>
@@ -372,11 +538,14 @@ const ProfileScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* ✅ NEW: Credit Balance row in credit card */}
             {creditBalance > 0 && (
               <View style={styles.creditBalanceRow}>
                 <View style={styles.creditBalanceLeft}>
-                  <Ionicons name="wallet-outline" size={14} color={COLORS.success} />
+                  <Ionicons
+                    name="wallet-outline"
+                    size={14}
+                    color={COLORS.success}
+                  />
                   <Text style={styles.creditBalanceLabel}>Credit Balance</Text>
                 </View>
                 <Text style={styles.creditBalanceValue}>
@@ -408,17 +577,21 @@ const ProfileScreen = ({ navigation }) => {
               onPress={item.onPress}
             >
               <View style={styles.menuItemLeft}>
-                <View style={[
-                  styles.menuIcon,
-                  item.highlight && styles.menuIconHighlight,
-                  // ✅ NEW: Green icon bg when has credit balance
-                  item.hasCredit && styles.menuIconCredit,
-                ]}>
+                <View
+                  style={[
+                    styles.menuIcon,
+                    item.highlight && styles.menuIconHighlight,
+                    item.hasCredit && styles.menuIconCredit,
+                    item.isDanger && { backgroundColor: COLORS.errorLight },
+                  ]}
+                >
                   <Ionicons
                     name={item.icon}
                     size={22}
                     color={
-                      item.hasCredit
+                      item.isDanger
+                        ? COLORS.error
+                        : item.hasCredit
                         ? COLORS.success
                         : item.highlight
                         ? COLORS.error
@@ -427,18 +600,34 @@ const ProfileScreen = ({ navigation }) => {
                   />
                 </View>
                 <View style={styles.menuItemContent}>
-                  <Text style={styles.menuItemTitle}>{item.title}</Text>
-                  <Text style={[
-                    styles.menuItemSubtitle,
-                    item.highlight && styles.menuItemSubtitleHighlight,
-                    // ✅ NEW: Green subtitle when has credit
-                    item.hasCredit && styles.menuItemSubtitleCredit,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.menuItemTitle,
+                      item.isDanger && {
+                        color: COLORS.error,
+                        fontWeight: '600',
+                      },
+                    ]}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.menuItemSubtitle,
+                      item.highlight && styles.menuItemSubtitleHighlight,
+                      item.hasCredit && styles.menuItemSubtitleCredit,
+                      item.isDanger && { color: COLORS.error + '95' },
+                    ]}
+                  >
                     {item.subtitle}
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={item.isDanger ? COLORS.error + '80' : COLORS.gray}
+              />
             </TouchableOpacity>
           ))}
         </View>
@@ -446,7 +635,7 @@ const ProfileScreen = ({ navigation }) => {
         {/* Logout Button */}
         <TouchableOpacity
           style={styles.logoutButton}
-          onPress={() => setShowLogoutDialog(true)}
+          onPress={handleLogoutPrompt}
         >
           <Ionicons name="log-out-outline" size={22} color={COLORS.error} />
           <Text style={styles.logoutText}>Logout</Text>
@@ -455,19 +644,8 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Logout Confirmation */}
-      <ConfirmDialog
-        visible={showLogoutDialog}
-        title="Logout?"
-        message="Are you sure you want to logout from your account?"
-        confirmText="Logout"
-        cancelText="Stay"
-        confirmColor={COLORS.error}
-        icon="log-out-outline"
-        iconColor={COLORS.error}
-        onConfirm={handleLogout}
-        onCancel={() => setShowLogoutDialog(false)}
-      />
+      {/* Single Unified Custom Dialog Component */}
+      <ConfirmDialog {...modalConfig} />
     </Screen>
   );
 };
@@ -580,8 +758,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '600',
   },
-
-  // ✅ NEW: Credit balance row styles
   creditBalanceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -606,7 +782,6 @@ const styles = StyleSheet.create({
     color: COLORS.success,
     fontWeight: '700',
   },
-
   creditWarning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,7 +830,6 @@ const styles = StyleSheet.create({
   menuIconHighlight: {
     backgroundColor: COLORS.primaryLight + '30',
   },
-  // ✅ NEW: Green icon for credit balance
   menuIconCredit: {
     backgroundColor: COLORS.success + '20',
   },
@@ -674,7 +848,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '500',
   },
-  // ✅ NEW: Green subtitle for credit balance
   menuItemSubtitleCredit: {
     color: COLORS.success,
     fontWeight: '600',

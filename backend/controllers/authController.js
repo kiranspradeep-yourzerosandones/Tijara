@@ -1547,3 +1547,49 @@ exports.updateNotificationPreferences = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// ACCOUNT DELETION (Enforce Pending Balance Check)
+// ============================================================
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 🔒 BUSINESS LOGIC: Block account deletion if user owes money
+    if (user.pendingAmount && user.pendingAmount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete account with an outstanding balance of ₹${user.pendingAmount.toLocaleString('en-IN')}. Please settle your dues first.`,
+      });
+    }
+
+    // Delete the user permanently if balance is ₹0
+    await User.findByIdAndDelete(userId);
+
+    // Clean up any pending registration records tied to this phone number
+    const PendingRegistration = require("../models/PendingRegistration");
+    await PendingRegistration.deleteOne({ phone: user.phone });
+
+    console.log(`🗑️ Account permanently deleted: ${user.phone}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Your account and all associated data have been permanently deleted.",
+    });
+  } catch (error) {
+    console.error("Delete Account Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete account",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};

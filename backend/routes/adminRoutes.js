@@ -10,7 +10,7 @@ const {
   changePassword,
   forgotPassword,
   resetPassword,
-  verifyResetToken
+  verifyResetToken,
 } = require("../controllers/adminAuthController");
 
 const { protect } = require("../middleware/auth");
