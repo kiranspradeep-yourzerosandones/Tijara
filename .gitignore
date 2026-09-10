@@ -1,104 +1,169 @@
 # -----------------------------
+
 # Dependencies
+
 # -----------------------------
+
 node_modules/
 **/node_modules/
 
 # -----------------------------
+
 # Environment variables
+
 # -----------------------------
+
 .env
 .env.*
 !.env.example
+.env*.local
 
 # -----------------------------
-# Next.js build files
+
+# Build / generated files
+
 # -----------------------------
+
 .next/
 out/
 build/
 dist/
 
 # -----------------------------
+
 # Logs
+
 # -----------------------------
+
 logs/
 *.log
 npm-debug.log*
+npm-debug.*
 yarn-debug.log*
+yarn-debug.*
 yarn-error.log*
 pnpm-debug.log*
 
 # -----------------------------
+
 # Cache
-# -----------------------------
-.cache/
-.parcel-cache/
 
 # -----------------------------
-# OS files
+
+.cache/
+.parcel-cache/
+coverage/
+*.tsbuildinfo
+
 # -----------------------------
+
+# OS files
+
+# -----------------------------
+
 .DS_Store
 Thumbs.db
 desktop.ini
 
 # -----------------------------
+
 # Editor / IDE
+
 # -----------------------------
+
 .vscode/
 .idea/
 *.swp
 *.swo
+*.iml
 
 # -----------------------------
-# Testing
-# -----------------------------
-coverage/
 
-# -----------------------------
 # Temporary files
+
 # -----------------------------
+
 tmp/
 temp/
-
-# -----------------------------
-# Package lock backups
-# -----------------------------
 *.tgz
 
 # -----------------------------
+
 # Firebase / Google
+
 # -----------------------------
 
 GoogleService-Info.plist
+google-services.json
+**/google-services.json
 
 # -----------------------------
-# Android
+
+# Android signing files
+
 # -----------------------------
+
 *.keystore
 !debug.keystore
 *.jks
-
-
-# -----------------------------
-# iOS
-# -----------------------------
-ios/GoogleService-Info.plist
 *.p12
+
+# -----------------------------
+
+# Android local / generated files
+
+# -----------------------------
+
+android/local.properties
+android/.gradle/
+android/.cxx/
+android/app/.cxx/
+android/app/build/
+android/app/debug/
+android/app/release/
+
+# -----------------------------
+
+# Android generated native artifacts
+
+# -----------------------------
+
+*.apk
+*.aab
+
+# -----------------------------
+
+# iOS
+
+# -----------------------------
+
+ios/GoogleService-Info.plist
+ios/Pods/
+ios/build/
+ios/DerivedData/
 *.mobileprovision
 
 # -----------------------------
+
 # Expo
+
 # -----------------------------
+
 .expo/
 .expo-shared/
 
 # -----------------------------
+
 # React Native
+
 # -----------------------------
-android/local.properties
-android/.gradle/
-android/app/debug/
-android/app/release/
-ios/Pods/
-ios/build/
+
+*.jsbundle
+
+# -----------------------------
+
+# macOS certificates / keys
+
+# -----------------------------
+
+*.pem

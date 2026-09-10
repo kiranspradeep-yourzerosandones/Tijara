@@ -1,16 +1,41 @@
 # OSX
-#
+
 .DS_Store
 
-# Android/IntelliJ
-#
+# Node
+
+node_modules/
+
+# Expo
+
+.expo/
+.expo-shared/
+
+# Android / Gradle
+
+.gradle/
 build/
-.idea
-.gradle
+app/build/
 local.properties
+.idea/
 *.iml
-*.hprof
 .cxx/
 
+# Gradle
+
+*.hprof
+
 # Bundle artifacts
+
 *.jsbundle
+
+# APK / AAB outputs
+
+*.apk
+*.aab
+
+# Environment files
+
+.env
+.env.*
+!.env.example

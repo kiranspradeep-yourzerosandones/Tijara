@@ -1,22 +1,40 @@
+# -----------------------------
+
 # Dependencies
+
+# -----------------------------
+
 node_modules/
 **/node_modules/
 
+# -----------------------------
+
 # Environment variables
+
+# -----------------------------
+
 .env
 .env.*
 !.env.example
+.env*.local
 
-# Expo
-.expo/
-.expo-shared/
+# -----------------------------
 
-# Build output
-dist/
-build/
+# Build / generated files
+
+# -----------------------------
+
+.next/
 out/
+build/
+dist/
+
+# -----------------------------
 
 # Logs
+
+# -----------------------------
+
 logs/
 *.log
 npm-debug.log*
@@ -24,49 +42,110 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# -----------------------------
+
 # Cache
+
+# -----------------------------
+
 .cache/
 .parcel-cache/
 coverage/
+*.tsbuildinfo
 
-# OS
+# -----------------------------
+
+# OS files
+
+# -----------------------------
+
 .DS_Store
 Thumbs.db
 desktop.ini
 
+# -----------------------------
+
 # Editor / IDE
+
+# -----------------------------
+
 .vscode/
 .idea/
 *.swp
 *.swo
+*.iml
+
+# -----------------------------
 
 # Temporary files
+
+# -----------------------------
+
 tmp/
 temp/
 *.tgz
 
-# TypeScript
-*.tsbuildinfo
+# -----------------------------
 
 # Firebase / Google
+
+# -----------------------------
+
 GoogleService-Info.plist
 google-services.json
 **/google-services.json
 
-# Android local/build files
+# -----------------------------
+
+# Android
+
+# -----------------------------
+
+*.keystore
+!debug.keystore
+*.jks
+
 android/local.properties
 android/.gradle/
+.cxx/
+android/app/build/
 android/app/debug/
 android/app/release/
-*.keystore
-*.jks
-!debug.keystore
 
-# iOS generated/build files
-/ios
-/android
+
+# -----------------------------
+
+# iOS
+
+# -----------------------------
+
+ios/GoogleService-Info.plist
 ios/Pods/
 ios/build/
 *.p12
 *.mobileprovision
+
+# -----------------------------
+
+# Expo
+
+# -----------------------------
+
+.expo/
+.expo-shared/
+
+# -----------------------------
+
+# React Native generated bundle
+
+# -----------------------------
+
+*.jsbundle
+
+# -----------------------------
+
+# macOS certificates / keys
+
+# -----------------------------
+
 *.pem
